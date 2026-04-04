@@ -12,7 +12,7 @@ function Show-MainTitle {
     Write-Host " #                                                                           #" -ForegroundColor $COLOR_PRIMARY
     Write-Host " #          T E C H F L O W   S U I T E   -   P R O   E D I T I O N          #" -ForegroundColor $COLOR_PRIMARY
     Write-Host " #                  SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO              #" -ForegroundColor $COLOR_PRIMARY
-    Write-Host " #                                                                           #" -ForegroundColor $COLOR_PRIMARY
+    Write-Host " #                                     V.4.0                                 #" -ForegroundColor $COLOR_PRIMARY
     Write-Host " #############################################################################" -ForegroundColor $COLOR_PRIMARY
 }
 
@@ -20,25 +20,15 @@ function Show-MainTitle {
 function Invoke-SmartInstall ($AppID, $AppName) {
     Write-Host "`n [!] INSTALANDO: $AppName..." -ForegroundColor $COLOR_MENU
     
-    # Intento con Winget (Silent & Unattended)
-    $wingetResult = winget install $AppID --accept-package-agreements --accept-source-agreements --silent --no-restart
+    # Intento con Winget usando el ID exacto
+    $wingetResult = winget install --id $AppID --exact --accept-package-agreements --accept-source-agreements --silent
     
     if ($LastExitCode -ne 0) {
-        Write-Host " [!] WINGET FALLO O NO ENCONTRO LA APP. RECURRIENDO A CHOCOLATEY..." -ForegroundColor $COLOR_ALERT
+        Write-Host " [!] WINGET FALLO. BUSCANDO EN CHOCOLATEY CON NOMBRE CORTO..." -ForegroundColor $COLOR_ALERT
         
-        if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
-            $confirm = Read-Host " [?] CHOCO ES NECESARIO PERO NO ESTA INSTALADO. ¿INSTALAR AHORA? (S/N)"
-            if ($confirm.ToUpper() -eq "S") {
-                Set-ExecutionPolicy Bypass -Scope Process -Force
-                [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-                iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-            } else {
-                return "ERROR (Falta Choco)"
-            }
-        }
+        $shortName = $AppID.Split('.')[-1].ToLower() 
+        choco install $shortName -y --no-progress
         
-        # Intento con Chocolatey
-        choco install $AppID -y --no-progress
         if ($LastExitCode -eq 0) { return "OK" } else { return "ERROR" }
     }
     return "OK"
