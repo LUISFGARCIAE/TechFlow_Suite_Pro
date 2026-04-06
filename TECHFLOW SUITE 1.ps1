@@ -19,16 +19,11 @@ function Show-MainTitle {
 # --- MOTOR DE INSTALACION HIBRIDA INTELIGENTE ---
 function Invoke-SmartInstall ($AppID, $AppName) {
     Write-Host "`n [!] INSTALANDO: $AppName..." -ForegroundColor $COLOR_MENU
-    
-    # Intento con Winget usando el ID exacto
     $wingetResult = winget install --id $AppID --exact --accept-package-agreements --accept-source-agreements --silent
-    
     if ($LastExitCode -ne 0) {
         Write-Host " [!] WINGET FALLO. BUSCANDO EN CHOCOLATEY CON NOMBRE CORTO..." -ForegroundColor $COLOR_ALERT
-        
         $shortName = $AppID.Split('.')[-1].ToLower() 
         choco install $shortName -y --no-progress
-        
         if ($LastExitCode -eq 0) { return "OK" } else { return "ERROR" }
     }
     return "OK"
@@ -54,10 +49,10 @@ function Invoke-KitPostFormat {
         "71" = @{Name="Steam"; ID="Valve.Steam"}; "72" = @{Name="Epic Games"; ID="EpicGames.EpicGamesLauncher"}; "73" = @{Name="EA Desktop"; ID="ElectronicArts.EADesktop"}; "74" = @{Name="Ubisoft Connect"; ID="Ubisoft.Connect"}; "75" = @{Name="GOG Galaxy"; ID="GOG.Galaxy"};
         "81" = @{Name="Razer Cortex"; ID="Razer.Cortex"}; "82" = @{Name="MSI Afterburner"; ID="MSI.Afterburner"}; "86" = @{Name="VS Code"; ID="Microsoft.VisualStudioCode"}; "87" = @{Name="Git"; ID="Git.Git"}; "90" = @{Name="Docker"; ID="Docker.DockerDesktop"};
         "94" = @{Name="DirectX"; ID="Microsoft.DirectX"}; "95" = @{Name="Google Drive"; ID="Google.Drive"}; "98" = @{Name="Notepad++"; ID="Notepad++.Notepad++"}; "100" = @{Name="VirtualBox"; ID="Oracle.VirtualBox"}
-        # ... (Se pueden seguir llenando hasta 100 con la misma estructura)
     }
 
     while($true){
+        Clear-Host
         Show-MainTitle
         Write-Host "`n KIT POST FORMAT - INSTALACION INTELIGENTE" -ForegroundColor $COLOR_PRIMARY
         Write-Host " [0] LIMPIEZA DE BLOATWARE (CandyCrush, Netflix, etc.)" -ForegroundColor $COLOR_ALERT
@@ -81,6 +76,7 @@ function Invoke-KitPostFormat {
             "1" { $selection = "1","16","36","56","29" }
             "2" { $selection = "71","28","36","94" }
             "3" {
+                Clear-Host
                 Show-MainTitle
                 Write-Host "`n LISTADO MAESTRO" -ForegroundColor $COLOR_MENU
                 $sortedKeys = $apps.Keys | Sort-Object {[int]$_}
@@ -94,7 +90,8 @@ function Invoke-KitPostFormat {
                     }
                     Write-Host " $row"
                 }
-                $manual = Read-Host "`n > INGRESE NUMEROS SEPARADOS POR COMA"
+                $manual = Read-Host "`n > INGRESE NUMEROS SEPARADOS POR COMA (X para cancelar)"
+                if($manual -eq "X"){ continue }
                 $selection = $manual.Split(",").Trim()
             }
             "4" { winget upgrade --all --silent; Read-Host " OK. ENTER"; continue }
@@ -111,11 +108,10 @@ function Invoke-KitPostFormat {
             Show-MainTitle
             Write-Host "`n RESUMEN DE INSTALACION:" -ForegroundColor $COLOR_ALERT
             $results | ForEach-Object { Write-Host " $_" }
-            Read-Host "`n PRESIONE ENTER"
+            Read-Host "`n PRESIONE ENTER PARA LIMPIAR Y CONTINUAR"
         }
     }
 }
-
 
 # --- MOTOR DE RESPALDO Y RESTAURACION ---
 function Invoke-Engine ($Mode, $Msg) {
@@ -297,6 +293,166 @@ function Invoke-DefenderControl {
     }
 }
 
+function Invoke-AutoFlow {
+    Show-MainTitle
+    Write-Host "`n [!] PERFIL: MANTENIMIENTO EXPRESS (AUTO-FLOW)" -ForegroundColor $COLOR_ALERT
+    Write-Host " ---------------------------------------------------" -ForegroundColor Gray
+    Write-Host " DESCRIPCION:" -ForegroundColor $COLOR_MENU
+    Write-Host " 1. Elimina Apps basura (Netflix, Disney, etc.)"
+    Write-Host " 2. Limpia archivos temporales del sistema."
+    Write-Host " 3. Instala: Chrome, 7-Zip y VLC Player."
+    Write-Host " ---------------------------------------------------" -ForegroundColor Gray
+    
+    Write-Host "`n [ENTER] COMENZAR INSTALACION" -ForegroundColor $COLOR_PRIMARY
+    Write-Host " [X]     VOLVER AL MENU PRINCIPAL" -ForegroundColor $COLOR_DANGER
+    Write-Host " ---------------------------------------------------" -ForegroundColor Gray
+
+    # --- MOTOR DE DETECCION DE TECLAS (X o ENTER) ---
+    $Decision = $null
+    while ($true) {
+        if ($Host.UI.RawUI.KeyAvailable) {
+            $KeyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+            $TeclaPresionada = $KeyInfo.Character.ToString().ToUpper()
+            $CodigoASCII = [int]$KeyInfo.Character
+
+            if ($TeclaPresionada -eq "X") { $Decision = "SALIR"; break }
+            if ($CodigoASCII -eq 13) { $Decision = "INICIAR"; break } # 13 es ENTER
+        }
+        Start-Sleep -Milliseconds 100
+    }
+
+    # --- LOGICA DE SALIDA ---
+    if ($Decision -eq "SALIR") {
+        Write-Host "`n [X] REGRESANDO AL MENU..." -ForegroundColor $COLOR_ALERT
+        Start-Sleep -Seconds 1
+        return
+    } 
+
+    Write-Host "`n [>] INICIANDO OPERACIONES..." -ForegroundColor $COLOR_PRIMARY
+    Start-Sleep -Seconds 1
+
+    # Función para abortar DURANTE el proceso (Si dejas presionada X)
+    $CheckAbort = {
+        if ($Host.UI.RawUI.KeyAvailable) {
+            $k = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+            if ($k.Character -eq 'x' -or $k.Character -eq 'X') {
+                Write-Host "`n`n [XXX] DETENIDO POR EL USUARIO." -ForegroundColor $COLOR_DANGER
+                Start-Sleep -Seconds 1
+                return $true
+            }
+        }
+        return $false
+    }
+
+    # --- PASO 1: BLOATWARE ---
+    Write-Host "`n [+] Paso 1/3: Eliminando Bloatware..." -ForegroundColor $COLOR_MENU
+    $bloat = @("*CandyCrush*", "*Disney*", "*Netflix*", "*TikTok*", "*Instagram*")
+    foreach($b in $bloat){ 
+        if (& $CheckAbort) { return }
+        Get-AppxPackage $b | Remove-AppxPackage -ErrorAction SilentlyContinue 
+    }
+    
+    # --- PASO 2: TEMPORALES ---
+    if (& $CheckAbort) { return }
+    Write-Host " [+] Paso 2/3: Limpiando temporales..." -ForegroundColor $COLOR_MENU
+    $targets = @("$env:TEMP\*", "C:\Windows\Temp\*")
+    $targets | ForEach-Object { 
+        if (& $CheckAbort) { return }
+        Remove-Item $_ -Recurse -Force -ErrorAction SilentlyContinue 
+    }
+
+    # --- PASO 3: INSTALACION ---
+    if (& $CheckAbort) { return }
+    Write-Host " [+] Paso 3/3: Instalando apps esenciales..." -ForegroundColor $COLOR_MENU
+    $basico = @(
+        @{Name="Chrome"; ID="Google.Chrome"},
+        @{Name="7-Zip"; ID="7zip.7zip"},
+        @{Name="VLC Player"; ID="VideoLAN.VLC"}
+    )
+    foreach($app in $basico){
+        if (& $CheckAbort) { return }
+        Invoke-SmartInstall -AppID $app.ID -AppName $app.Name | Out-Null
+    }
+
+    Write-Host "`n [OK] AUTO-FLOW FINALIZADO." -ForegroundColor Green
+    Read-Host " PRESIONE ENTER PARA VOLVER"
+}
+# --- GESTION DE DRIVERS MEJORADA (OFICIAL MS) ---
+function Invoke-DriverManagement {
+    while($true){ 
+        Show-MainTitle
+        Write-Host "`n GESTION DE DRIVERS PRO" -ForegroundColor $COLOR_MENU
+        Write-Host " [A] EXPORTAR DRIVERS (BACKUP LOCAL EN USB/SCRIPT)"
+        Write-Host " [B] RE-INSTALAR DRIVERS (DESDE BACKUP)"
+        Write-Host " [C] BUSCAR EN SERVIDORES OFICIALES (WINDOWS UPDATE)"
+        Write-Host " [D] VER IDENTIFICADORES DE HARDWARE (SIN DRIVER)"
+        Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+        
+        $o=(Read-Host "`n > SELECCIONE").ToUpper()
+        if($o -eq "X"){break}
+        
+        if($o -eq "A") {
+            $p="$PSScriptRoot\Drivers_$env:COMPUTERNAME"
+            if(!(Test-Path $p)){ New-Item $p -ItemType Directory -Force | Out-Null }
+            Write-Host " [+] Exportando drivers instalados... esto puede tardar." -ForegroundColor $COLOR_MENU
+            Export-WindowsDriver -Online -Destination $p
+            Read-Host " [+] BACKUP CREADO EN: $p. ENTER PARA VOLVER"
+        }
+
+        if($o -eq "B") {
+            $path = "$PSScriptRoot\Drivers_$env:COMPUTERNAME"
+            if(Test-Path $path){
+                Write-Host " [+] Re-instalando drivers desde backup..." -ForegroundColor $COLOR_PRIMARY
+                Get-ChildItem "$path\*.inf" -Recurse | ForEach-Object { pnputil /add-driver $_.FullName /install }
+                Read-Host " [+] PROCESO TERMINADO. ENTER"
+            } else { 
+                Write-Host " [!] NO SE ENCONTRO CARPETA DE BACKUP." -ForegroundColor $COLOR_DANGER
+                Start-Sleep -Seconds 2 
+            }
+        }
+
+        if($o -eq "C") {
+            Write-Host "`n [+] CONFIGURANDO ENTORNO SEGURO..." -ForegroundColor Gray
+            # --- MEJORA CRITICA: Bypass de confirmaciones y protocolos ---
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+            
+            Write-Host " [+] CONECTANDO CON MICROSOFT UPDATE..." -ForegroundColor $COLOR_PRIMARY
+            
+            if(!(Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)){
+                Write-Host " [+] Instalando proveedor NuGet..." -ForegroundColor Gray
+                Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false | Out-Null
+            }
+            
+            if(!(Get-Module -ListAvailable PSWindowsUpdate)){
+                Write-Host " [+] Instalando módulo PSWindowsUpdate..." -ForegroundColor Gray
+                Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope CurrentUser | Out-Null
+            }
+            
+            Import-Module PSWindowsUpdate
+            Write-Host " [+] Buscando e instalando controladores certificados..." -ForegroundColor $COLOR_MENU
+            
+            # El comando clave: Solo baja Categoría "Drivers" (ignora parches de seguridad pesados)
+            Get-WindowsUpdate -Category "Drivers" -Install -AcceptAll -IgnoreReboot
+            
+            Write-Host "`n [OK] BUSQUEDA Y CARGA FINALIZADA." -ForegroundColor Green
+            Read-Host " ENTER PARA VOLVER"
+        }
+
+        if($o -eq "D") {
+            Show-MainTitle
+            Write-Host "`n [!] DISPOSITIVOS CON ERRORES O SIN DRIVER:" -ForegroundColor $COLOR_ALERT
+            $missing = Get-CimInstance Win32_PnPEntity | Where-Object { $_.ConfigManagerErrorCode -ne 0 }
+            if ($missing) {
+                $missing | Select-Object Name, Status, DeviceID | Out-GridView -Title "Drivers Faltantes - TechFlow"
+                Write-Host " [+] Se ha abierto una ventana con el listado detallado." -ForegroundColor $COLOR_PRIMARY
+            } else {
+                Write-Host " [+] No se detectaron problemas de hardware (Todo OK)." -ForegroundColor Green
+            }
+            Read-Host " ENTER PARA VOLVER"
+        }
+    }
+}
 # --- MENU PRINCIPAL ---
 while ($true) {
     Show-MainTitle
@@ -305,17 +461,18 @@ while ($true) {
     Write-Host " -----------------------------------------------------------------------------" -ForegroundColor Gray
     
     if ($Global:MenuHorizontal) {
-        Write-Host "    [A]  BACKUP TOTAL             [E]  OPTIMIZAR TEMP           [I]  KIT POST FORMAT"
-        Write-Host "    [B]  RESTORE TOTAL            [F]  WIN UTIL TITUS           [J]  GESTION USUARIOS"
-        Write-Host "    [C]  GESTION DRIVERS          [G]  MASSGRAVE ACT            [K]  SOPORTE TECNICO PRO"
-        Write-Host "    [D]  PURGA Y FORMATEO         [H]  GESTION PAQUETES PRO     [L]  BYPASS WINDOWS 11"
-        Write-Host "    [M]  RED Y REPARACION         [N]  MANTENIM DISCO           [O]  MONITOR EN VIVO (PRO)"
-        Write-Host "    [P]  WINDOWS DEFENDER TOTAL"
+        Write-Host "    [A]  BACKUP TOTAL             [E]  OPTIMIZAR TEMP           [I]  KIT POST FORMAT" -ForegroundColor Green
+        Write-Host "    [B]  RESTORE TOTAL            [F]  WIN UTIL TITUS           [J]  GESTION USUARIOS" -ForegroundColor Green
+        Write-Host "    [C]  GESTION DRIVERS          [G]  MASSGRAVE ACT            [K]  SOPORTE TECNICO PRO" -ForegroundColor Green
+        Write-Host "    [D]  PURGA Y FORMATEO         [H]  GESTION PAQUETES PRO     [L]  BYPASS WINDOWS 11" -ForegroundColor Green
+        Write-Host "    [M]  RED Y REPARACION         [N]  MANTENIM DISCO           [O]  MONITOR EN VIVO (PRO)" -ForegroundColor Green
+        Write-Host "    [P]  WINDOWS DEFENDER TOTAL   [Q]  AUTO-FLOW (EXPRESS)" -ForegroundColor Green
     } else {
         Write-Host "    [A] BACKUP TOTAL`n    [B] RESTORE TOTAL`n    [C] GESTION DRIVERS`n    [D] PURGA Y FORMATEO`n    [E] OPTIMIZAR TEMP"
         Write-Host "    [F] WIN UTIL TITUS`n    [G] MASSGRAVE ACT`n    [H] GESTION PAQUETES PRO`n    [I] KIT POST FORMAT`n    [J] GESTION USUARIOS"
         Write-Host "    [K] SOPORTE TECNICO PRO`n    [L] BYPASS WINDOWS 11`n    [M] RED Y REPARACION`n    [N] MANTENIM DISCO`n    [O] MONITOR EN VIVO (PRO)"
         Write-Host "    [P] WINDOWS DEFENDER TOTAL"
+        Write-Host "    [Q]  AUTO-FLOW (MANTENIMIENTO EXPRESS)" -ForegroundColor Green
     }
 
     Write-Host "`n CONFIGURACION Y VISTA" -ForegroundColor Gray
@@ -327,16 +484,10 @@ while ($true) {
     switch ($opt) {
         "R" { continue }
         "V" { $Global:MenuHorizontal = !$Global:MenuHorizontal; continue }
+        "Q" { Invoke-AutoFlow }
         "A" { Invoke-Engine "BACKUP" "RESPALDO" }
         "B" { Invoke-Engine "RESTORE" "RESTAURACION" }
-        "C" { 
-            while($true){ Show-MainTitle; Write-Host "`n GESTION DE DRIVERS" -ForegroundColor $COLOR_MENU
-            Write-Host " [A] EXPORTAR DRIVERS`n [B] INSTALAR DRIVERS"
-            Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-            $o=(Read-Host "`n > SELECCIONE").ToUpper(); if($o -eq "X"){break}
-            if($o -eq "A"){$p="$PSScriptRoot\Drivers_$env:COMPUTERNAME"; New-Item $p -ItemType Directory -Force | Out-Null; Export-WindowsDriver -Online -Destination $p; Read-Host " OK"}
-            if($o -eq "B"){$path = "$PSScriptRoot\Drivers_$env:COMPUTERNAME"; Get-ChildItem "$path\*.inf" -Recurse | ForEach-Object {pnputil /add-driver $_.FullName /install}; Read-Host " OK"} }
-        }
+        "C" { Invoke-DriverManagement }
         "D" { 
             while($true){ Show-MainTitle; Write-Host "`n OPERACION CRITICA" -ForegroundColor $COLOR_DANGER
             Write-Host " [A] PURGAR PERFIL`n [B] FORMATEAR USB"
@@ -428,7 +579,7 @@ while ($true) {
         }
         "O" { Show-LiveMonitor }
         "P" { Invoke-DefenderControl }
-        "S" { $nk=Read-Host "> NUEVA CLAVE"; if($nk){$nk | Out-File $CONFIG_FILE -Force; $Global:MasterPass=$nk}; Read-Host " OK" }
+        "S" { $nk=Read-Host "> NUEVA CLAVE"; if($nk){$nk | Out-File $CONFIG_FILE -Encoding ascii -Force; $Global:MasterPass=$nk}; Read-Host " OK" }
         "X" { exit }
     }
 }
