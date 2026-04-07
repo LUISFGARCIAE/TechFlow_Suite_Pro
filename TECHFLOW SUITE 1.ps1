@@ -4,7 +4,49 @@ $Global:MenuHorizontal = $true
 
 if (!(Test-Path $CONFIG_FILE)) { "ADMIN2026" | Out-File $CONFIG_FILE -Encoding ascii -Force }
 $Global:MasterPass = (Get-Content $CONFIG_FILE -Raw).Trim()
-$USER_FOLDERS = @("$HOME\Desktop", "$HOME\Documents", "$HOME\Pictures", "$HOME\Videos", "$HOME\Music", "$HOME\Downloads")
+$USER_FOLDER_NAMES = @("Desktop", "Documents", "Pictures", "Videos", "Music", "Downloads", "Favorites", "Contacts", "Saved Games", "AppData\Roaming")
+$USER_FOLDERS = $USER_FOLDER_NAMES
+$DEFAULT_BACKUP_BASE = "$env:SystemDrive\Backups"
+
+function Get-UserProfilePaths {
+    $profilesPath = "$env:SystemDrive\Users"
+    Get-ChildItem -Path $profilesPath -Directory | Where-Object {
+        $_.Name -notin @('All Users', 'Default', 'Default User', 'Public', 'desktop.ini', 'DefaultAppPool')
+    } | Select-Object -ExpandProperty FullName
+}
+
+function Get-BackupRoot($basePath) {
+    $existing = Get-ChildItem -Path $basePath -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "Backup_*" } | ForEach-Object { $_.Name -replace "Backup_", "" } | Where-Object { $_ -match "^\d+$" } | Sort-Object {[int]$_} -Descending
+    if ($existing) { $next = [int]$existing[0] + 1 } else { $next = 1 }
+    $root = Join-Path $basePath ("Backup_" + $next.ToString("00"))
+    if (!(Test-Path $root)) { New-Item -Path $root -ItemType Directory -Force | Out-Null }
+    return $root
+}
+
+function Backup-ProfileData($profilePath, $backupRoot) {
+    $userName = Split-Path $profilePath -Leaf
+    $destRoot = Join-Path $backupRoot $userName
+    foreach ($folder in $USER_FOLDER_NAMES) {
+        $source = Join-Path $profilePath $folder
+        $target = Join-Path $destRoot $folder
+        if (Test-Path $source) {
+            Write-Host " [+] RESPALDANDO $userName\$folder ..." -ForegroundColor $COLOR_PRIMARY
+            robocopy $source $target /E /MT:16 /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
+        }
+    }
+}
+
+function Restore-ProfileData($backupProfilePath) {
+    $profileName = Split-Path $backupProfilePath -Leaf
+    $targetRoot = "$env:SystemDrive\Users\$profileName"
+    if (!(Test-Path $targetRoot)) { New-Item -Path $targetRoot -ItemType Directory -Force | Out-Null }
+    Get-ChildItem -Path $backupProfilePath -Directory | ForEach-Object {
+        $source = $_.FullName
+        $dest = Join-Path $targetRoot $_.Name
+        Write-Host " [+] RESTAURANDO $profileName\$($_.Name) ..." -ForegroundColor $COLOR_PRIMARY
+        robocopy $source $dest /E /MT:16 /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
+    }
+}
 
 function Show-MainTitle {
     Clear-Host
@@ -12,7 +54,7 @@ function Show-MainTitle {
     Write-Host " #                                                                           #" -ForegroundColor $COLOR_PRIMARY
     Write-Host " #          T E C H F L O W   S U I T E   -   P R O   E D I T I O N          #" -ForegroundColor $COLOR_PRIMARY
     Write-Host " #                  SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO              #" -ForegroundColor $COLOR_PRIMARY
-    Write-Host " #                                     V.4.0                                 #" -ForegroundColor $COLOR_PRIMARY
+    Write-Host " #                                     V.4.1                                 #" -ForegroundColor $COLOR_PRIMARY
     Write-Host " #############################################################################" -ForegroundColor $COLOR_PRIMARY
 }
 
@@ -55,14 +97,14 @@ function Invoke-KitPostFormat {
         Clear-Host
         Show-MainTitle
         Write-Host "`n KIT POST FORMAT - INSTALACION INTELIGENTE" -ForegroundColor $COLOR_PRIMARY
-        Write-Host " [0] LIMPIEZA DE BLOATWARE (CandyCrush, Netflix, etc.)" -ForegroundColor $COLOR_ALERT
-        Write-Host " [1] PERFIL BASICO (Chrome, 7Zip, VLC, AnyDesk, Zoom)"
-        Write-Host " [2] PERFIL GAMING (Steam, Discord, VLC, DirectX)"
-        Write-Host " [3] SELECCION MANUAL (Listado Completo)"
+        Write-Host ' [0] LIMPIEZA DE BLOATWARE (CandyCrush, Netflix, etc.)'
+        Write-Host ' [1] PERFIL BASICO (Chrome, 7Zip, VLC, AnyDesk, Zoom)'
+        Write-Host ' [2] PERFIL GAMING (Steam, Discord, VLC, DirectX)'
+        Write-Host ' [3] SELECCION MANUAL (Listado Completo)'
         Write-Host " [4] ACTUALIZAR TODO EL SOFTWARE"
         Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
         
-        $opt = (Read-Host "`n > SELECCIONE").ToUpper()
+        $opt = (Read-Host "`n ``> SELECCIONE").ToUpper()
         if($opt -eq "X"){break}
         
         $selection = @()
@@ -90,7 +132,7 @@ function Invoke-KitPostFormat {
                     }
                     Write-Host " $row"
                 }
-                $manual = Read-Host "`n > INGRESE NUMEROS SEPARADOS POR COMA (X para cancelar)"
+                $manual = Read-Host "`n ``> INGRESE NUMEROS SEPARADOS POR COMA ``(X para cancelar`)"
                 if($manual -eq "X"){ continue }
                 $selection = $manual.Split(",").Trim()
             }
@@ -117,54 +159,190 @@ function Invoke-KitPostFormat {
 function Invoke-Engine ($Mode, $Msg) {
     Show-MainTitle
     $DriveLetter = if ($PSScriptRoot -and $PSScriptRoot.Length -ge 2) { $PSScriptRoot.Substring(0,2) } else { "C:" }
-    Write-Host "`n SELECCION DE UNIDAD PARA $Msg" -ForegroundColor $COLOR_ALERT
-    Write-Host " [A] UNIDAD ACTUAL $DriveLetter"
-    Write-Host " [B] OTRA UNIDAD"
-    Write-Host "`n CONTROL" -ForegroundColor Gray 
-    Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
-    Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-    $p = (Read-Host "`n > SELECCIONE").ToUpper()
-    if ($p -eq "X") { return }
-    $Base = if ($p -eq "B") { 
-        $l = (Read-Host " LETRA DE UNIDAD EJ D").Substring(0,1).ToUpper(); "$($l):\$env:USERNAME" 
-    } else { "$DriveLetter\Backups\$env:USERNAME" }
-    foreach ($f in $USER_FOLDERS) {
-        $name = Split-Path $f -Leaf
-        $BackupPath = "$Base\$name"
-        Show-MainTitle ; Write-Host "`n PROCESANDO $Msg - $name" -ForegroundColor $COLOR_MENU
-        if ($Mode -eq "BACKUP") {
-            if (Test-Path $f) {
-                if (!(Test-Path $BackupPath)) { New-Item $BackupPath -ItemType Directory -Force | Out-Null }
-                robocopy "$f" "$BackupPath" /E /MT:16 /R:0 /W:0 /XJ /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
-            }
-        } 
-        elseif ($Mode -eq "RESTORE") {
-            if (Test-Path $BackupPath) {
-                if (!(Test-Path $f)) { New-Item $f -ItemType Directory -Force | Out-Null }
-                robocopy "$BackupPath" "$f" /E /MT:16 /R:0 /W:0 /XJ /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
-            }
+
+    if ($Mode -eq "BACKUP") {
+        Write-Host "`n BACKUP TOTAL - SELECCIONA EL TIPO DE RESPALDO" -ForegroundColor $COLOR_ALERT
+        Write-Host " [A] PERFIL ACTUAL" -ForegroundColor $COLOR_PRIMARY
+        Write-Host " [B] TODOS LOS PERFILES LOCALES" -ForegroundColor $COLOR_PRIMARY
+        Write-Host " [C] EXPORTAR INVENTARIO DE APPS Y DRIVERS" -ForegroundColor $COLOR_PRIMARY
+        Write-Host "`n CONTROL" -ForegroundColor Gray
+        Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
+        Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+        $choice = (Read-Host "`n ``> SELECCIONE").ToUpper()
+        if ($choice -eq "X") { return }
+
+        $Base = Read-Host (' RUTA DESTINO PARA BACKUP (ENTER para ' + $DEFAULT_BACKUP_BASE + ')')
+        if (-not $Base) { $Base = $DEFAULT_BACKUP_BASE }
+        $BackupRoot = Get-BackupRoot $Base
+
+        if ($choice -eq "A") {
+            Backup-ProfileData $env:USERPROFILE $BackupRoot
+            Read-Host "`n BACKUP DE PERFIL ACTUAL COMPLETADO EN: $BackupRoot. ENTER"
+            return
         }
+
+        if ($choice -eq "B") {
+            $profiles = Get-UserProfilePaths
+            foreach ($profile in $profiles) {
+                Backup-ProfileData $profile $BackupRoot
+            }
+            Read-Host "`n BACKUP DE TODOS LOS PERFILES COMPLETADO EN: $BackupRoot. ENTER"
+            return
+        }
+
+        if ($choice -eq "C") {
+            if (!(Test-Path $BackupRoot)) { New-Item -Path $BackupRoot -ItemType Directory -Force | Out-Null }
+            $appsFile = Join-Path $BackupRoot "InstalledApps_$((Get-Date).ToString('yyyyMMdd_HHmmss')).txt"
+            $driversPath = Join-Path $BackupRoot "Drivers"
+            Write-Host "`n [+] EXPORTANDO LISTA DE PROGRAMAS INSTALADOS..." -ForegroundColor $COLOR_PRIMARY
+            Get-Package | Sort-Object Name | Format-Table -AutoSize | Out-String | Out-File $appsFile -Encoding utf8
+            Write-Host "[+] EXPORTANDO DRIVERS INSTALADOS..." -ForegroundColor $COLOR_PRIMARY
+            if (!(Test-Path $driversPath)) { New-Item -Path $driversPath -ItemType Directory -Force | Out-Null }
+            Export-WindowsDriver -Online -Destination $driversPath | Out-Null
+            Read-Host "`n INVENTARIO CREADO EN: $BackupRoot. ENTER"
+            return
+        }
+
+        Write-Host "`n OPCION NO VALIDA. VUELVE A INTENTARLO." -ForegroundColor $COLOR_DANGER
+        Start-Sleep -Seconds 1
+        return
     }
-    Read-Host "`n PROCESO FINALIZADO. ENTER PARA VOLVER"
+
+    if ($Mode -eq "RESTORE") {
+        Write-Host "`n RESTORE TOTAL" -ForegroundColor $COLOR_ALERT
+        Write-Host ' [A] RESTAURAR DESDE UBICACIÓN PREDETERMINADA (LISTAR BACKUPS DISPONIBLES)' -ForegroundColor $COLOR_PRIMARY
+        Write-Host " [B] ESPECIFICAR RUTA MANUAL" -ForegroundColor $COLOR_PRIMARY
+        Write-Host " [C] RESTAURAR EL ÚLTIMO BACKUP AUTOMÁTICAMENTE" -ForegroundColor $COLOR_PRIMARY
+        Write-Host "`n CONTROL" -ForegroundColor Gray
+        Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
+        Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+        $choice = Read-Host "``> SELECCIONE"
+        if ($choice.ToUpper() -eq "X") { return }
+
+        if ($choice.ToUpper() -eq "A") {
+            $base = $DEFAULT_BACKUP_BASE
+            if (!(Test-Path $base)) {
+                Write-Host "`n [!] NO HAY BACKUPS EN LA UBICACIÓN PREDETERMINADA." -ForegroundColor $COLOR_DANGER
+                Start-Sleep -Seconds 2
+                return
+            }
+            $backups = Get-ChildItem -Path $base -Directory | Where-Object { $_.Name -like "Backup_*" } | Sort-Object CreationTime -Descending
+            if (!$backups) {
+                Write-Host "`n [!] NO SE ENCONTRARON BACKUPS." -ForegroundColor $COLOR_DANGER
+                Start-Sleep -Seconds 2
+                return
+            }
+            Write-Host "`n BACKUPS DISPONIBLES:" -ForegroundColor $COLOR_PRIMARY
+            for ($i = 0; $i -lt $backups.Count; $i++) {
+                Write-Host " [$($i+1)] $($backups[$i].Name) - $($backups[$i].CreationTime)"
+            }
+            Write-Host ' [L] ÚLTIMO (MÁS RECIENTE)' -ForegroundColor $COLOR_MENU
+            Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+            $sel = Read-Host "``> SELECCIONE BACKUP"
+            if ($sel.ToUpper() -eq "X") { return }
+            if ($sel.ToUpper() -eq "L") {
+                $BackupRoot = $backups[0].FullName
+            } elseif ($sel -match "^\d+$" -and [int]$sel -le $backups.Count) {
+                $BackupRoot = $backups[[int]$sel - 1].FullName
+            } else {
+                Write-Host "`n [!] SELECCIÓN INVÁLIDA." -ForegroundColor $COLOR_DANGER
+                Start-Sleep -Seconds 2
+                return
+            }
+        } elseif ($choice.ToUpper() -eq "B") {
+            $BackupRoot = Read-Host ' > INGRESE LA RUTA COMPLETA AL BACKUP'
+            if (-not $BackupRoot -or -not (Test-Path $BackupRoot)) {
+                Write-Host "`n [!] RUTA NO VÁLIDA O NO EXISTE." -ForegroundColor $COLOR_DANGER
+                Start-Sleep -Seconds 2
+                return
+            }
+        } elseif ($choice.ToUpper() -eq "C") {
+            $base = $DEFAULT_BACKUP_BASE
+            if (!(Test-Path $base)) {
+                Write-Host "`n [!] NO HAY BACKUPS EN LA UBICACIÓN PREDETERMINADA." -ForegroundColor $COLOR_DANGER
+                Start-Sleep -Seconds 2
+                return
+            }
+            $latest = Get-ChildItem -Path $base -Directory | Where-Object { $_.Name -like "Backup_*" } | Sort-Object CreationTime -Descending | Select-Object -First 1
+            if (!$latest) {
+                Write-Host "`n [!] NO SE ENCONTRARON BACKUPS." -ForegroundColor $COLOR_DANGER
+                Start-Sleep -Seconds 2
+                return
+            }
+            $BackupRoot = $latest.FullName
+            Write-Host "`n [+] USANDO EL ÚLTIMO BACKUP: $($latest.Name)" -ForegroundColor $COLOR_PRIMARY
+        } else {
+            Write-Host "`n OPCIÓN NO VÁLIDA." -ForegroundColor $COLOR_DANGER
+            Start-Sleep -Seconds 1
+            return
+        }
+
+        $backupProfiles = Get-ChildItem -Path $BackupRoot -Directory -ErrorAction SilentlyContinue
+        if (!$backupProfiles) {
+            Write-Host "`n [!] NO SE ENCONTRARON PERFILES DE BACKUP EN LA RUTA ESPECIFICADA." -ForegroundColor $COLOR_DANGER
+            Start-Sleep -Seconds 2
+            return
+        }
+
+        Write-Host "`n PERFILES EN EL BACKUP:" -ForegroundColor $COLOR_PRIMARY
+        $backupProfiles | ForEach-Object { Write-Host " [ ] $($_.Name)" -ForegroundColor $COLOR_MENU }
+        Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+        $profileChoice = Read-Host ' NOMBRE DE PERFIL A RESTAURAR (ENTER PARA TODOS, X PARA VOLVER)'
+        if ($profileChoice -and $profileChoice.ToUpper() -eq "X") {
+            return
+        }
+
+        if (-not $profileChoice) {
+            foreach ($profile in $backupProfiles) { Restore-ProfileData $profile.FullName }
+            Read-Host "`n RESTAURACIÓN DE TODOS LOS PERFILES COMPLETADA. ENTER"
+            return
+        }
+
+        $selected = $backupProfiles | Where-Object { $_.Name -ieq $profileChoice }
+        if ($selected) {
+            Restore-ProfileData $selected.FullName
+            Read-Host "`n RESTAURACIÓN DEL PERFIL $profileChoice COMPLETADA. ENTER"
+            return
+        }
+
+        Write-Host "`n [!] PERFIL NO ENCONTRADO EN EL BACKUP." -ForegroundColor $COLOR_DANGER
+        Start-Sleep -Seconds 2
+        return
+    }
 }
+
+# --- OPTIMIZADOR DE TEMPORALES ---
 
 # --- OPTIMIZADOR DE TEMPORALES ---
 function Invoke-TempOptimizer {
     while($true){
         Show-MainTitle
         Write-Host "`n OPTIMIZACION DE ARCHIVOS TEMPORALES" -ForegroundColor $COLOR_MENU
-        Write-Host " [A] LIMPIEZA PROFUNDA (TODO)`n [B] SOLO TEMPORALES DE USUARIO`n [C] SOLO TEMPORALES DEL SISTEMA"
+        Write-Host " [A] LIMPIEZA PROFUNDA ``(TODO`)`n [B] SOLO TEMPORALES DE USUARIO`n [C] SOLO TEMPORALES DEL SISTEMA"
         Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-        $o = (Read-Host "`n > SELECCIONE").ToUpper()
+        $o = (Read-Host "`n ``> SELECCIONE").ToUpper()
         if($o -eq "X"){break}
         $targets = @()
-        if($o -eq "A"){ $targets = @("$env:TEMP\*", "C:\Windows\Temp\*") }
-        elseif($o -eq "B"){ $targets = @("$env:TEMP\*") }
-        elseif($o -eq "C"){ $targets = @("C:\Windows\Temp\*") }
+        if($o -eq "A"){ $targets = @("$env:TEMP", "C:\Windows\Temp") }
+        elseif($o -eq "B"){ $targets = @("$env:TEMP") }
+        elseif($o -eq "C"){ $targets = @("C:\Windows\Temp") }
+        else {
+            Write-Host "`n OPCION NO VALIDA. INTENTA NUEVAMENTE." -ForegroundColor $COLOR_DANGER
+            Start-Sleep -Seconds 1
+            continue
+        }
+
         if($targets.Count -gt 0){
             Write-Host "`n ELIMINANDO ARCHIVOS..." -ForegroundColor $COLOR_PRIMARY
-            $targets | ForEach-Object { Remove-Item $_ -Recurse -Force -ErrorAction SilentlyContinue }
-            Write-Host "`n LIMPIEZA COMPLETADA" -ForegroundColor $COLOR_PRIMARY; Start-Sleep -Seconds 1
+            foreach ($target in $targets) {
+                if (Test-Path $target) {
+                    Get-ChildItem -Path $target -Force -ErrorAction SilentlyContinue | ForEach-Object {
+                        Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                }
+            }
+            Write-Host "`n LIMPIEZA COMPLETADA" -ForegroundColor $COLOR_PRIMARY
+            Start-Sleep -Seconds 1
         }
     }
 }
@@ -173,13 +351,13 @@ function Invoke-TempOptimizer {
 function Invoke-WingetMenu {
     while($true){
         Show-MainTitle
-        Write-Host "`n GESTION DE PAQUETES (WINGET & CHOCOLATEY)" -ForegroundColor $COLOR_MENU
+        Write-Host ([Environment]::NewLine + ' GESTION DE PAQUETES (WINGET & CHOCOLATEY)') -ForegroundColor $COLOR_MENU
         Write-Host " [A] WINGET: ACTUALIZAR TODO             [D] CHOCO: INSTALAR CHOCOLATEY"
         Write-Host " [B] WINGET: LISTAR DISPONIBLES          [E] CHOCO: ACTUALIZAR TODO"
         Write-Host " [C] WINGET: REPARAR CLIENTE             [F] CHOCO: BUSCAR PAQUETE"
-        Write-Host " [G] INSTALAR POR NOMBRE (AUTO-SEARCH)"
+        Write-Host ' [G] INSTALAR POR NOMBRE (AUTO-SEARCH)'
         Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-        $o = (Read-Host "`n > SELECCIONE").ToUpper()
+        $o = (Read-Host "`n ``> SELECCIONE").ToUpper()
         if($o -eq "X"){break}
         
         if($o -eq "A"){
@@ -213,7 +391,7 @@ function Invoke-WingetMenu {
             Read-Host "`n ENTER"
         }
         if($o -eq "G"){
-            $app = (Read-Host "`n > ESCRIBA EL NOMBRE DE LA APP A INSTALAR").Trim()
+            $app = (Read-Host "`n ``> ESCRIBA EL NOMBRE DE LA APP A INSTALAR").Trim()
             if($app){ Invoke-SmartInstall -AppID $app -AppName $app }
             Read-Host "`n PROCESO TERMINADO. ENTER"
         }
@@ -231,10 +409,10 @@ function Show-LiveMonitor {
         $mem = Get-CimInstance Win32_OperatingSystem | Select-Object @{Name="Free";Expression={"{0:N2}" -f ($_.FreePhysicalMemory / 1MB)}}, @{Name="Total";Expression={"{0:N2}" -f ($_.TotalVisibleMemorySize / 1MB)}}
         
         Write-Host " ESTADO ACTUAL:" -ForegroundColor $COLOR_ALERT
-        Write-Host " >> CPU: $cpu %" -ForegroundColor $COLOR_PRIMARY
-        Write-Host " >> RAM LIBRE: $($mem.Free) GB / $($mem.Total) GB" -ForegroundColor $COLOR_PRIMARY
+        Write-Host (' {0}{0} CPU: {1} %' -f '>', $cpu) -ForegroundColor $COLOR_PRIMARY
+        Write-Host (' {0}{0} RAM LIBRE: {1} GB / {2} GB' -f '>', $mem.Free, $mem.Total) -ForegroundColor $COLOR_PRIMARY
         
-        Write-Host "`n TOP 10 PROCESOS (ORDENADOS POR CONSUMO DE RAM):" -ForegroundColor $COLOR_ALERT
+        Write-Host "`n TOP 10 PROCESOS ``(ORDENADOS POR CONSUMO DE RAM`)`:" -ForegroundColor $COLOR_ALERT
         Write-Host " -----------------------------------------------------------------------------" -ForegroundColor Gray
         
         Get-Process | Sort-Object WorkingSet -Descending | Select-Object -First 10 | ForEach-Object {
@@ -252,7 +430,7 @@ function Show-LiveMonitor {
         Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
         Write-Host " [X] VOLVER AL MENU PRINCIPAL" -ForegroundColor $COLOR_DANGER
 
-        $action = (Read-Host "`n > SELECCIONE").ToUpper()
+        $action = (Read-Host "`n ``> SELECCIONE").ToUpper()
         if ($action -eq "X") { break }
         if ($action -eq "K") {
             $target = Read-Host " INGRESE NOMBRE O ID DEL PROCESO"
@@ -277,7 +455,7 @@ function Invoke-DefenderControl {
         Write-Host "`n CONTROL TOTAL DE WINDOWS DEFENDER" -ForegroundColor $COLOR_MENU
         Write-Host " [A] ACTIVAR DEFENDER`n [B] DESACTIVAR DEFENDER"
         Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-        $o = (Read-Host "`n > SELECCIONE").ToUpper()
+        $o = (Read-Host "`n ``> SELECCIONE").ToUpper()
         if($o -eq "X"){break}
         if($o -eq "A"){
             reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v "DisableAntiSpyware" /t REG_DWORD /d 0 /f | Out-Null
@@ -295,10 +473,10 @@ function Invoke-DefenderControl {
 
 function Invoke-AutoFlow {
     Show-MainTitle
-    Write-Host "`n [!] PERFIL: MANTENIMIENTO EXPRESS (AUTO-FLOW)" -ForegroundColor $COLOR_ALERT
+    Write-Host ([Environment]::NewLine + ' [!] PERFIL: MANTENIMIENTO EXPRESS (AUTO-FLOW)') -ForegroundColor $COLOR_ALERT
     Write-Host " ---------------------------------------------------" -ForegroundColor Gray
     Write-Host " DESCRIPCION:" -ForegroundColor $COLOR_MENU
-    Write-Host " 1. Elimina Apps basura (Netflix, Disney, etc.)"
+    Write-Host ' 1. Elimina Apps basura (Netflix, Disney, etc.)'
     Write-Host " 2. Limpia archivos temporales del sistema."
     Write-Host " 3. Instala: Chrome, 7-Zip y VLC Player."
     Write-Host " ---------------------------------------------------" -ForegroundColor Gray
@@ -382,13 +560,13 @@ function Invoke-DriverManagement {
     while($true){ 
         Show-MainTitle
         Write-Host "`n GESTION DE DRIVERS PRO" -ForegroundColor $COLOR_MENU
-        Write-Host " [A] EXPORTAR DRIVERS (BACKUP LOCAL EN USB/SCRIPT)"
-        Write-Host " [B] RE-INSTALAR DRIVERS (DESDE BACKUP)"
-        Write-Host " [C] BUSCAR EN SERVIDORES OFICIALES (WINDOWS UPDATE)"
-        Write-Host " [D] VER IDENTIFICADORES DE HARDWARE (SIN DRIVER)"
+        Write-Host ' [A] EXPORTAR DRIVERS (BACKUP LOCAL EN USB/SCRIPT)'
+        Write-Host ' [B] RE-INSTALAR DRIVERS (DESDE BACKUP)'
+        Write-Host ' [C] BUSCAR EN SERVIDORES OFICIALES (WINDOWS UPDATE)'
+        Write-Host ' [D] VER IDENTIFICADORES DE HARDWARE (SIN DRIVER)'
         Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
         
-        $o=(Read-Host "`n > SELECCIONE").ToUpper()
+        $o=(Read-Host "`n ``> SELECCIONE").ToUpper()
         if($o -eq "X"){break}
         
         if($o -eq "A") {
@@ -447,7 +625,7 @@ function Invoke-DriverManagement {
                 $missing | Select-Object Name, Status, DeviceID | Out-GridView -Title "Drivers Faltantes - TechFlow"
                 Write-Host " [+] Se ha abierto una ventana con el listado detallado." -ForegroundColor $COLOR_PRIMARY
             } else {
-                Write-Host " [+] No se detectaron problemas de hardware (Todo OK)." -ForegroundColor Green
+                Write-Host ' [+] No se detectaron problemas de hardware (Todo OK).' -ForegroundColor Green
             }
             Read-Host " ENTER PARA VOLVER"
         }
@@ -465,22 +643,22 @@ while ($true) {
         Write-Host "    [B]  RESTORE TOTAL            [F]  WIN UTIL TITUS           [J]  GESTION USUARIOS" -ForegroundColor Green
         Write-Host "    [C]  GESTION DRIVERS          [G]  MASSGRAVE ACT            [K]  SOPORTE TECNICO PRO" -ForegroundColor Green
         Write-Host "    [D]  PURGA Y FORMATEO         [H]  GESTION PAQUETES PRO     [L]  BYPASS WINDOWS 11" -ForegroundColor Green
-        Write-Host "    [M]  RED Y REPARACION         [N]  MANTENIM DISCO           [O]  MONITOR EN VIVO (PRO)" -ForegroundColor Green
-        Write-Host "    [P]  WINDOWS DEFENDER TOTAL   [Q]  AUTO-FLOW (EXPRESS)" -ForegroundColor Green
+        Write-Host '    [M]  RED Y REPARACION         [N]  MANTENIM DISCO           [O]  MONITOR EN VIVO (PRO)' -ForegroundColor Green
+        Write-Host '    [P]  WINDOWS DEFENDER TOTAL   [Q]  AUTO-FLOW (EXPRESS)' -ForegroundColor Green
     } else {
         Write-Host "    [A] BACKUP TOTAL`n    [B] RESTORE TOTAL`n    [C] GESTION DRIVERS`n    [D] PURGA Y FORMATEO`n    [E] OPTIMIZAR TEMP"
         Write-Host "    [F] WIN UTIL TITUS`n    [G] MASSGRAVE ACT`n    [H] GESTION PAQUETES PRO`n    [I] KIT POST FORMAT`n    [J] GESTION USUARIOS"
-        Write-Host "    [K] SOPORTE TECNICO PRO`n    [L] BYPASS WINDOWS 11`n    [M] RED Y REPARACION`n    [N] MANTENIM DISCO`n    [O] MONITOR EN VIVO (PRO)"
+        Write-Host ('    [K] SOPORTE TECNICO PRO' + "`n    [L] BYPASS WINDOWS 11`n    [M] RED Y REPARACION`n    [N] MANTENIM DISCO`n    [O] MONITOR EN VIVO " + '(PRO)')
         Write-Host "    [P] WINDOWS DEFENDER TOTAL"
-        Write-Host "    [Q]  AUTO-FLOW (MANTENIMIENTO EXPRESS)" -ForegroundColor Green
+        Write-Host '    [Q]  AUTO-FLOW (MANTENIMIENTO EXPRESS)' -ForegroundColor Green
     }
 
     Write-Host "`n CONFIGURACION Y VISTA" -ForegroundColor Gray
     Write-Host "  -----------------------------------------------------------------------------" -ForegroundColor $COLOR_MENU
-    Write-Host "    [R] REFRESCAR MENU            [V] CAMBIAR VISTA (V)" -ForegroundColor $COLOR_MENU
+    Write-Host '    [R] REFRESCAR MENU            [V] CAMBIAR VISTA (V)' -ForegroundColor $COLOR_MENU
     Write-Host "    [S] CAMBIAR CLAVE             [X] SALIR DEL SCRIPT" -ForegroundColor $COLOR_DANGER
 
-    $opt = (Read-Host "`n > OPCION").ToUpper()
+    $opt = (Read-Host "`n ``> OPCION").ToUpper()
     switch ($opt) {
         "R" { continue }
         "V" { $Global:MenuHorizontal = !$Global:MenuHorizontal; continue }
@@ -492,7 +670,7 @@ while ($true) {
             while($true){ Show-MainTitle; Write-Host "`n OPERACION CRITICA" -ForegroundColor $COLOR_DANGER
             Write-Host " [A] PURGAR PERFIL`n [B] FORMATEAR USB"
             Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-            $o=(Read-Host "`n > SELECCIONE").ToUpper(); if($o -eq "X"){break}
+            $o=(Read-Host "`n ``> SELECCIONE").ToUpper(); if($o -eq "X"){break}
             $pin=Get-Random -Min 1000 -Max 9999; Write-Host "`n PIN DE SEGURIDAD $pin" -BackgroundColor Red -ForegroundColor White
             if((Read-Host " INGRESE PIN PARA CONFIRMAR") -eq $pin.ToString()){
                 if($o -eq "B"){$l=(Read-Host " LETRA DE UNIDAD"); Format-Volume -DriveLetter $l -FileSystem NTFS -Force}
@@ -511,7 +689,7 @@ while ($true) {
                 Write-Host " [A] LISTAR USUARIOS`n [B] CREAR LOCAL ADMIN`n [C] ELIMINAR USUARIO"
                 Write-Host " [D] ACTIVAR SUPER ADMIN`n [F] CAMBIAR PASSWORD"
                 Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-                $u=(Read-Host "`n >").ToUpper(); if($u -eq "X"){break}
+                $u=(Read-Host ([Environment]::NewLine + ' >')).ToUpper(); if($u -eq "X"){break}
                 if($u -eq "A"){net user ; Read-Host " ENTER"}
                 if($u -eq "B"){$n=Read-Host " NOMBRE"; net user "$n" /add; net localgroup administrators "$n" /add; Read-Host " OK"}
                 if($u -eq "C"){$n=Read-Host " NOMBRE"; net user "$n" /delete; Read-Host " OK"}
@@ -523,34 +701,50 @@ while ($true) {
             while($true){ Show-MainTitle; Write-Host "`n SOPORTE TECNICO PRO" -ForegroundColor $COLOR_MENU
             Write-Host " [A] SALUD DISCO`n [B] REPARAR SISTEMA`n [C] CLAVE BIOS`n [D] SINCRONIZAR HORA"
             Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-            $s=(Read-Host "`n >").ToUpper(); if($s -eq "X"){break}
+            $s=(Read-Host ([Environment]::NewLine + ' >')).ToUpper(); if($s -eq "X"){break}
             if($s -eq "A"){Get-PhysicalDisk | Format-Table; Read-Host " ENTER"}
             if($s -eq "B"){sfc /scannow; dism /online /cleanup-image /restorehealth; Read-Host " OK"}
             if($s -eq "C"){(Get-CimInstance SoftwareLicensingService).OA3xOriginalProductKey; Read-Host " OK"} 
-            if($s -eq "D"){net stop w32time; w32tm /config /syncfromflags:manual /manualpeerlist:"time.windows.com"; net start w32time; w32tm /resync; Read-Host " OK"} }
+            if($s -eq "D"){ 
+                net stop w32time 
+                w32tm /config /syncfromflags:manual /manualpeerlist:"time.windows.com" 
+                net start w32time 
+                $syncResult = w32tm /resync 2>&1 
+                if ($LASTEXITCODE -eq 0) { 
+                    Write-Host "`n [+] SINCRONIZACION EXITOSA" -ForegroundColor $COLOR_PRIMARY 
+                    Write-Host "`n ESTADO DE SINCRONIZACION:" -ForegroundColor $COLOR_ALERT 
+                    w32tm /query /source | ForEach-Object { Write-Host (' > ' + $_) } 
+                    w32tm /query /status | ForEach-Object { Write-Host (' > ' + $_) } 
+                } else { 
+                    Write-Host "`n [!] ERROR AL SINCRONIZAR:" -ForegroundColor $COLOR_DANGER 
+                    $syncResult | ForEach-Object { Write-Host (' > ' + $_) } 
+                } 
+                Read-Host " OK" 
+            } }
         }
         "L" { 
             while($true){ Show-MainTitle; Write-Host "`n BYPASS WINDOWS 11" -ForegroundColor $COLOR_ALERT
-            Write-Host " [A] BYPASS HARDWARE`n [B] BYPASS INTERNET"
+            Write-Host " [A] BYPASS HARDWARE   - Omitir TPM, SecureBoot y chequeos de RAM para continuar la instalación" -ForegroundColor $COLOR_MENU
+            Write-Host " [B] BYPASS INTERNET  - Evitar la necesidad de conexión a Internet durante la instalación" -ForegroundColor $COLOR_MENU
             Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-            $b=(Read-Host "`n > SELECCIONE").ToUpper(); if($b -eq "X"){break}
-            if($b -eq "A"){$reg="HKLM:\System\Setup\LabConfig"; if(!(Test-Path $reg)){New-Item $reg -Force}; "BypassTPMCheck","BypassSecureBootCheck","BypassRAMCheck" | ForEach-Object {New-ItemProperty $reg $_ -Value 1 -PropertyType DWord -Force}; Read-Host " OK"}
-            if($b -eq "B"){& $env:SystemRoot\System32\oobe\bypassnro.cmd} }
+            $b=(Read-Host "`n ``> SELECCIONE").ToUpper(); if($b -eq "X"){break}
+            if($b -eq "A"){Write-Host "`n [+] Aplicando bypass de hardware: se omiten TPM, SecureBoot y RAM checks..." -ForegroundColor $COLOR_PRIMARY; $reg="HKLM:\System\Setup\LabConfig"; if(!(Test-Path $reg)){New-Item $reg -Force}; "BypassTPMCheck","BypassSecureBootCheck","BypassRAMCheck" | ForEach-Object {New-ItemProperty $reg $_ -Value 1 -PropertyType DWord -Force}; Read-Host " OK"}
+            if($b -eq "B"){Write-Host "`n [+] Aplicando bypass de Internet: la instalación no requerirá conexión obligatoria..." -ForegroundColor $COLOR_PRIMARY; & $env:SystemRoot\System32\oobe\bypassnro.cmd; Read-Host " OK"} }
         }
         "M" {  
             while($true){ 
                 Show-MainTitle; Write-Host "`n RED Y REPARACION" -ForegroundColor $COLOR_MENU
-                Write-Host " [A] RESETEAR RED           [F] TRAZA DE RUTA (TRACERT)"
-                Write-Host " [B] REPARAR UPDATE         [G] TEST VELOCIDAD (FAST.COM)"
+                Write-Host ' [A] RESETEAR RED           [F] TRAZA DE RUTA (TRACERT)'
+                Write-Host ' [B] REPARAR UPDATE         [G] TEST VELOCIDAD (FAST.COM)'
                 Write-Host " [C] VER IP                 [E] VER CLAVES WI FI"
                 Write-Host " [D] PING MONITOR"
                 Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-                $m=(Read-Host "`n > SELECCIONE").ToUpper(); if($m -eq "X"){break}
+                $m=(Read-Host "`n ``> SELECCIONE").ToUpper(); if($m -eq "X"){break}
                 if($m -eq "A"){netsh winsock reset; netsh int ip reset; ipconfig /flushdns; Read-Host " OK"}
                 if($m -eq "B"){"wuauserv","bits" | ForEach-Object {Stop-Service $_ -Force}; Remove-Item "C:\Windows\SoftwareDistribution\*" -Recurse -Force; "wuauserv","bits" | ForEach-Object {Start-Service $_}; Read-Host " OK"}
-                if($m -eq "C"){Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -notmatch 'Loopback' | Format-Table; Read-Host " ENTER"}
+                if($m -eq "C"){Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -notmatch "Loopback" | Format-Table; Read-Host " ENTER"}
                 if($m -eq "D"){
-                    $target = Read-Host "> IP O DOMINIO (DEFECTO 8.8.8.8)"; if(!$target){$target="8.8.8.8"}
+                    $target = Read-Host ([Environment]::NewLine + ' IP O DOMINIO (DEFECTO 8.8.8.8)'); if(!$target){$target="8.8.8.8"}
                     while($true){Test-Connection $target -Count 1; if([console]::KeyAvailable){break}; Start-Sleep -Seconds 1}
                 } 
                 if($m -eq "E"){
@@ -571,7 +765,7 @@ while ($true) {
                 Show-MainTitle; Write-Host "`n MANTENIMIENTO DE DISCOS" -ForegroundColor $COLOR_MENU
                 Write-Host " [A] DESFRAGMENTAR HDD`n [B] OPTIMIZAR SSD`n [C] LIMPIEZA DISM"
                 Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-                $o=(Read-Host "`n >").ToUpper(); if($o -eq "X"){break}
+                $o=(Read-Host ([Environment]::NewLine + ' >')).ToUpper(); if($o -eq "X"){break}
                 if($o -eq "A"){defrag C: /O; Read-Host " OK"}
                 if($o -eq "B"){Optimize-Volume -DriveLetter C -ReTrim -Verbose; Read-Host " OK"}
                 if($o -eq "C"){dism /online /Cleanup-Image /StartComponentCleanup; Read-Host " OK"}
@@ -579,7 +773,7 @@ while ($true) {
         }
         "O" { Show-LiveMonitor }
         "P" { Invoke-DefenderControl }
-        "S" { $nk=Read-Host "> NUEVA CLAVE"; if($nk){$nk | Out-File $CONFIG_FILE -Encoding ascii -Force; $Global:MasterPass=$nk}; Read-Host " OK" }
+        "S" { $nk=Read-Host ' > NUEVA CLAVE'; if($nk){$nk | Out-File $CONFIG_FILE -Encoding ascii -Force; $Global:MasterPass=$nk}; Read-Host " OK" }
         "X" { exit }
     }
 }
