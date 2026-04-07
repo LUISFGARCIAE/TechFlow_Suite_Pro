@@ -52,6 +52,43 @@ Para maximizar la eficiencia en el taller, la suite divide la instalación en do
    - Usa la tecla `X` en cualquier submenú para regresar.
    - En **Auto-Flow**, presiona `ENTER` para iniciar o `X` para cancelar antes de empezar.
 
+❓ Preguntas Frecuentes (FAQ)
+1. ¿Por qué el archivo .EXE tiene alertas en VirusTotal pero el .PS1 no? ⚠️
+Es la duda más común. El código base en PowerShell (.ps1) es 100% LIMPIO. Sin embargo, al convertirlo a ejecutable (.exe) para que sea más fácil de usar, los antivirus se ponen "nerviosos" por dos razones técnicas:
+
+El Empaquetado: Herramientas como PS2EXE envuelven el script en un ejecutable genérico. Muchos virus reales usan esta misma técnica para esconderse, por lo que los antivirus marcan el archivo como "sospechoso" por precaución (Falso Positivo).
+
+Firma Digital: Como es un proyecto independiente y no tiene una firma digital de pago (certificados EV que cuestan cientos de dólares), Windows y otros motores no reconocen al autor y lanzan advertencias preventivas.
+
+💡 Consejo de confianza: Si tienes dudas, no uses el .exe. Descarga el archivo .ps1, revísalo línea por línea y ejecútalo directamente con PowerShell. ¡Transparencia total!
+
+2. ¿Es seguro darle permisos de Administrador? 🛡️
+Sí. El script necesita privilegios de Administrador para realizar tareas críticas del sistema que un usuario normal no puede hacer:
+
+Reparar archivos dañados con SFC y DISM.
+
+Realizar copias de seguridad de los Drivers del sistema.
+
+Modificar llaves del Registro para optimizar el rendimiento y la privacidad.
+
+Gestionar instalaciones de software mediante Winget o Chocolatey.
+
+3. ¿Qué hago si mi antivirus bloquea el script al ejecutarlo? 🛠️
+Debido a que el script interactúa con funciones profundas del sistema (como el registro y servicios), algunos antivirus "heurísticos" pueden bloquearlo.
+
+Solución: Agrega la carpeta donde tienes el script a las exclusiones de tu antivirus o desactiva temporalmente la protección en tiempo real mientras realizas el mantenimiento.
+
+4. ¿Cómo puedo apoyar este proyecto? ⭐
+Este es un proyecto hecho "de un colega para colegas" con mucho esfuerzo. Puedes ayudar de tres formas:
+
+Dale una Estrella (Star): Haz clic en la ⭐ arriba a la derecha en este GitHub. Esto ayuda a subir la reputación del proyecto.
+
+Reporta Errores: Si algo no funciona en tu equipo, abre un "Issue" aquí en GitHub para que pueda corregirlo en la v4.2.
+
+Vota en VirusTotal: Si analizas el archivo, deja un voto positivo y un comentario confirmando que es seguro. ¡Ayúdanos a limpiar la fama del script!
+
+<img width="1791" height="341" alt="image" src="https://github.com/user-attachments/assets/01265ba6-9089-42a8-8d27-cabe00968561" />
+
 ---
 
 ## 👨‍💻 Desarrollador
