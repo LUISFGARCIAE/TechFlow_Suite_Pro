@@ -1,12 +1,213 @@
+# ============================================================
+# [SISTEMA] - AUTO-ELEVACIÓN A ADMINISTRADOR
+# ============================================================
+if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Write-Host " [!] Solicitando permisos de Administrador..." -ForegroundColor Yellow
+    Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    exit
+}
+# ============================================================
 $CONFIG_FILE = "$PSScriptRoot\suite_config.dat"
 $COLOR_PRIMARY = "Green"; $COLOR_ALERT = "Yellow"; $COLOR_DANGER = "Red"; $COLOR_MENU = "Cyan"
 $Global:MenuHorizontal = $true
 
 if (!(Test-Path $CONFIG_FILE)) { "ADMIN2026" | Out-File $CONFIG_FILE -Encoding ascii -Force }
 $Global:MasterPass = (Get-Content $CONFIG_FILE -Raw).Trim()
-$USER_FOLDER_NAMES = @("Desktop", "Documents", "Pictures", "Videos", "Music", "Downloads", "Favorites", "Contacts", "Saved Games", "AppData\Roaming")
+
+$USER_FOLDER_NAMES = @("Desktop", "Documents", "Pictures", "Videos", "Music", "Downloads", "Favorites", "Contacts")
 $USER_FOLDERS = $USER_FOLDER_NAMES
 $DEFAULT_BACKUP_BASE = "$env:SystemDrive\Backups"
+
+$LOG_FILE = Join-Path $PSScriptRoot ("techflow_suite_log_" + (Get-Date).ToString("yyyyMMdd_HHmmss") + ".log")
+$PREFS_FILE = Join-Path $PSScriptRoot "suite_prefs.json"
+function Write-Log {
+    param(
+        [Parameter(Mandatory = $true)][string]$Level,
+        [Parameter(Mandatory = $true)][string]$Message
+    )
+    $ts = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    Add-Content -Path $LOG_FILE -Value "$ts [$Level] $Message" -Encoding utf8
+}
+Write-Log "INFO" "TECHFLOW_SUITE started. ScriptRoot=$PSScriptRoot"
+
+function Get-Prefs {
+    if(Test-Path $PREFS_FILE){
+        try { return (Get-Content $PREFS_FILE -Raw | ConvertFrom-Json) } catch { return [pscustomobject]@{} }
+    }
+    return [pscustomobject]@{}
+}
+
+function Save-Prefs($prefs){
+    try {
+        ($prefs | ConvertTo-Json -Depth 5) | Out-File -FilePath $PREFS_FILE -Encoding utf8 -Force
+        Write-Log "INFO" "Prefs saved to $PREFS_FILE"
+    } catch {
+        Write-Log "WARN" ("Prefs save failed: " + $_.Exception.Message)
+    }
+}
+
+function Pause-Enter {
+    param([string]$Message = " PRESIONE ENTER PARA VOLVER")
+    Read-Host $Message | Out-Null
+}
+
+function Read-MenuOption {
+    param(
+        [Parameter(Mandatory = $true)][string]$Prompt,
+        [string[]]$Valid = @(),
+        [switch]$AllowEmpty
+    )
+    while ($true) {
+        $raw = Read-Host $Prompt
+        if (-not $raw -or -not $raw.Trim()) {
+            # Enter vacío: no repreguntar aquí (evita prompts duplicados). El caller decide si refresca o sale.
+            return ""
+        }
+        $opt = $raw.Trim().ToUpper()
+        if ($Valid.Count -eq 0 -or $Valid -contains $opt) { return $opt }
+        Write-Host "`n [!] OPCIÓN NO VÁLIDA: $opt" -ForegroundColor $COLOR_DANGER
+        Start-Sleep -Seconds 1
+    }
+}
+
+function Test-IsAdmin {
+    try {
+        $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $p = New-Object Security.Principal.WindowsPrincipal($id)
+        return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } catch {
+        return $false
+    }
+}
+
+function Require-Admin {
+    param([string]$ActionName = "esta operación")
+    if (-not (Test-IsAdmin)) {
+        Write-Host "`n [!] Requiere permisos de ADMIN para $ActionName." -ForegroundColor $COLOR_DANGER
+        Write-Host "     Cierra y ejecuta PowerShell como Administrador." -ForegroundColor $COLOR_ALERT
+        Write-Log "WARN" "Admin required for: $ActionName"
+        Pause-Enter " ENTER"
+        return $false
+    }
+    return $true
+}
+
+function Test-HasInternet {
+    try {
+        return Test-Connection -ComputerName "1.1.1.1" -Count 1 -Quiet -ErrorAction SilentlyContinue
+    } catch {
+        return $false
+    }
+}
+
+function Confirm-Critical {
+    param(
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$Keyword
+    )
+    Show-MainTitle
+    Write-Host "`n OPERACIÓN CRÍTICA: $Title" -ForegroundColor $COLOR_DANGER
+    $pin = Get-Random -Min 1000 -Max 9999
+    Write-Host "`n PIN DE SEGURIDAD $pin" -BackgroundColor Red -ForegroundColor White
+    $p = Read-Host " INGRESE PIN PARA CONFIRMAR"
+    if ($p -ne $pin.ToString()) {
+        Write-Host "`n [!] PIN INCORRECTO." -ForegroundColor $COLOR_DANGER
+        Write-Log "WARN" "Critical confirm failed (PIN): $Title"
+        Start-Sleep -Seconds 1
+        return $false
+    }
+    $k = (Read-Host " ESCRIBA '$Keyword' PARA CONTINUAR").Trim().ToUpper()
+    if ($k -ne $Keyword.Trim().ToUpper()) {
+        Write-Host "`n [!] PALABRA DE CONFIRMACIÓN INCORRECTA." -ForegroundColor $COLOR_DANGER
+        Write-Log "WARN" "Critical confirm failed (keyword): $Title"
+        Start-Sleep -Seconds 1
+        return $false
+    }
+    Write-Log "INFO" "Critical confirmed: $Title"
+    return $true
+}
+
+function Confirm-RemoteScript {
+    param([Parameter(Mandatory = $true)][string]$Url)
+    Show-MainTitle
+    Write-Host "`n [!] SE EJECUTARÁ UN SCRIPT REMOTO:" -ForegroundColor $COLOR_ALERT
+    Write-Host "     $Url" -ForegroundColor $COLOR_MENU
+    Write-Host "     Esto puede modificar el sistema." -ForegroundColor $COLOR_ALERT
+    $ok = Read-MenuOption " CONTINUAR? (S/N)" -Valid @("S","N")
+    if ($ok -ne "S") {
+        Write-Log "INFO" "Remote script canceled: $Url"
+        return $false
+    }
+    if (-not (Test-HasInternet)) {
+        Write-Host "`n [!] Sin conexión a Internet." -ForegroundColor $COLOR_DANGER
+        Write-Log "WARN" "Remote script blocked (no internet): $Url"
+        Pause-Enter " ENTER"
+        return $false
+    }
+    Write-Log "INFO" "Remote script confirmed: $Url"
+    return $true
+}
+
+function Format-Bytes([Int64]$Bytes) {
+    if ($Bytes -lt 1KB) { return "$Bytes B" }
+    if ($Bytes -lt 1MB) { return "{0:N2} KB" -f ($Bytes / 1KB) }
+    if ($Bytes -lt 1GB) { return "{0:N2} MB" -f ($Bytes / 1MB) }
+    if ($Bytes -lt 1TB) { return "{0:N2} GB" -f ($Bytes / 1GB) }
+    return "{0:N2} TB" -f ($Bytes / 1TB)
+}
+
+function Get-FolderSizeBytes {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    try {
+        $sum = 0L
+        Get-ChildItem -LiteralPath $Path -Force -Recurse -ErrorAction SilentlyContinue -File |
+            ForEach-Object { $sum += $_.Length }
+        return $sum
+    } catch {
+        return 0L
+    }
+}
+
+function Get-DriveFreeBytes {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    try {
+        $root = [System.IO.Path]::GetPathRoot($Path)
+        $name = $root.TrimEnd('\')
+        $d = Get-CimInstance Win32_LogicalDisk -Filter ("DeviceID='" + $name + "'") -ErrorAction SilentlyContinue
+        if ($d) { return [Int64]$d.FreeSpace }
+        return 0L
+    } catch { return 0L }
+}
+
+function Is-SuspiciousBackupBase {
+    param([Parameter(Mandatory = $true)][string]$Base)
+    $b = $Base.Trim().ToLower()
+    return ($b -like "*\\windows*" -or $b -like "*\\system32*" -or $b -like "*\\program files*")
+}
+
+function Select-RemovableVolumes {
+    try {
+        return Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -eq 2 }
+    } catch {
+        return @()
+    }
+}
+
+function Download-RemoteScript {
+    param([Parameter(Mandatory = $true)][string]$Url)
+    $dest = Join-Path $env:TEMP ("techflow_remote_" + (Get-Date).ToString("yyyyMMdd_HHmmss") + ".ps1")
+    Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $dest
+    return $dest
+}
+
+function Get-FileHashSafe {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    try {
+        return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash
+    } catch {
+        return $null
+    }
+}
 
 function Get-UserProfilePaths {
     $profilesPath = "$env:SystemDrive\Users"
@@ -36,9 +237,10 @@ function Backup-ProfileData($profilePath, $backupRoot) {
     }
 }
 
-function Restore-ProfileData($backupProfilePath) {
+function Restore-ProfileData($backupProfilePath, $TargetUsersRoot = $null) {
     $profileName = Split-Path $backupProfilePath -Leaf
-    $targetRoot = "$env:SystemDrive\Users\$profileName"
+    if(-not $TargetUsersRoot){ $TargetUsersRoot = "$env:SystemDrive\Users" }
+    $targetRoot = Join-Path $TargetUsersRoot $profileName
     if (!(Test-Path $targetRoot)) { New-Item -Path $targetRoot -ItemType Directory -Force | Out-Null }
     Get-ChildItem -Path $backupProfilePath -Directory | ForEach-Object {
         $source = $_.FullName
@@ -92,6 +294,9 @@ function Invoke-KitPostFormat {
         "81" = @{Name="Razer Cortex"; ID="Razer.Cortex"}; "82" = @{Name="MSI Afterburner"; ID="MSI.Afterburner"}; "86" = @{Name="VS Code"; ID="Microsoft.VisualStudioCode"}; "87" = @{Name="Git"; ID="Git.Git"}; "90" = @{Name="Docker"; ID="Docker.DockerDesktop"};
         "94" = @{Name="DirectX"; ID="Microsoft.DirectX"}; "95" = @{Name="Google Drive"; ID="Google.Drive"}; "98" = @{Name="Notepad++"; ID="Notepad++.Notepad++"}; "100" = @{Name="VirtualBox"; ID="Oracle.VirtualBox"}
     }
+    $prefs = Get-Prefs
+    $lastOpt = $null
+    try { $lastOpt = $prefs.lastKitOption } catch { $lastOpt = $null }
 
     while($true){
         Clear-Host
@@ -103,9 +308,16 @@ function Invoke-KitPostFormat {
         Write-Host ' [3] SELECCION MANUAL (Listado Completo)'
         Write-Host " [4] ACTUALIZAR TODO EL SOFTWARE"
         Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+        if($lastOpt){ Write-Host " [ENTER] Repetir última selección: $lastOpt" -ForegroundColor $COLOR_MENU }
         
-        $opt = (Read-Host "`n ``> SELECCIONE").ToUpper()
+        $opt = Read-MenuOption "`n ``> SELECCIONE" -Valid @("0","1","2","3","4","X")
+        if(-not $opt -and $lastOpt){ $opt = $lastOpt.ToString().Trim().ToUpper() }
         if($opt -eq "X"){break}
+        if(-not $opt){ continue }
+
+        $prefs.lastKitOption = $opt
+        Save-Prefs $prefs
+        Write-Log "KIT" "Selected option=$opt"
         
         $selection = @()
         switch ($opt) {
@@ -113,7 +325,7 @@ function Invoke-KitPostFormat {
                 Write-Host "`n [!] Eliminando Bloatware..." -ForegroundColor $COLOR_ALERT
                 $bloat = @("*CandyCrush*", "*Disney*", "*Netflix*", "*TikTok*", "*Instagram*")
                 foreach($b in $bloat){ Get-AppxPackage $b | Remove-AppxPackage -ErrorAction SilentlyContinue }
-                Read-Host " OK. ENTER"
+                Pause-Enter " OK. ENTER"
             }
             "1" { $selection = "1","16","36","56","29" }
             "2" { $selection = "71","28","36","94" }
@@ -136,7 +348,17 @@ function Invoke-KitPostFormat {
                 if($manual -eq "X"){ continue }
                 $selection = $manual.Split(",").Trim()
             }
-            "4" { winget upgrade --all --silent; Read-Host " OK. ENTER"; continue }
+            "4" { 
+                if(Get-Command winget -ErrorAction SilentlyContinue){
+                    winget upgrade --all --silent
+                    Write-Log "KIT" ("winget upgrade all exit={0}" -f $LASTEXITCODE)
+                } else {
+                    Write-Host "`n [!] winget no disponible." -ForegroundColor $COLOR_DANGER
+                    Write-Log "KIT" "winget not available"
+                }
+                Pause-Enter " OK. ENTER"
+                continue
+            }
         }
 
         if($selection.Count -gt 0){
@@ -144,13 +366,19 @@ function Invoke-KitPostFormat {
             foreach($item in $selection){
                 if($apps.ContainsKey($item)){
                     $res = Invoke-SmartInstall -AppID $apps[$item].ID -AppName $apps[$item].Name
+                    if($res -ne "OK"){
+                        Write-Host " [!] Reintentando: $($apps[$item].Name)" -ForegroundColor $COLOR_ALERT
+                        Write-Log "KIT" "Retry app=$($apps[$item].Name) id=$($apps[$item].ID)"
+                        $res = Invoke-SmartInstall -AppID $apps[$item].ID -AppName $apps[$item].Name
+                    }
+                    Write-Log "KIT" "Install app=$($apps[$item].Name) result=$res"
                     $results += "[ $res ] $($apps[$item].Name)"
                 }
             }
             Show-MainTitle
             Write-Host "`n RESUMEN DE INSTALACION:" -ForegroundColor $COLOR_ALERT
             $results | ForEach-Object { Write-Host " $_" }
-            Read-Host "`n PRESIONE ENTER PARA LIMPIAR Y CONTINUAR"
+            Pause-Enter "`n PRESIONE ENTER PARA LIMPIAR Y CONTINUAR"
         }
     }
 }
@@ -168,25 +396,81 @@ function Invoke-Engine ($Mode, $Msg) {
         Write-Host "`n CONTROL" -ForegroundColor Gray
         Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
         Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-        $choice = (Read-Host "`n ``> SELECCIONE").ToUpper()
+        $choice = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","X")
         if ($choice -eq "X") { return }
 
         $Base = Read-Host (' RUTA DESTINO PARA BACKUP (ENTER para ' + $DEFAULT_BACKUP_BASE + ')')
         if (-not $Base) { $Base = $DEFAULT_BACKUP_BASE }
+
+        if (Is-SuspiciousBackupBase $Base) {
+            Write-Host "`n [!] ADVERTENCIA: la ruta destino parece sensible: $Base" -ForegroundColor $COLOR_ALERT
+            if (-not (Confirm-Critical "DESTINO DE BACKUP SENSIBLE ($Base)" "APLICAR")) { return }
+        }
+
+        # Resumen + tamaño aproximado (solo para backups de perfil)
+        if ($choice -eq "A" -or $choice -eq "B") {
+            Show-MainTitle
+            Write-Host "`n RESUMEN DE BACKUP" -ForegroundColor $COLOR_MENU
+            Write-Host " DESTINO BASE: $Base" -ForegroundColor $COLOR_PRIMARY
+            Write-Host " CARPETAS INCLUIDAS:" -ForegroundColor $COLOR_PRIMARY
+            $USER_FOLDER_NAMES | ForEach-Object { Write-Host "  - $_" -ForegroundColor $COLOR_MENU }
+
+            $estBytes = 0L
+            if ($choice -eq "A") {
+                foreach ($rel in $USER_FOLDER_NAMES) {
+                    $p = Join-Path $env:USERPROFILE $rel
+                    if (Test-Path $p) { $estBytes += Get-FolderSizeBytes $p }
+                }
+            } else {
+                $profiles = Get-UserProfilePaths
+                foreach ($profile in $profiles) {
+                    foreach ($rel in $USER_FOLDER_NAMES) {
+                        $p = Join-Path $profile $rel
+                        if (Test-Path $p) { $estBytes += Get-FolderSizeBytes $p }
+                    }
+                }
+            }
+            $freeBytes = Get-DriveFreeBytes $Base
+            Write-Host "`n TAMAÑO APROX (SUMA DE CARPETAS): $(Format-Bytes $estBytes)" -ForegroundColor $COLOR_ALERT
+            Write-Host " ESPACIO LIBRE DESTINO:            $(Format-Bytes $freeBytes)" -ForegroundColor $COLOR_ALERT
+            Write-Log "BACKUP" "EstimateBytes=$estBytes FreeBytes=$freeBytes Base=$Base Choice=$choice"
+            if ($freeBytes -gt 0 -and $estBytes -gt 0 -and $freeBytes -lt ($estBytes * 1.2)) {
+                Write-Host "`n [!] POSIBLE FALTA DE ESPACIO (recomendado >= 20% extra)." -ForegroundColor $COLOR_DANGER
+                if (-not (Confirm-Critical "CONTINUAR CON POSIBLE POCO ESPACIO" "APLICAR")) { return }
+            } else {
+                Pause-Enter " ENTER PARA CONTINUAR"
+            }
+        }
+
         $BackupRoot = Get-BackupRoot $Base
+        Write-Log "BACKUP" "BackupRoot=$BackupRoot Base=$Base Choice=$choice"
 
         if ($choice -eq "A") {
+            Write-Log "BACKUP" "Choice=A ProfileRoot=$env:USERPROFILE"
             Backup-ProfileData $env:USERPROFILE $BackupRoot
-            Read-Host "`n BACKUP DE PERFIL ACTUAL COMPLETADO EN: $BackupRoot. ENTER"
+            $verify = Read-MenuOption "`n VERIFICAR BACKUP (conteo rápido)? (S/N)" -Valid @("S","N")
+            if($verify -eq "S"){
+                $count = (Get-ChildItem -Path $BackupRoot -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+                Write-Host " [+] ARCHIVOS EN BACKUP: $count" -ForegroundColor $COLOR_PRIMARY
+                Write-Log "BACKUP" "VerifyFiles=$count BackupRoot=$BackupRoot"
+            }
+            Pause-Enter "`n BACKUP DE PERFIL ACTUAL COMPLETADO EN: $BackupRoot. ENTER"
             return
         }
 
         if ($choice -eq "B") {
             $profiles = Get-UserProfilePaths
+            Write-Log "BACKUP" "Choice=B ProfilesCount=$(@($profiles).Count) BackupRoot=$BackupRoot"
             foreach ($profile in $profiles) {
                 Backup-ProfileData $profile $BackupRoot
             }
-            Read-Host "`n BACKUP DE TODOS LOS PERFILES COMPLETADO EN: $BackupRoot. ENTER"
+            $verify = Read-MenuOption "`n VERIFICAR BACKUP (conteo rápido)? (S/N)" -Valid @("S","N")
+            if($verify -eq "S"){
+                $count = (Get-ChildItem -Path $BackupRoot -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+                Write-Host " [+] ARCHIVOS EN BACKUP: $count" -ForegroundColor $COLOR_PRIMARY
+                Write-Log "BACKUP" "VerifyFiles=$count BackupRoot=$BackupRoot"
+            }
+            Pause-Enter "`n BACKUP DE TODOS LOS PERFILES COMPLETADO EN: $BackupRoot. ENTER"
             return
         }
 
@@ -194,12 +478,13 @@ function Invoke-Engine ($Mode, $Msg) {
             if (!(Test-Path $BackupRoot)) { New-Item -Path $BackupRoot -ItemType Directory -Force | Out-Null }
             $appsFile = Join-Path $BackupRoot "InstalledApps_$((Get-Date).ToString('yyyyMMdd_HHmmss')).txt"
             $driversPath = Join-Path $BackupRoot "Drivers"
+            Write-Log "BACKUP" "Choice=C Export Apps+Drivers to $BackupRoot"
             Write-Host "`n [+] EXPORTANDO LISTA DE PROGRAMAS INSTALADOS..." -ForegroundColor $COLOR_PRIMARY
             Get-Package | Sort-Object Name | Format-Table -AutoSize | Out-String | Out-File $appsFile -Encoding utf8
             Write-Host "[+] EXPORTANDO DRIVERS INSTALADOS..." -ForegroundColor $COLOR_PRIMARY
             if (!(Test-Path $driversPath)) { New-Item -Path $driversPath -ItemType Directory -Force | Out-Null }
             Export-WindowsDriver -Online -Destination $driversPath | Out-Null
-            Read-Host "`n INVENTARIO CREADO EN: $BackupRoot. ENTER"
+            Pause-Enter "`n INVENTARIO CREADO EN: $BackupRoot. ENTER"
             return
         }
 
@@ -221,16 +506,63 @@ function Invoke-Engine ($Mode, $Msg) {
 
         if ($choice.ToUpper() -eq "A") {
             $base = $DEFAULT_BACKUP_BASE
-            if (!(Test-Path $base)) {
-                Write-Host "`n [!] NO HAY BACKUPS EN LA UBICACIÓN PREDETERMINADA." -ForegroundColor $COLOR_DANGER
-                Start-Sleep -Seconds 2
-                return
+            $backups = @()
+            if (Test-Path $base) {
+                $backups = Get-ChildItem -Path $base -Directory -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -like "Backup_*" } |
+                    Sort-Object CreationTime -Descending
             }
-            $backups = Get-ChildItem -Path $base -Directory | Where-Object { $_.Name -like "Backup_*" } | Sort-Object CreationTime -Descending
             if (!$backups) {
-                Write-Host "`n [!] NO SE ENCONTRARON BACKUPS." -ForegroundColor $COLOR_DANGER
-                Start-Sleep -Seconds 2
-                return
+                # Si no está en la ubicación predeterminada, buscar en todas las unidades locales
+                Write-Host "`n [!] No se encontraron backups en la ubicación predeterminada." -ForegroundColor $COLOR_DANGER
+                Write-Host " [+] Buscando carpetas 'Backup_*' en unidades disponibles..." -ForegroundColor $COLOR_PRIMARY
+                $backups = @()
+                $seen = @{}
+                $disks = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -in 2,3 }
+                foreach($disk in $disks){
+                    $root = ($disk.DeviceID + "\")
+                    if(Test-Path $root){
+                        # Nivel 1: E:\Backup_01 (directo en la raiz)
+                        Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue |
+                            Where-Object { $_.Name -like "Backup_*" } |
+                            ForEach-Object {
+                                if(-not $seen.ContainsKey($_.FullName)){
+                                    $backups += [pscustomobject]@{
+                                        Name         = $_.Name
+                                        FullName     = $_.FullName
+                                        CreationTime = $_.CreationTime
+                                        Drive        = $disk.DeviceID
+                                    }
+                                    $seen[$_.FullName] = $true
+                                }
+                            }
+
+                        # Nivel 2: E:\Carpeta\Backup_01 (un nivel debajo)
+                        $parents = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue
+                        foreach($p in $parents){
+                            Get-ChildItem -Path $p.FullName -Directory -ErrorAction SilentlyContinue |
+                                Where-Object { $_.Name -like "Backup_*" } |
+                                ForEach-Object {
+                                    if(-not $seen.ContainsKey($_.FullName)){
+                                        $backups += [pscustomobject]@{
+                                            Name         = $_.Name
+                                            FullName     = $_.FullName
+                                            CreationTime = $_.CreationTime
+                                            Drive        = $disk.DeviceID
+                                        }
+                                        $seen[$_.FullName] = $true
+                                    }
+                                }
+                        }
+                    }
+                }
+
+                if (!$backups -or $backups.Count -eq 0) {
+                    Write-Host "`n [!] NO SE ENCONTRARON BACKUPS EN NINGUNA UNIDAD." -ForegroundColor $COLOR_DANGER
+                    Start-Sleep -Seconds 2
+                    return
+                }
+                $backups = $backups | Sort-Object CreationTime -Descending
             }
             Write-Host "`n BACKUPS DISPONIBLES:" -ForegroundColor $COLOR_PRIMARY
             for ($i = 0; $i -lt $backups.Count; $i++) {
@@ -249,8 +581,74 @@ function Invoke-Engine ($Mode, $Msg) {
                 Start-Sleep -Seconds 2
                 return
             }
+            Write-Log "RESTORE" "Choice=A BackupRoot=$BackupRoot"
         } elseif ($choice.ToUpper() -eq "B") {
-            $BackupRoot = Read-Host ' > INGRESE LA RUTA COMPLETA AL BACKUP'
+            # Busca auto en USB conectadas (carpetas Backup_* directamente en la raiz, p.ej. E:\Backup_01)
+            $found = @()
+            $seenUsb = @{}
+            $usbDisks = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -eq 2 }
+            foreach($disk in $usbDisks){
+                $root = ($disk.DeviceID + "\")
+                if(Test-Path $root){
+                    # Nivel 1: E:\Backup_01
+                    Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue |
+                        Where-Object { $_.Name -like "Backup_*" } |
+                        ForEach-Object {
+                            if(-not $seenUsb.ContainsKey($_.FullName)){
+                                $found += [pscustomobject]@{
+                                    Name         = $_.Name
+                                    FullName     = $_.FullName
+                                    CreationTime = $_.CreationTime
+                                    Drive        = $disk.DeviceID
+                                }
+                                $seenUsb[$_.FullName] = $true
+                            }
+                        }
+
+                    # Nivel 2: E:\Carpeta\Backup_01
+                    $parents = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue
+                    foreach($p in $parents){
+                        Get-ChildItem -Path $p.FullName -Directory -ErrorAction SilentlyContinue |
+                            Where-Object { $_.Name -like "Backup_*" } |
+                            ForEach-Object {
+                                if(-not $seenUsb.ContainsKey($_.FullName)){
+                                    $found += [pscustomobject]@{
+                                        Name         = $_.Name
+                                        FullName     = $_.FullName
+                                        CreationTime = $_.CreationTime
+                                        Drive        = $disk.DeviceID
+                                    }
+                                    $seenUsb[$_.FullName] = $true
+                                }
+                            }
+                    }
+                }
+            }
+
+            if($found.Count -gt 0){
+                $found = $found | Sort-Object CreationTime -Descending
+                Write-Host "`n BACKUPS ENCONTRADOS EN USB:" -ForegroundColor $COLOR_PRIMARY
+                for ($i = 0; $i -lt $found.Count; $i++) {
+                    Write-Host " [$($i+1)] $($found[$i].Drive)\$($found[$i].Name) - $($found[$i].CreationTime) - $($found[$i].FullName)" -ForegroundColor $COLOR_MENU
+                }
+                Write-Host " [M] MANUAL - INGRESAR RUTA COMPLETA" -ForegroundColor $COLOR_MENU
+                Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+                $sel = (Read-Host "``> SELECCIONE BACKUP (NUMERO)") 
+                if($sel.ToUpper() -eq "X"){ return }
+                if($sel.ToUpper() -eq "M"){
+                    $BackupRoot = Read-Host ' > INGRESE LA RUTA COMPLETA AL BACKUP'
+                } elseif ($sel -match "^\d+$" -and [int]$sel -ge 1 -and [int]$sel -le $found.Count) {
+                    $BackupRoot = $found[[int]$sel - 1].FullName
+                } else {
+                    Write-Host "`n [!] SELECCIÓN INVÁLIDA." -ForegroundColor $COLOR_DANGER
+                    Start-Sleep -Seconds 2
+                    return
+                }
+            } else {
+                $BackupRoot = Read-Host ' > NO SE ENCONTRARON BACKUPS EN USB. INGRESE LA RUTA COMPLETA AL BACKUP'
+            }
+
+            Write-Log "RESTORE" "Choice=B BackupRoot=$BackupRoot"
             if (-not $BackupRoot -or -not (Test-Path $BackupRoot)) {
                 Write-Host "`n [!] RUTA NO VÁLIDA O NO EXISTE." -ForegroundColor $COLOR_DANGER
                 Start-Sleep -Seconds 2
@@ -258,19 +656,91 @@ function Invoke-Engine ($Mode, $Msg) {
             }
         } elseif ($choice.ToUpper() -eq "C") {
             $base = $DEFAULT_BACKUP_BASE
-            if (!(Test-Path $base)) {
-                Write-Host "`n [!] NO HAY BACKUPS EN LA UBICACIÓN PREDETERMINADA." -ForegroundColor $COLOR_DANGER
+            # Listar TODOS los backups en todas las unidades y permitir elegir (Enter = más reciente)
+            Write-Host "`n [+] Buscando backups en todas las unidades..." -ForegroundColor $COLOR_PRIMARY
+            $backups = @()
+            $seen = @{}
+
+            if (Test-Path $base) {
+                Get-ChildItem -Path $base -Directory -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -like "Backup_*" } |
+                    ForEach-Object {
+                        if(-not $seen.ContainsKey($_.FullName)){
+                            $backups += [pscustomobject]@{
+                                Name         = $_.Name
+                                FullName     = $_.FullName
+                                CreationTime = $_.CreationTime
+                                Drive        = $_.FullName.Substring(0,2)
+                            }
+                            $seen[$_.FullName] = $true
+                        }
+                    }
+            }
+
+            $disks = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -in 2,3 }
+            foreach($disk in $disks){
+                $root = ($disk.DeviceID + "\")
+                if(Test-Path $root){
+                    # Nivel 1
+                    Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue |
+                        Where-Object { $_.Name -like "Backup_*" } |
+                        ForEach-Object {
+                            if(-not $seen.ContainsKey($_.FullName)){
+                                $backups += [pscustomobject]@{
+                                    Name         = $_.Name
+                                    FullName     = $_.FullName
+                                    CreationTime = $_.CreationTime
+                                    Drive        = $disk.DeviceID
+                                }
+                                $seen[$_.FullName] = $true
+                            }
+                        }
+
+                    # Nivel 2
+                    $parents = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue
+                    foreach($p in $parents){
+                        Get-ChildItem -Path $p.FullName -Directory -ErrorAction SilentlyContinue |
+                            Where-Object { $_.Name -like "Backup_*" } |
+                            ForEach-Object {
+                                if(-not $seen.ContainsKey($_.FullName)){
+                                    $backups += [pscustomobject]@{
+                                        Name         = $_.Name
+                                        FullName     = $_.FullName
+                                        CreationTime = $_.CreationTime
+                                        Drive        = $disk.DeviceID
+                                    }
+                                    $seen[$_.FullName] = $true
+                                }
+                            }
+                    }
+                }
+            }
+
+            if(!$backups -or $backups.Count -eq 0){
+                Write-Host "`n [!] NO SE ENCONTRARON BACKUPS EN NINGUNA UNIDAD." -ForegroundColor $COLOR_DANGER
                 Start-Sleep -Seconds 2
                 return
             }
-            $latest = Get-ChildItem -Path $base -Directory | Where-Object { $_.Name -like "Backup_*" } | Sort-Object CreationTime -Descending | Select-Object -First 1
-            if (!$latest) {
-                Write-Host "`n [!] NO SE ENCONTRARON BACKUPS." -ForegroundColor $COLOR_DANGER
-                Start-Sleep -Seconds 2
-                return
+
+            $backups = $backups | Sort-Object CreationTime -Descending
+            Write-Host "`n BACKUPS ENCONTRADOS (TODAS LAS UNIDADES):" -ForegroundColor $COLOR_PRIMARY
+            for ($i = 0; $i -lt $backups.Count; $i++) {
+                Write-Host " [$($i+1)] $($backups[$i].Drive)\$($backups[$i].Name) - $($backups[$i].CreationTime) - $($backups[$i].FullName)" -ForegroundColor $COLOR_MENU
             }
+            Write-Host " [ENTER] Usar el más reciente" -ForegroundColor $COLOR_MENU
+            Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+
+            $sel = Read-Host "``> SELECCIONE BACKUP (NUMERO/ENTER)"
+            if($sel -and $sel.ToUpper() -eq "X"){ return }
+
+            $latest = $backups[0]
+            if($sel -match "^\d+$" -and [int]$sel -ge 1 -and [int]$sel -le $backups.Count){
+                $latest = $backups[[int]$sel - 1]
+            }
+
             $BackupRoot = $latest.FullName
-            Write-Host "`n [+] USANDO EL ÚLTIMO BACKUP: $($latest.Name)" -ForegroundColor $COLOR_PRIMARY
+            Write-Log "RESTORE" "Choice=C BackupRoot=$BackupRoot"
+            Write-Host "`n [+] USANDO BACKUP: $($latest.Name)" -ForegroundColor $COLOR_PRIMARY
         } else {
             Write-Host "`n OPCIÓN NO VÁLIDA." -ForegroundColor $COLOR_DANGER
             Start-Sleep -Seconds 1
@@ -283,6 +753,25 @@ function Invoke-Engine ($Mode, $Msg) {
             Start-Sleep -Seconds 2
             return
         }
+        Write-Log "RESTORE" "BackupRoot=$BackupRoot BackupProfiles=$(@($backupProfiles).Count)"
+
+        # Validación rápida del layout esperado (que los perfiles tengan al menos una carpeta típica)
+        $hasExpectedLayout = $false
+        foreach($profile in $backupProfiles){
+            foreach($rel in $USER_FOLDER_NAMES){
+                $checkPath = Join-Path $profile.FullName $rel
+                if(Test-Path $checkPath){
+                    $hasExpectedLayout = $true
+                    break
+                }
+            }
+            if($hasExpectedLayout){ break }
+        }
+        if(-not $hasExpectedLayout){
+            Write-Host "`n [!] El backup no parece tener el layout esperado (no se encuentran carpetas típicas dentro de los perfiles)." -ForegroundColor $COLOR_DANGER
+            Start-Sleep -Seconds 2
+            return
+        }
 
         Write-Host "`n PERFILES EN EL BACKUP:" -ForegroundColor $COLOR_PRIMARY
         $backupProfiles | ForEach-Object { Write-Host " [ ] $($_.Name)" -ForegroundColor $COLOR_MENU }
@@ -292,15 +781,37 @@ function Invoke-Engine ($Mode, $Msg) {
             return
         }
 
+        $targetUsersRoot = "$env:SystemDrive\Users"
+        $alt = Read-MenuOption " RESTAURAR EN UBICACIÓN ALTERNATIVA? (S/N)" -Valid @("S","N")
+        if($alt -eq "S"){
+            $custom = Read-Host " RUTA BASE (ej: D:\\Restores)"
+            if($custom){ $targetUsersRoot = $custom }
+        }
+        Write-Log "RESTORE" "TargetUsersRoot=$targetUsersRoot"
+
         if (-not $profileChoice) {
-            foreach ($profile in $backupProfiles) { Restore-ProfileData $profile.FullName }
+            Write-Log "RESTORE" "Restoring ALL profiles Count=$(@($backupProfiles).Count)"
+            foreach ($profile in $backupProfiles) {
+                Write-Log "RESTORE" "Restoring profile=$($profile.Name)"
+                $dest = Join-Path $targetUsersRoot $profile.Name
+                if(Test-Path $dest){
+                    if(-not (Confirm-Critical "SOBRESCRIBIR PERFIL EXISTENTE: $dest" "APLICAR")){ continue }
+                }
+                Restore-ProfileData $profile.FullName $targetUsersRoot
+            }
             Read-Host "`n RESTAURACIÓN DE TODOS LOS PERFILES COMPLETADA. ENTER"
             return
         }
 
         $selected = $backupProfiles | Where-Object { $_.Name -ieq $profileChoice }
         if ($selected) {
-            Restore-ProfileData $selected.FullName
+            $selProfile = $selected | Select-Object -First 1
+            Write-Log "RESTORE" "Restoring profile choice=$profileChoice Actual=$($selProfile.Name)"
+            $dest = Join-Path $targetUsersRoot $selProfile.Name
+            if(Test-Path $dest){
+                if(-not (Confirm-Critical "SOBRESCRIBIR PERFIL EXISTENTE: $dest" "APLICAR")){ return }
+            }
+            Restore-ProfileData $selProfile.FullName $targetUsersRoot
             Read-Host "`n RESTAURACIÓN DEL PERFIL $profileChoice COMPLETADA. ENTER"
             return
         }
@@ -333,15 +844,41 @@ function Invoke-TempOptimizer {
         }
 
         if($targets.Count -gt 0){
+            $demoMode = (Read-Host " MODO DEMO (S=solo mostrar, N=ejecutar)").ToUpper()
+            $isDemo = ($demoMode -eq "S")
+
+            Write-Log "TEMP" "Inicio optimizer. DemoMode=$isDemo Targets=$($targets -join ';')"
             Write-Host "`n ELIMINANDO ARCHIVOS..." -ForegroundColor $COLOR_PRIMARY
+            $failCount = 0
             foreach ($target in $targets) {
                 if (Test-Path $target) {
-                    Get-ChildItem -Path $target -Force -ErrorAction SilentlyContinue | ForEach-Object {
-                        Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                    $items = Get-ChildItem -Path $target -Force -ErrorAction SilentlyContinue
+                    $cnt = if($items){$items.Count}else{0}
+                    Write-Host ("  - {0} => {1} elementos" -f $target, $cnt)
+                    Write-Log "TEMP" "Target=$target Elements=$cnt DemoMode=$isDemo"
+
+                    if(-not $isDemo){
+                        foreach($it in $items){
+                            try {
+                                Remove-Item $it.FullName -Recurse -Force -ErrorAction Stop
+                            } catch {
+                                $failCount++
+                                Write-Log "TEMP" ("Remove failed path={0} err={1}" -f $it.FullName, $_.Exception.Message)
+                            }
+                        }
                     }
                 }
             }
-            Write-Host "`n LIMPIEZA COMPLETADA" -ForegroundColor $COLOR_PRIMARY
+            if(-not $isDemo){
+                if($failCount -gt 0){
+                    Write-Host "`n [!] LIMPIEZA COMPLETADA CON ERRORES. No se pudieron borrar: $failCount elementos (en uso/permisos)." -ForegroundColor $COLOR_ALERT
+                } else {
+                    Write-Host "`n LIMPIEZA COMPLETADA" -ForegroundColor $COLOR_PRIMARY
+                }
+            } else {
+                Write-Host "`n DEMO: no se borro ningun archivo" -ForegroundColor $COLOR_ALERT
+            }
+            Write-Log "TEMP" "Fin optimizer. DemoMode=$isDemo FailCount=$failCount"
             Start-Sleep -Seconds 1
         }
     }
@@ -356,50 +893,84 @@ function Invoke-WingetMenu {
         Write-Host " [B] WINGET: LISTAR DISPONIBLES          [E] CHOCO: ACTUALIZAR TODO"
         Write-Host " [C] WINGET: REPARAR CLIENTE             [F] CHOCO: BUSCAR PAQUETE"
         Write-Host ' [G] INSTALAR POR NOMBRE (AUTO-SEARCH)'
+        Write-Host ' [H] INSTALAR WINGET (APP INSTALLER)'
         Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-        $o = (Read-Host "`n ``> SELECCIONE").ToUpper()
+        $hasWinget = [bool](Get-Command winget -ErrorAction SilentlyContinue)
+        $hasChoco  = [bool](Get-Command choco -ErrorAction SilentlyContinue)
+        Write-Host "`n ESTADO:" -ForegroundColor Gray
+        Write-Host ("  - winget: {0}" -f ($(if($hasWinget){"OK"}else{"NO"}))) -ForegroundColor $COLOR_MENU
+        Write-Host ("  - choco : {0}" -f ($(if($hasChoco){"OK"}else{"NO"}))) -ForegroundColor $COLOR_MENU
+
+        $o = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","E","F","G","H","X")
         if($o -eq "X"){break}
         
         if($o -eq "A"){
+            if(-not $hasWinget){ Write-Host "`n [!] winget no está disponible." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
             Write-Host "`n ACTUALIZANDO VIA WINGET..." -ForegroundColor $COLOR_PRIMARY
-            winget upgrade --all --accept-package-agreements --accept-source-agreements
-            Read-Host "`n FIN. ENTER"
+            $out = winget upgrade --all --accept-package-agreements --accept-source-agreements 2>&1
+            Write-Log "PKG" ("winget upgrade all exit={0}" -f $LASTEXITCODE)
+            Pause-Enter "`n FIN. ENTER"
         }
-        if($o -eq "B"){ winget upgrade; Read-Host "`n ENTER" }
+        if($o -eq "B"){
+            if(-not $hasWinget){ Write-Host "`n [!] winget no está disponible." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
+            winget upgrade
+            Pause-Enter "`n ENTER"
+        }
         if($o -eq "C"){
+            if(-not $hasWinget){ Write-Host "`n [!] winget no está disponible." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
             Write-Host "`n RE-INSTALANDO CLIENTE WINGET..." -ForegroundColor $COLOR_ALERT
             $url = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
             $dest = "$env:TEMP\winget.msixbundle"
             Invoke-WebRequest -Uri $url -OutFile $dest
             Add-AppxPackage -Path $dest
-            Read-Host "`n CLIENTE ACTUALIZADO. ENTER"
+            Write-Log "PKG" "winget client reinstalled from $url"
+            Pause-Enter "`n CLIENTE ACTUALIZADO. ENTER"
+        }
+        if($o -eq "H"){
+            if(-not (Test-HasInternet)){ Write-Host "`n [!] Sin Internet." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
+            Write-Host "`n INSTALANDO/REPARANDO WINGET (APP INSTALLER)..." -ForegroundColor $COLOR_ALERT
+            $url = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
+            $dest = "$env:TEMP\\winget.msixbundle"
+            Invoke-WebRequest -Uri $url -OutFile $dest
+            Add-AppxPackage -Path $dest
+            Write-Log "PKG" "winget installed/repaired from $url"
+            Pause-Enter "`n LISTO. VUELVE A ENTRAR AL MENU PARA VER SI DICE OK."
         }
         if($o -eq "D"){
+            if(-not (Test-HasInternet)){ Write-Host "`n [!] Sin Internet." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
+            if(-not (Require-Admin "instalar Chocolatey")){ continue }
             Set-ExecutionPolicy Bypass -Scope Process -Force
             [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
             iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-            Read-Host "`n INSTALACION FINALIZADA. ENTER"
+            Write-Log "PKG" ("choco install bootstrap exit={0}" -f $LASTEXITCODE)
+            Pause-Enter "`n INSTALACION FINALIZADA. ENTER"
         }
         if($o -eq "E"){
-            if(Get-Command choco -ErrorAction SilentlyContinue){ choco upgrade all -y }
-            else { Write-Host " CHOCO NO INSTALADO" -ForegroundColor $COLOR_DANGER }
-            Read-Host " ENTER"
+            if(-not $hasChoco){ Write-Host "`n [!] CHOCO NO INSTALADO" -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
+            $out = choco upgrade all -y --no-progress 2>&1
+            Write-Log "PKG" ("choco upgrade all exit={0}" -f $LASTEXITCODE)
+            Pause-Enter " ENTER"
         }
         if($o -eq "F"){
+            if(-not $hasChoco){ Write-Host "`n [!] CHOCO NO INSTALADO" -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
             $p = Read-Host " NOMBRE DEL PROGRAMA A BUSCAR EN CHOCO"
             if($p){ choco search $p }
-            Read-Host "`n ENTER"
+            Pause-Enter "`n ENTER"
         }
         if($o -eq "G"){
             $app = (Read-Host "`n ``> ESCRIBA EL NOMBRE DE LA APP A INSTALAR").Trim()
-            if($app){ Invoke-SmartInstall -AppID $app -AppName $app }
-            Read-Host "`n PROCESO TERMINADO. ENTER"
+            if($app){
+                $res = Invoke-SmartInstall -AppID $app -AppName $app
+                Write-Log "PKG" "SmartInstall app=$app result=$res"
+            }
+            Pause-Enter "`n PROCESO TERMINADO. ENTER"
         }
     }
 }
 
 # --- MONITOR DE SISTEMA PRO ---
 function Show-LiveMonitor {
+    $refreshMs = 1500
     while ($true) {
         Show-MainTitle
         Write-Host "`n [O] MONITOR DE SISTEMA Y GESTION DE TAREAS" -ForegroundColor $COLOR_MENU
@@ -422,16 +993,32 @@ function Show-LiveMonitor {
             Write-Host " [ID: $($_.Id.ToString().PadRight(6))]  $($procName.PadRight(25)) | Uso: $memMB MB"
         }
 
+        Write-Host "`n TOP 10 PROCESOS (CPU):" -ForegroundColor $COLOR_ALERT
+        Write-Host " -----------------------------------------------------------------------------" -ForegroundColor Gray
+        Get-Process | Where-Object { $_.CPU -ne $null } | Sort-Object CPU -Descending | Select-Object -First 10 | ForEach-Object {
+            $cpuT = "{0:N2}" -f $_.CPU
+            $procName = $_.ProcessName
+            if($procName.Length -gt 25) { $procName = $procName.Substring(0,22) + "..." }
+            Write-Host " [ID: $($_.Id.ToString().PadRight(6))]  $($procName.PadRight(25)) | CPU: $cpuT s"
+        }
+
         Write-Host "`n ACCIONES DE MONITOREO" -ForegroundColor Gray
         Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_MENU
         Write-Host " [K] KILL: FINALIZAR PROCESO      [R] REFRESCAR / ACTUALIZAR DATOS" -ForegroundColor $COLOR_MENU
+        Write-Host " [T] TIEMPO REFRESCO (MS)         [Q] SALIR" -ForegroundColor $COLOR_MENU
         
         Write-Host "`n CONTROL" -ForegroundColor Gray
         Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
         Write-Host " [X] VOLVER AL MENU PRINCIPAL" -ForegroundColor $COLOR_DANGER
 
-        $action = (Read-Host "`n ``> SELECCIONE").ToUpper()
+        Write-Host "`n (Auto refresco: $refreshMs ms)" -ForegroundColor Gray
+        $action = Read-MenuOption "`n ``> SELECCIONE (ENTER=auto)" -Valid @("K","R","T","Q","X")
+        if(-not $action){
+            Start-Sleep -Milliseconds $refreshMs
+            continue
+        }
         if ($action -eq "X") { break }
+        if ($action -eq "Q") { break }
         if ($action -eq "K") {
             $target = Read-Host " INGRESE NOMBRE O ID DEL PROCESO"
             if ($target) {
@@ -439,10 +1026,19 @@ function Show-LiveMonitor {
                     if ($target -match "^\d+$") { Stop-Process -Id $target -Force -ErrorAction Stop }
                     else { Stop-Process -Name $target -Force -ErrorAction Stop }
                     Write-Host "`n [+] PROCESO FINALIZADO EXITOSAMENTE." -ForegroundColor $COLOR_PRIMARY
+                    Write-Log "MONITOR" "Killed process target=$target"
                 } catch {
                     Write-Host "`n [!] ERROR: NO SE PUDO CERRAR EL PROCESO." -ForegroundColor $COLOR_DANGER
+                    Write-Log "MONITOR" ("Kill failed target={0} err={1}" -f $target, $_.Exception.Message)
                 }
                 Start-Sleep -Seconds 2
+            }
+        }
+        if ($action -eq "T") {
+            $v = Read-Host " NUEVO INTERVALO (MS) (ej 1000)"
+            if($v -match "^\\d+$"){
+                $refreshMs = [int]$v
+                Write-Log "MONITOR" "RefreshMs set to $refreshMs"
             }
         }
     }
@@ -455,18 +1051,27 @@ function Invoke-DefenderControl {
         Write-Host "`n CONTROL TOTAL DE WINDOWS DEFENDER" -ForegroundColor $COLOR_MENU
         Write-Host " [A] ACTIVAR DEFENDER`n [B] DESACTIVAR DEFENDER"
         Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-        $o = (Read-Host "`n ``> SELECCIONE").ToUpper()
+        $o = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","X")
+        if(-not $o){ continue }
         if($o -eq "X"){break}
         if($o -eq "A"){
+            if(-not (Require-Admin "activar Defender")){ continue }
+            if(-not (Confirm-Critical "ACTIVAR WINDOWS DEFENDER" "APLICAR")){ continue }
             reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v "DisableAntiSpyware" /t REG_DWORD /d 0 /f | Out-Null
-            Write-Host " REINICIE PARA APLICAR CAMBIOS" -ForegroundColor Green; Read-Host " ENTER"
+            Write-Log "DEFENDER" "Enabled (policy DisableAntiSpyware=0)"
+            Write-Host " REINICIE PARA APLICAR CAMBIOS" -ForegroundColor Green
+            Pause-Enter " ENTER"
         }
         if($o -eq "B"){
+            if(-not (Require-Admin "desactivar Defender")){ continue }
+            if(-not (Confirm-Critical "DESACTIVAR WINDOWS DEFENDER" "APLICAR")){ continue }
             $regReal = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
             if (!(Test-Path $regReal)) { New-Item $regReal -Force | Out-Null }
             reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v "DisableAntiSpyware" /t REG_DWORD /d 1 /f | Out-Null
             reg add $regReal /v "DisableRealtimeMonitoring" /t REG_DWORD /d 1 /f | Out-Null
-            Write-Host " DEFENDER DESACTIVADO" -ForegroundColor Green; Read-Host " ENTER"
+            Write-Log "DEFENDER" "Disabled (policy DisableAntiSpyware=1, DisableRealtimeMonitoring=1)"
+            Write-Host " DEFENDER DESACTIVADO" -ForegroundColor Green
+            Pause-Enter " ENTER"
         }
     }
 }
@@ -566,23 +1171,38 @@ function Invoke-DriverManagement {
         Write-Host ' [D] VER IDENTIFICADORES DE HARDWARE (SIN DRIVER)'
         Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
         
-        $o=(Read-Host "`n ``> SELECCIONE").ToUpper()
+        $o = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","X")
         if($o -eq "X"){break}
         
         if($o -eq "A") {
+            if(-not (Require-Admin "exportar drivers")){ continue }
             $p="$PSScriptRoot\Drivers_$env:COMPUTERNAME"
             if(!(Test-Path $p)){ New-Item $p -ItemType Directory -Force | Out-Null }
             Write-Host " [+] Exportando drivers instalados... esto puede tardar." -ForegroundColor $COLOR_MENU
             Export-WindowsDriver -Online -Destination $p
-            Read-Host " [+] BACKUP CREADO EN: $p. ENTER PARA VOLVER"
+            Write-Log "DRIVER" "Export drivers to $p"
+            Pause-Enter " [+] BACKUP CREADO EN: $p. ENTER PARA VOLVER"
         }
 
         if($o -eq "B") {
+            if(-not (Require-Admin "instalar drivers")){ continue }
             $path = "$PSScriptRoot\Drivers_$env:COMPUTERNAME"
             if(Test-Path $path){
                 Write-Host " [+] Re-instalando drivers desde backup..." -ForegroundColor $COLOR_PRIMARY
-                Get-ChildItem "$path\*.inf" -Recurse | ForEach-Object { pnputil /add-driver $_.FullName /install }
-                Read-Host " [+] PROCESO TERMINADO. ENTER"
+                $infs = Get-ChildItem "$path\*.inf" -Recurse -ErrorAction SilentlyContinue
+                $count = if($infs){$infs.Count}else{0}
+                Write-Host " [+] INF encontrados: $count" -ForegroundColor $COLOR_MENU
+                if($count -gt 0){
+                    Write-Host "`n TOP 10 INF:" -ForegroundColor $COLOR_ALERT
+                    $infs | Select-Object -First 10 | ForEach-Object { Write-Host "  - $($_.FullName)" -ForegroundColor $COLOR_MENU }
+                }
+                Write-Log "DRIVER" "Reinstall from $path INFCount=$count"
+                foreach($inf in $infs){
+                    $out = pnputil /add-driver $inf.FullName /install 2>&1
+                    $exit = $LASTEXITCODE
+                    Write-Log "DRIVER" ("pnputil exit={0} inf={1}" -f $exit, $inf.FullName)
+                }
+                Pause-Enter " [+] PROCESO TERMINADO. ENTER"
             } else { 
                 Write-Host " [!] NO SE ENCONTRO CARPETA DE BACKUP." -ForegroundColor $COLOR_DANGER
                 Start-Sleep -Seconds 2 
@@ -590,6 +1210,7 @@ function Invoke-DriverManagement {
         }
 
         if($o -eq "C") {
+            if(-not (Require-Admin "buscar drivers en Windows Update")){ continue }
             Write-Host "`n [+] CONFIGURANDO ENTORNO SEGURO..." -ForegroundColor Gray
             # --- MEJORA CRITICA: Bypass de confirmaciones y protocolos ---
             Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -611,10 +1232,13 @@ function Invoke-DriverManagement {
             Write-Host " [+] Buscando e instalando controladores certificados..." -ForegroundColor $COLOR_MENU
             
             # El comando clave: Solo baja Categoría "Drivers" (ignora parches de seguridad pesados)
-            Get-WindowsUpdate -Category "Drivers" -Install -AcceptAll -IgnoreReboot
+            $wuOut = Get-WindowsUpdate -Category "Drivers" -Install -AcceptAll -IgnoreReboot 2>&1
+            $needsReboot = ($wuOut | Out-String) -match "reboot|reiniciar|restart"
+            Write-Log "DRIVER" ("WindowsUpdate Drivers finished NeedsReboot={0}" -f $needsReboot)
             
             Write-Host "`n [OK] BUSQUEDA Y CARGA FINALIZADA." -ForegroundColor Green
-            Read-Host " ENTER PARA VOLVER"
+            if($needsReboot){ Write-Host " [!] Puede requerir reinicio." -ForegroundColor $COLOR_ALERT }
+            Pause-Enter " ENTER PARA VOLVER"
         }
 
         if($o -eq "D") {
@@ -627,7 +1251,7 @@ function Invoke-DriverManagement {
             } else {
                 Write-Host ' [+] No se detectaron problemas de hardware (Todo OK).' -ForegroundColor Green
             }
-            Read-Host " ENTER PARA VOLVER"
+            Pause-Enter " ENTER PARA VOLVER"
         }
     }
 }
@@ -667,20 +1291,106 @@ while ($true) {
         "B" { Invoke-Engine "RESTORE" "RESTAURACION" }
         "C" { Invoke-DriverManagement }
         "D" { 
-            while($true){ Show-MainTitle; Write-Host "`n OPERACION CRITICA" -ForegroundColor $COLOR_DANGER
-            Write-Host " [A] PURGAR PERFIL`n [B] FORMATEAR USB"
-            Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-            $o=(Read-Host "`n ``> SELECCIONE").ToUpper(); if($o -eq "X"){break}
-            $pin=Get-Random -Min 1000 -Max 9999; Write-Host "`n PIN DE SEGURIDAD $pin" -BackgroundColor Red -ForegroundColor White
-            if((Read-Host " INGRESE PIN PARA CONFIRMAR") -eq $pin.ToString()){
-                if($o -eq "B"){$l=(Read-Host " LETRA DE UNIDAD"); Format-Volume -DriveLetter $l -FileSystem NTFS -Force}
-                if($o -eq "A"){$USER_FOLDERS | ForEach-Object {if(Test-Path $_){Remove-Item "$_\*" -Recurse -Force -ErrorAction SilentlyContinue}}}
-                Read-Host " HECHO ENTER"
-            } }
+            while($true){
+                Show-MainTitle
+                Write-Host "`n OPERACION CRITICA" -ForegroundColor $COLOR_DANGER
+                Write-Host " [A] PURGAR PERFIL`n [B] FORMATEAR USB"
+                Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+                $o = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","X")
+                if($o -eq "X"){ break }
+
+                if($o -eq "B"){
+                    if(-not (Require-Admin "formatear una unidad")){ continue }
+                    if(-not (Confirm-Critical "FORMATEAR USB" "FORMAT")){ continue }
+                    $vols = Select-RemovableVolumes
+                    if($vols -and $vols.Count -gt 0){
+                        Write-Host "`n UNIDADES REMOVIBLES DETECTADAS:" -ForegroundColor $COLOR_PRIMARY
+                        $vols | ForEach-Object {
+                            $size = if($_.Size){ Format-Bytes ([Int64]$_.Size) } else { "?" }
+                            $free = if($_.FreeSpace){ Format-Bytes ([Int64]$_.FreeSpace) } else { "?" }
+                            Write-Host ("  - {0}\\  Label: {1}  Size: {2}  Free: {3}" -f $_.DeviceID, $_.VolumeName, $size, $free) -ForegroundColor $COLOR_MENU
+                        }
+                    } else {
+                        Write-Host "`n [!] No se detectaron unidades removibles via Win32_LogicalDisk." -ForegroundColor $COLOR_ALERT
+                    }
+
+                    $l = Read-Host " LETRA DE UNIDAD A FORMATEAR (EJ: E)"
+                    if($l){
+                        Write-Log "FORMAT" "Format-Volume DriveLetter=$l"
+                        Format-Volume -DriveLetter $l -FileSystem NTFS -Force
+                    }
+                    Pause-Enter " HECHO. ENTER"
+                    continue
+                }
+
+                if($o -eq "A"){
+                    if(-not (Confirm-Critical "PURGAR PERFIL (ELIMINAR DATOS DE USUARIO ACTUAL)" "BORRAR")){ continue }
+                    $profileRoot = $env:USERPROFILE
+                    Write-Host " [+] Purga del perfil en: $profileRoot" -ForegroundColor $COLOR_PRIMARY
+
+                    $demoMode = Read-MenuOption " MODO DEMO (S=solo mostrar, N=ejecutar)" -Valid @("S","N")
+                    $isDemo = ($demoMode -eq "S")
+
+                    $scriptPath = $PSCommandPath
+                    Write-Log "PURGA" "Inicio. DemoMode=$isDemo ProfileRoot=$profileRoot"
+                    foreach($rel in $USER_FOLDER_NAMES){
+                        $fullPath = Join-Path $profileRoot $rel
+                        if(Test-Path $fullPath){
+                            $items = Get-ChildItem -LiteralPath $fullPath -Force -ErrorAction SilentlyContinue
+                            $cnt = if($items){$items.Count}else{0}
+                            Write-Host ("  - {0} => {1} elementos" -f $rel, $cnt)
+                            Write-Log "PURGA" "Target=$fullPath Elements=$cnt DemoMode=$isDemo"
+
+                            if(-not $isDemo){
+                                $items | ForEach-Object {
+                                    if($scriptPath -and ($_.FullName -ieq $scriptPath)){
+                                        Write-Host "    (Excluido: script actual)" -ForegroundColor $COLOR_ALERT
+                                        Write-Log "PURGA" "Excluded current script path=$scriptPath"
+                                        return
+                                    }
+                                    Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                                }
+                            }
+                        }
+                    }
+                    Write-Log "PURGA" "Fin. ProfileRoot=$profileRoot"
+                    Pause-Enter " HECHO. ENTER"
+                }
+            }
         }
         "E" { Invoke-TempOptimizer }
-        "F" { Show-MainTitle; Invoke-WebRequest -UseBasicParsing https://christitus.com/win | Invoke-Expression }
-        "G" { Show-MainTitle; Invoke-WebRequest -UseBasicParsing https://get.activated.win | Invoke-Expression }
+        "F" { 
+            $url = "https://christitus.com/win"
+            if(Confirm-RemoteScript $url){
+                $file = Download-RemoteScript $url
+                $hash = Get-FileHashSafe $file
+                Write-Host "`n [+] DESCARGADO EN: $file" -ForegroundColor $COLOR_PRIMARY
+                if($hash){ Write-Host " [+] SHA256: $hash" -ForegroundColor $COLOR_MENU }
+                Write-Log "REMOTE" "Downloaded url=$url file=$file sha256=$hash"
+                $go = Read-MenuOption " EJECUTAR AHORA? (S/N)" -Valid @("S","N")
+                if($go -eq "S"){
+                    Write-Log "REMOTE" "Executing file=$file"
+                    & powershell -NoProfile -ExecutionPolicy Bypass -File $file
+                }
+                Pause-Enter " OK. ENTER"
+            }
+        }
+        "G" { 
+            $url = "https://get.activated.win"
+            if(Confirm-RemoteScript $url){
+                $file = Download-RemoteScript $url
+                $hash = Get-FileHashSafe $file
+                Write-Host "`n [+] DESCARGADO EN: $file" -ForegroundColor $COLOR_PRIMARY
+                if($hash){ Write-Host " [+] SHA256: $hash" -ForegroundColor $COLOR_MENU }
+                Write-Log "REMOTE" "Downloaded url=$url file=$file sha256=$hash"
+                $go = Read-MenuOption " EJECUTAR AHORA? (S/N)" -Valid @("S","N")
+                if($go -eq "S"){
+                    Write-Log "REMOTE" "Executing file=$file"
+                    & powershell -NoProfile -ExecutionPolicy Bypass -File $file
+                }
+                Pause-Enter " OK. ENTER"
+            }
+        }
         "H" { Invoke-WingetMenu }
         "I" { Invoke-KitPostFormat }
         "J" { 
@@ -689,22 +1399,86 @@ while ($true) {
                 Write-Host " [A] LISTAR USUARIOS`n [B] CREAR LOCAL ADMIN`n [C] ELIMINAR USUARIO"
                 Write-Host " [D] ACTIVAR SUPER ADMIN`n [F] CAMBIAR PASSWORD"
                 Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-                $u=(Read-Host ([Environment]::NewLine + ' >')).ToUpper(); if($u -eq "X"){break}
-                if($u -eq "A"){net user ; Read-Host " ENTER"}
-                if($u -eq "B"){$n=Read-Host " NOMBRE"; net user "$n" /add; net localgroup administrators "$n" /add; Read-Host " OK"}
-                if($u -eq "C"){$n=Read-Host " NOMBRE"; net user "$n" /delete; Read-Host " OK"}
-                if($u -eq "D"){net user administrator /active:yes; Read-Host " OK"}
-                if($u -eq "F"){$n=Read-Host " USUARIO"; $p=Read-Host " CLAVE"; if($n -and $p){net user "$n" $p}; Read-Host " OK"}
+                $u = Read-MenuOption ([Environment]::NewLine + ' >') -Valid @("A","B","C","D","F","X")
+                if(-not $u){ continue }
+                if($u -eq "X"){break}
+
+                if(-not (Require-Admin "gestión de usuarios")){ continue }
+
+                if($u -eq "A"){
+                    net user
+                    Pause-Enter " ENTER"
+                }
+                if($u -eq "B"){
+                    if(-not (Confirm-Critical "CREAR USUARIO LOCAL ADMIN" "APLICAR")){ continue }
+                    $n = (Read-Host " NOMBRE").Trim()
+                    if($n){
+                        net user "$n" /add
+                        net localgroup administrators "$n" /add
+                        Write-Log "USER" "Created admin user=$n"
+                    }
+                    Pause-Enter " OK"
+                }
+                if($u -eq "C"){
+                    $n = (Read-Host " NOMBRE").Trim()
+                    if($n -and ($n.ToLower() -ne $env:USERNAME.ToLower())){
+                        if(-not (Confirm-Critical "ELIMINAR USUARIO '$n'" "BORRAR")){ continue }
+                        net user "$n" /delete
+                        Write-Log "USER" "Deleted user=$n"
+                    } else {
+                        Write-Host "`n [!] No se puede eliminar el usuario actual ($env:USERNAME)." -ForegroundColor $COLOR_DANGER
+                    }
+                    Pause-Enter " OK"
+                }
+                if($u -eq "D"){
+                    if(-not (Confirm-Critical "ACTIVAR CUENTA ADMINISTRATOR (SUPER ADMIN)" "APLICAR")){ continue }
+                    net user administrator /active:yes
+                    Write-Log "USER" "Activated built-in administrator"
+                    Pause-Enter " OK"
+                }
+                if($u -eq "F"){
+                    $n = (Read-Host " USUARIO").Trim()
+                    $p = Read-Host " CLAVE"
+                    if($n -and $p){
+                        if(-not (Confirm-Critical "CAMBIAR PASSWORD DE '$n'" "APLICAR")){ continue }
+                        net user "$n" $p
+                        Write-Log "USER" "Password changed for user=$n"
+                    }
+                    Pause-Enter " OK"
+                }
             }
         }
         "K" { 
             while($true){ Show-MainTitle; Write-Host "`n SOPORTE TECNICO PRO" -ForegroundColor $COLOR_MENU
-            Write-Host " [A] SALUD DISCO`n [B] REPARAR SISTEMA`n [C] CLAVE BIOS`n [D] SINCRONIZAR HORA"
+            Write-Host " [A] SALUD DISCO`n [B] REPARAR SISTEMA`n [C] CLAVE BIOS - Recupera la licencia original del equipo.`n [D] SINCRONIZAR HORA"
             Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-            $s=(Read-Host ([Environment]::NewLine + ' >')).ToUpper(); if($s -eq "X"){break}
-            if($s -eq "A"){Get-PhysicalDisk | Format-Table; Read-Host " ENTER"}
-            if($s -eq "B"){sfc /scannow; dism /online /cleanup-image /restorehealth; Read-Host " OK"}
-            if($s -eq "C"){(Get-CimInstance SoftwareLicensingService).OA3xOriginalProductKey; Read-Host " OK"} 
+            $s = Read-MenuOption ([Environment]::NewLine + ' >') -Valid @("A","B","C","D","X")
+            if(-not $s){ continue }
+            if($s -eq "X"){break}
+            if($s -eq "A"){
+                Get-PhysicalDisk | Format-Table
+                Write-Log "SUPPORT" "Disk health queried"
+                Pause-Enter " ENTER"
+            }
+            if($s -eq "B"){
+                if(-not (Require-Admin "reparar sistema (SFC/DISM)")){ continue }
+                if(-not (Confirm-Critical "REPARAR SISTEMA (SFC + DISM)" "APLICAR")){ continue }
+                $outFile = Join-Path $PSScriptRoot ("support_repair_" + (Get-Date).ToString("yyyyMMdd_HHmmss") + ".txt")
+                Write-Host "`n [+] Ejecutando SFC..." -ForegroundColor $COLOR_MENU
+                $sfcOut = (sfc /scannow 2>&1 | Out-String)
+                Write-Host "`n [+] Ejecutando DISM..." -ForegroundColor $COLOR_MENU
+                $dismOut = (dism /online /cleanup-image /restorehealth 2>&1 | Out-String)
+                ($sfcOut + "`n`n--- DISM ---`n`n" + $dismOut) | Out-File -FilePath $outFile -Encoding utf8 -Force
+                Write-Log "SUPPORT" "Repair ran. OutputFile=$outFile"
+                Write-Host "`n [+] Salida guardada en: $outFile" -ForegroundColor $COLOR_PRIMARY
+                Pause-Enter " OK"
+            }
+            if($s -eq "C"){
+                $key = (Get-CimInstance SoftwareLicensingService).OA3xOriginalProductKey
+                Write-Host $key
+                Write-Log "SUPPORT" "OA3 key queried"
+                Pause-Enter " OK"
+            } 
             if($s -eq "D"){ 
                 net stop w32time 
                 w32tm /config /syncfromflags:manual /manualpeerlist:"time.windows.com" 
@@ -719,17 +1493,58 @@ while ($true) {
                     Write-Host "`n [!] ERROR AL SINCRONIZAR:" -ForegroundColor $COLOR_DANGER 
                     $syncResult | ForEach-Object { Write-Host (' > ' + $_) } 
                 } 
-                Read-Host " OK" 
+                Write-Log "SUPPORT" ("Time sync exit={0}" -f $LASTEXITCODE)
+                Pause-Enter " OK" 
             } }
         }
         "L" { 
             while($true){ Show-MainTitle; Write-Host "`n BYPASS WINDOWS 11" -ForegroundColor $COLOR_ALERT
             Write-Host " [A] BYPASS HARDWARE   - Omitir TPM, SecureBoot y chequeos de RAM para continuar la instalación" -ForegroundColor $COLOR_MENU
             Write-Host " [B] BYPASS INTERNET  - Evitar la necesidad de conexión a Internet durante la instalación" -ForegroundColor $COLOR_MENU
+            Write-Host " [C] VER ESTADO ACTUAL (REGISTRO)" -ForegroundColor $COLOR_MENU
+            Write-Host " [D] REVERTIR BYPASS HARDWARE" -ForegroundColor $COLOR_MENU
             Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-            $b=(Read-Host "`n ``> SELECCIONE").ToUpper(); if($b -eq "X"){break}
-            if($b -eq "A"){Write-Host "`n [+] Aplicando bypass de hardware: se omiten TPM, SecureBoot y RAM checks..." -ForegroundColor $COLOR_PRIMARY; $reg="HKLM:\System\Setup\LabConfig"; if(!(Test-Path $reg)){New-Item $reg -Force}; "BypassTPMCheck","BypassSecureBootCheck","BypassRAMCheck" | ForEach-Object {New-ItemProperty $reg $_ -Value 1 -PropertyType DWord -Force}; Read-Host " OK"}
-            if($b -eq "B"){Write-Host "`n [+] Aplicando bypass de Internet: la instalación no requerirá conexión obligatoria..." -ForegroundColor $COLOR_PRIMARY; & $env:SystemRoot\System32\oobe\bypassnro.cmd; Read-Host " OK"} }
+            $b = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","X")
+            if(-not $b){ continue }
+            if($b -eq "X"){break}
+            $reg="HKLM:\System\Setup\LabConfig"
+            if($b -eq "A"){
+                if(-not (Require-Admin "aplicar bypass Windows 11")){ continue }
+                if(-not (Confirm-Critical "BYPASS HARDWARE (LabConfig)" "APLICAR")){ continue }
+                Write-Host "`n [+] Aplicando bypass de hardware..." -ForegroundColor $COLOR_PRIMARY
+                if(!(Test-Path $reg)){New-Item $reg -Force | Out-Null}
+                "BypassTPMCheck","BypassSecureBootCheck","BypassRAMCheck" | ForEach-Object {New-ItemProperty $reg $_ -Value 1 -PropertyType DWord -Force | Out-Null}
+                Write-Log "BYPASS" "Applied hardware bypass LabConfig"
+                Pause-Enter " OK"
+            }
+            if($b -eq "B"){
+                Write-Host "`n [+] Aplicando bypass de Internet..." -ForegroundColor $COLOR_PRIMARY
+                & $env:SystemRoot\System32\oobe\bypassnro.cmd
+                Write-Log "BYPASS" "Ran bypassnro.cmd"
+                Pause-Enter " OK"
+            }
+            if($b -eq "C"){
+                Show-MainTitle
+                Write-Host "`n ESTADO LabConfig:" -ForegroundColor $COLOR_ALERT
+                if(Test-Path $reg){
+                    Get-ItemProperty $reg -ErrorAction SilentlyContinue | Select-Object BypassTPMCheck,BypassSecureBootCheck,BypassRAMCheck | Format-List
+                } else {
+                    Write-Host " (No existe)" -ForegroundColor $COLOR_MENU
+                }
+                Pause-Enter " ENTER"
+            }
+            if($b -eq "D"){
+                if(-not (Require-Admin "revertir bypass Windows 11")){ continue }
+                if(-not (Confirm-Critical "REVERTIR BYPASS HARDWARE (LabConfig)" "APLICAR")){ continue }
+                if(Test-Path $reg){
+                    "BypassTPMCheck","BypassSecureBootCheck","BypassRAMCheck" | ForEach-Object {
+                        try { Remove-ItemProperty -Path $reg -Name $_ -ErrorAction SilentlyContinue } catch {}
+                    }
+                }
+                Write-Log "BYPASS" "Reverted hardware bypass LabConfig"
+                Pause-Enter " OK"
+            }
+            }
         }
         "M" {  
             while($true){ 
@@ -739,10 +1554,37 @@ while ($true) {
                 Write-Host " [C] VER IP                 [E] VER CLAVES WI FI"
                 Write-Host " [D] PING MONITOR"
                 Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-                $m=(Read-Host "`n ``> SELECCIONE").ToUpper(); if($m -eq "X"){break}
-                if($m -eq "A"){netsh winsock reset; netsh int ip reset; ipconfig /flushdns; Read-Host " OK"}
-                if($m -eq "B"){"wuauserv","bits" | ForEach-Object {Stop-Service $_ -Force}; Remove-Item "C:\Windows\SoftwareDistribution\*" -Recurse -Force; "wuauserv","bits" | ForEach-Object {Start-Service $_}; Read-Host " OK"}
-                if($m -eq "C"){Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -notmatch "Loopback" | Format-Table; Read-Host " ENTER"}
+                $m = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","E","F","G","X")
+                if(-not $m){ continue }
+                if($m -eq "X"){break}
+                if($m -eq "A"){
+                    if(-not (Require-Admin "resetear red")){ continue }
+                    netsh winsock reset
+                    netsh int ip reset
+                    ipconfig /flushdns
+                    Pause-Enter " OK"
+                }
+                if($m -eq "B"){
+                    if(-not (Require-Admin "reparar Windows Update")){ continue }
+                    if(-not (Confirm-Critical "REPARAR WINDOWS UPDATE (LIMPIA SOFTWAREDISTRIBUTION)" "APLICAR")){ continue }
+                    $demo = Read-MenuOption " MODO DEMO (S=solo mostrar, N=ejecutar)" -Valid @("S","N")
+                    $isDemo = ($demo -eq "S")
+                    Write-Log "UPDATE" "RepairUpdate DemoMode=$isDemo"
+                    if($isDemo){
+                        Write-Host " (Demo) Se detendrían servicios: wuauserv, bits" -ForegroundColor $COLOR_ALERT
+                        Write-Host " (Demo) Se limpiaría: C:\\Windows\\SoftwareDistribution\\*" -ForegroundColor $COLOR_ALERT
+                        Write-Host " (Demo) Se iniciarían servicios: wuauserv, bits" -ForegroundColor $COLOR_ALERT
+                    } else {
+                        "wuauserv","bits" | ForEach-Object { Stop-Service $_ -Force -ErrorAction SilentlyContinue }
+                        Remove-Item "C:\Windows\SoftwareDistribution\*" -Recurse -Force -ErrorAction SilentlyContinue
+                        "wuauserv","bits" | ForEach-Object { Start-Service $_ -ErrorAction SilentlyContinue }
+                    }
+                    Pause-Enter " OK"
+                }
+                if($m -eq "C"){
+                    Get-NetIPAddress -AddressFamily IPv4 | Where-Object InterfaceAlias -notmatch "Loopback" | Format-Table
+                    Pause-Enter " ENTER"
+                }
                 if($m -eq "D"){
                     $target = Read-Host ([Environment]::NewLine + ' IP O DOMINIO (DEFECTO 8.8.8.8)'); if(!$target){$target="8.8.8.8"}
                     while($true){Test-Connection $target -Count 1; if([console]::KeyAvailable){break}; Start-Sleep -Seconds 1}
@@ -754,10 +1596,10 @@ while ($true) {
                         $passLine = (netsh wlan show profile name="$name" key=clear) | Select-String "Contenido de la clave|Key Content"
                         if($passLine){ $pass = $passLine.ToString().Split(":")[1].Trim(); Write-Host " RED $name | CLAVE $pass" -ForegroundColor $COLOR_PRIMARY }
                     }
-                    Read-Host "`n ENTER PARA VOLVER"
+                    Pause-Enter "`n ENTER PARA VOLVER"
                 }
-                if($m -eq "F"){ $target=Read-Host " DOMINIO"; tracert $target; Read-Host " ENTER"}
-                if($m -eq "G"){ Start-Process "https://fast.com"; Read-Host " OK"}
+                if($m -eq "F"){ $target=Read-Host " DOMINIO"; if($target){tracert $target}; Pause-Enter " ENTER"}
+                if($m -eq "G"){ Start-Process "https://fast.com"; Pause-Enter " OK"}
             }
         }
         "N" { 
@@ -765,15 +1607,45 @@ while ($true) {
                 Show-MainTitle; Write-Host "`n MANTENIMIENTO DE DISCOS" -ForegroundColor $COLOR_MENU
                 Write-Host " [A] DESFRAGMENTAR HDD`n [B] OPTIMIZAR SSD`n [C] LIMPIEZA DISM"
                 Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-                $o=(Read-Host ([Environment]::NewLine + ' >')).ToUpper(); if($o -eq "X"){break}
-                if($o -eq "A"){defrag C: /O; Read-Host " OK"}
-                if($o -eq "B"){Optimize-Volume -DriveLetter C -ReTrim -Verbose; Read-Host " OK"}
-                if($o -eq "C"){dism /online /Cleanup-Image /StartComponentCleanup; Read-Host " OK"}
+                $o = Read-MenuOption ([Environment]::NewLine + ' >') -Valid @("A","B","C","X")
+                if(-not $o){ continue }
+                if($o -eq "X"){break}
+                if(-not (Require-Admin "mantenimiento de discos")){ continue }
+                if($o -eq "A"){
+                    if(-not (Confirm-Critical "DESFRAGMENTAR/OPTIMIZAR DISCO C:" "APLICAR")){ continue }
+                    defrag C: /O
+                    Pause-Enter " OK"
+                }
+                if($o -eq "B"){
+                    if(-not (Confirm-Critical "OPTIMIZAR SSD (TRIM) EN DISCO C:" "APLICAR")){ continue }
+                    Optimize-Volume -DriveLetter C -ReTrim -Verbose
+                    Pause-Enter " OK"
+                }
+                if($o -eq "C"){
+                    if(-not (Confirm-Critical "LIMPIEZA DISM (STARTCOMPONENTCLEANUP)" "APLICAR")){ continue }
+                    dism /online /Cleanup-Image /StartComponentCleanup
+                    Pause-Enter " OK"
+                }
             }
         }
         "O" { Show-LiveMonitor }
         "P" { Invoke-DefenderControl }
-        "S" { $nk=Read-Host ' > NUEVA CLAVE'; if($nk){$nk | Out-File $CONFIG_FILE -Encoding ascii -Force; $Global:MasterPass=$nk}; Read-Host " OK" }
+        "S" { 
+            $nk1 = Read-Host ' > NUEVA CLAVE'
+            if(-not $nk1){ Pause-Enter " CANCELADO. ENTER"; break }
+            $nk2 = Read-Host ' > REPITA NUEVA CLAVE'
+            if($nk1 -ne $nk2){
+                Write-Host "`n [!] NO COINCIDE." -ForegroundColor $COLOR_DANGER
+                Write-Log "SEC" "MasterPass change failed (mismatch)"
+                Pause-Enter " ENTER"
+                break
+            }
+            if(-not (Confirm-Critical "CAMBIAR CLAVE MAESTRA" "APLICAR")){ break }
+            $nk1 | Out-File $CONFIG_FILE -Encoding ascii -Force
+            $Global:MasterPass = $nk1
+            Write-Log "SEC" "MasterPass changed"
+            Pause-Enter " OK"
+        }
         "X" { exit }
     }
 }
