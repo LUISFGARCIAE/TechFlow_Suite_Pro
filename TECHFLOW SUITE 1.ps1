@@ -32,9 +32,19 @@ Write-Log "INFO" "TECHFLOW_SUITE started. ScriptRoot=$PSScriptRoot"
 
 function Get-Prefs {
     if(Test-Path $PREFS_FILE){
-        try { return (Get-Content $PREFS_FILE -Raw | ConvertFrom-Json) } catch { return [pscustomobject]@{} }
+        try { 
+            $prefs = Get-Content $PREFS_FILE -Raw | ConvertFrom-Json
+            # Asegurar que la propiedad lastKitOption exista
+            if (-not ($prefs.PSObject.Properties['lastKitOption'])) {
+                $prefs | Add-Member -NotePropertyName 'lastKitOption' -NotePropertyValue $null
+            }
+            return $prefs
+        } catch { 
+            return [pscustomobject]@{ lastKitOption = $null }
+        }
     }
-    return [pscustomobject]@{}
+    # Si no existe el archivo, devolvemos un objeto con la propiedad
+    return [pscustomobject]@{ lastKitOption = $null }
 }
 
 function Save-Prefs($prefs){
@@ -77,6 +87,15 @@ function Test-IsAdmin {
         return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     } catch {
         return $false
+    }
+}
+
+function Get-AdminUsername {
+    $locale = (Get-WinSystemLocale).Name
+    if ($locale -like "*es*") {
+        return "administrador"
+    } else {
+        return "administrator"
     }
 }
 
@@ -256,44 +275,485 @@ function Show-MainTitle {
     Write-Host " #                                                                           #" -ForegroundColor $COLOR_PRIMARY
     Write-Host " #          T E C H F L O W   S U I T E   -   P R O   E D I T I O N          #" -ForegroundColor $COLOR_PRIMARY
     Write-Host " #                  SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO              #" -ForegroundColor $COLOR_PRIMARY
-    Write-Host " #                                     V.4.1                                 #" -ForegroundColor $COLOR_PRIMARY
+    Write-Host " #                                     V.5.0                                 #" -ForegroundColor $COLOR_PRIMARY
     Write-Host " #############################################################################" -ForegroundColor $COLOR_PRIMARY
 }
 
-# --- MOTOR DE INSTALACION HIBRIDA INTELIGENTE ---
+# --- MOTOR DE INSTALACION HIBRIDA INTELIGENTE (CON MAPEO CHOCOLATEY) ---
 function Invoke-SmartInstall ($AppID, $AppName) {
     Write-Host "`n [!] INSTALANDO: $AppName..." -ForegroundColor $COLOR_MENU
-    $wingetResult = winget install --id $AppID --exact --accept-package-agreements --accept-source-agreements --silent
-    if ($LastExitCode -ne 0) {
-        Write-Host " [!] WINGET FALLO. BUSCANDO EN CHOCOLATEY CON NOMBRE CORTO..." -ForegroundColor $COLOR_ALERT
-        $shortName = $AppID.Split('.')[-1].ToLower() 
-        choco install $shortName -y --no-progress
-        if ($LastExitCode -eq 0) { return "OK" } else { return "ERROR" }
+    
+    # ============================================================
+    # MAPEO MANUAL: ID de Winget -> Nombre corto en Chocolatey
+    # Solo para IDs donde el nombre automático no coincide
+    # ============================================================
+    $chocoMapping = @{
+        # Navegadores
+        "Google.Chrome"               = "googlechrome"
+        "Mozilla.Firefox"             = "firefox"
+        "Opera.Opera"                 = "opera"
+        "TorProject.TorBrowser"       = "tor-browser"
+        "LibreWolf.LibreWolf"         = "librewolf"
+        "Waterfox.Waterfox"           = "waterfox"
+        "Chromium.Chromium"           = "chromium"
+        
+        # Comunicación
+        "Discord.Discord"             = "discord"
+        "Telegram.TelegramDesktop"    = "telegram"
+        "OpenWhisperSystems.Signal"   = "signal"
+        "Zoom.Zoom"                   = "zoom"
+        "Microsoft.Teams"             = "teams"
+        "SlackTechnologies.Slack"     = "slack"
+        "WhatsApp.WhatsApp"           = "whatsapp"
+        "Element.Element"             = "element"
+        "ProtonTechnologies.ProtonMail" = "protonmail"
+        
+        # Utilidades
+        "7zip.7zip"                   = "7zip"
+        "RARLab.WinRAR"               = "winrar"
+        "Microsoft.PowerToys"         = "powertoys"
+        "voidtools.Everything"        = "everything"
+        "BleachBit.BleachBit"         = "bleachbit"
+        "RevoUninstaller.RevoUninstaller" = "revo"
+        "BulkCrapUninstaller.BulkCrapUninstaller" = "bcuninstaller"
+        "Bitsum.ProcessLasso"         = "processlasso"
+        "FanControl.FanControl"       = "fancontrol"
+        "OpenShell.OpenShell"         = "openshell"
+        
+        # Seguridad
+        "Bitwarden.Bitwarden"         = "bitwarden"
+        "AgileBits.1Password"         = "1password"
+        "KeePassXCTeam.KeePassXC"     = "keepassxc"
+        "Malwarebytes.Malwarebytes"   = "malwarebytes"
+        "DisplayDriverUninstaller.DisplayDriverUninstaller" = "ddu"
+        "TechPowerUp.NVCleanstall"    = "nvcleanstall"
+        "CrystalDiskInfo.CrystalDiskInfo" = "crystaldiskinfo"
+        "CrystalDiskMark.CrystalDiskMark" = "crystaldiskmark"
+        
+        # Hardware/Monitoreo
+        "CPUID.CPU-Z"                 = "cpuz"
+        "TechPowerUp.GPU-Z"           = "gpuz"
+        "CPUID.HWMonitor"             = "hwmonitor"
+        "REALiX.HWiNFO"               = "hwinfo"
+        "MSI.Afterburner"             = "msiafterburner"
+        "OpenRGB.OpenRGB"             = "openrgb"
+        
+        # Desarrollo
+        "Microsoft.VisualStudioCode"  = "vscode"
+        "Git.Git"                     = "git"
+        "GitHub.GitHubDesktop"        = "github-desktop"
+        "GitHub.cli"                  = "gh"
+        "Docker.DockerDesktop"        = "docker-desktop"
+        "Kitware.CMake"               = "cmake"
+        "OpenJS.NodeJS"               = "nodejs"
+        "Python.Python.3"             = "python"
+        "Anaconda.Anaconda3"          = "anaconda"
+        
+        # Clientes FTP/SSH
+        "PuTTY.PuTTY"                 = "putty"
+        "WinSCP.WinSCP"               = "winscp"
+        "FileZilla.Client"            = "filezilla"
+        "qBittorrent.qBittorrent"     = "qbittorrent"
+        "DelugeTeam.Deluge"           = "deluge"
+        "Motrix.Motrix"               = "motrix"
+        "LocalSend.LocalSend"         = "localsend"
+        
+        # Multimedia
+        "GIMP.GIMP"                   = "gimp"
+        "Inkscape.Inkscape"           = "inkscape"
+        "KritaFoundation.Krita"       = "krita"
+        "BlenderFoundation.Blender"   = "blender"
+        "dotPDN.PaintDotNet"          = "paint.net"
+        "Darktable.Darktable"         = "darktable"
+        "Figma.Figma"                 = "figma"
+        "ByteDance.CapCut"            = "capcut"
+        "BlackmagicDesign.DaVinciResolve" = "davinci-resolve"
+        "HandBrake.HandBrake"         = "handbrake"
+        "VideoLAN.VLC"                = "vlc"
+        "Spotify.Spotify"             = "spotify"
+        "OBSProject.OBSStudio"        = "obs-studio"
+        "Audacity.Audacity"           = "audacity"
+        "AIMP.AIMP"                   = "aimp"
+        "MusicBee.MusicBee"           = "musicbee"
+        "CodecGuide.K-LiteCodecPack.Full" = "klitecodec"
+        "Plex.PlexMediaServer"        = "plex"
+        "Jellyfin.Jellyfin"           = "jellyfin"
+        "Calibre.Calibre"             = "calibre"
+        
+        # Personalización
+        "LivelyWallpaper.LivelyWallpaper" = "livelywallpaper"
+        "Rainmeter.Rainmeter"         = "rainmeter"
+        "f.lux.f.lux"                 = "flux"
+        "Files.Files"                 = "files"
+        "FlowLauncher.FlowLauncher"   = "flowlauncher"
+        "Espanso.Espanso"             = "espanso"
+        "Ditto.Ditto"                 = "ditto"
+        "CopyQ.CopyQ"                 = "copyq"
+        
+        # Ofimática
+        "TheDocumentFoundation.LibreOffice" = "libreoffice"
+        "Microsoft.Office"            = "office365"
+        "Kingsoft.WPSOffice"          = "wpsoffice"
+        "AscensioSystemSIA.OnlyOffice" = "onlyoffice"
+        "Notion.Notion"               = "notion"
+        "Obsidian.Obsidian"           = "obsidian"
+        "Logseq.Logseq"               = "logseq"
+        "Joplin.Joplin"               = "joplin"
+        "Zotero.Zotero"               = "zotero"
+        
+        # PDF
+        "Adobe.Acrobat.Reader.64-bit" = "adobereader"
+        "Foxit.FoxitReader"           = "foxitreader"
+        "SumatraPDF.SumatraPDF"       = "sumatrapdf"
+        "PDFsam.PDFsam"               = "pdfsam"
+        "PDF24.PDF24"                 = "pdf24"
+        
+        # Redes
+        "WiresharkFoundation.Wireshark" = "wireshark"
+        "Nmap.Nmap"                   = "nmap"
+        "AngryIPScanner.AngryIPScanner" = "angryip"
+        "Famatech.AdvancedIPScanner"  = "advanced-ip-scanner"
+        "Mobatek.MobaXterm"           = "mobaxterm"
+        "Alacritty.Alacritty"         = "alacritty"
+        "Microsoft.WindowsTerminal"   = "windows-terminal"
+        
+        # Juegos
+        "Valve.Steam"                 = "steam"
+        "EpicGames.EpicGamesLauncher" = "epicgameslauncher"
+        "ElectronicArts.EADesktop"    = "ea-app"
+        "Ubisoft.Connect"             = "ubisoft-connect"
+        "GOG.Galaxy"                  = "gog-galaxy"
+        "Razer.Cortex"                = "razer-cortex"
+        "Parsec.Parsec"               = "parsec"
+        
+        # Virtualización
+        "Oracle.VirtualBox"           = "virtualbox"
+        "VMware.WorkstationPlayer"    = "vmware-player"
+        "RaspberryPiFoundation.RaspberryPiImager" = "raspberry-pi-imager"
+        "OrcaSlicer.OrcaSlicer"       = "orcaslicer"
+        "Prusa3D.PrusaSlicer"         = "prusaslicer"
+        
+        # Respaldos
+        "Duplicati.Duplicati"         = "duplicati"
+        "Nextcloud.NextcloudDesktop"  = "nextcloud"
+        "ownCloud.ownCloudDesktop"    = "owncloud"
+        "Google.Drive"                = "googledrive"
+        "Dropbox.Dropbox"             = "dropbox"
+        "ProtonTechnologies.ProtonDrive" = "protondrive"
+        
+        # Herramientas de renombrado/limpieza
+        "BulkRenameUtility.BulkRenameUtility" = "bulkrenameutility"
+        "AdvancedRenamer.AdvancedRenamer" = "advancedrenamer"
+        "DevToys.DevToys"             = "devtoys"
+        
+        # Remoto
+        "AnyDesk.AnyDesk"             = "anydesk"
+        "RustDesk.RustDesk"           = "rustdesk"
+        "TeamViewer.TeamViewer"       = "teamviewer"
+        "Barrier.Barrier"             = "barrier"
+        "KDE.KDEConnect"              = "kdeconnect"
+        "Citrix.CitrixWorkspaceApp"   = "citrix-workspace"
+        
+        # Extras
+        "AutoHotkey.AutoHotkey"       = "autohotkey"
+        "GlazeWM.GlazeWM"             = "glazewm"
+        "Gsudo.Gsudo"                 = "gsudo"
+        "Nushell.Nushell"             = "nushell"
+        "Fastfetch.Fastfetch"         = "fastfetch"
+        "DualMonitorTools.DualMonitorTools" = "dualmonitortools"
+        "Monitorian.Monitorian"       = "monitorian"
+        "Microsoft.PowerAutomateDesktop" = "power-automate-desktop"
     }
-    return "OK"
+    
+    # Verificar si winget está disponible
+    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
+    
+    # Función auxiliar para instalar con winget
+    function Install-WithWinget {
+        if (-not $wingetAvailable) { return $false }
+        winget install --id $AppID --exact --accept-package-agreements --accept-source-agreements --silent 2>&1 | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    }
+    
+    # Intentar con winget (primer intento)
+    Write-Host " [+] Intentando con winget..." -ForegroundColor $COLOR_PRIMARY
+    if (Install-WithWinget) { return "OK" }
+    
+    # Si falla, verificar si tenemos mapeo para Chocolatey
+    $chocoName = $null
+    if ($chocoMapping.ContainsKey($AppID)) {
+        $chocoName = $chocoMapping[$AppID]
+        Write-Host " [+] Usando mapeo manual para Chocolatey: $chocoName" -ForegroundColor $COLOR_ALERT
+    } else {
+        # Generar nombre corto automático (última parte del ID en minúsculas)
+        $chocoName = $AppID.Split('.')[-1].ToLower()
+        Write-Host " [+] Generando nombre corto automático: $chocoName" -ForegroundColor $COLOR_ALERT
+    }
+    
+    # Intentar con Chocolatey
+    Write-Host " [+] Instalando vía Chocolatey..." -ForegroundColor $COLOR_PRIMARY
+    choco install $chocoName -y --no-progress 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) { 
+        Write-Host " [✔] Instalado correctamente con Chocolatey" -ForegroundColor Green
+        return "OK" 
+    }
+    
+    # Segundo intento con winget (a veces falla por tiempos)
+    Write-Host " [+] Reintentando con winget (segundo intento)..." -ForegroundColor $COLOR_ALERT
+    Start-Sleep -Seconds 2
+    if (Install-WithWinget) { return "OK" }
+    
+    # Si todo falla, reportar error
+    Write-Host " [✘] FALLO DEFINITIVO. Instalación manual requerida." -ForegroundColor Red
+    Write-Log "INSTALL" "Failed to install $AppName ($AppID) via winget and Chocolatey"
+    return "ERROR"
 }
 
-# --- KIT POST FORMAT V3 (100 APPS INTEGRADAS) ---
+# --- KIT POST FORMAT V5 (200 APPS CON IDs FUNCIONALES) ---
 function Invoke-KitPostFormat {
     $apps = @{
-        "1" = @{Name="Chrome"; ID="Google.Chrome"}; "2" = @{Name="Firefox"; ID="Mozilla.Firefox"}; "3" = @{Name="Brave"; ID="Brave.Brave"}; "4" = @{Name="Opera GX"; ID="Opera.OperaGX"}; "5" = @{Name="Vivaldi"; ID="VivaldiTechnologies.Vivaldi"};
-        "6" = @{Name="MS Office"; ID="Microsoft.Office"}; "7" = @{Name="LibreOffice"; ID="LibreOffice.LibreOffice"}; "8" = @{Name="Foxit Reader"; ID="Foxit.FoxitReader"}; "9" = @{Name="Adobe Reader"; ID="Adobe.AdobeReader"}; "10" = @{Name="Notion"; ID="Notion.Notion"};
-        "11" = @{Name="Slack"; ID="SlackTechnologies.Slack"}; "12" = @{Name="WPS Office"; ID="Kingsoft.WPSOffice"}; "13" = @{Name="Trello"; ID="Atlassian.Trello"}; "14" = @{Name="Evernote"; ID="Evernote.Evernote"}; "15" = @{Name="PDF24"; ID="PDF24.PDF24"};
-        "16" = @{Name="7-Zip"; ID="7zip.7zip"}; "17" = @{Name="WinRAR"; ID="RARLab.WinRAR"}; "18" = @{Name="PowerToys"; ID="Microsoft.PowerToys"}; "19" = @{Name="Everything"; ID="voidtools.Everything"}; "20" = @{Name="BleachBit"; ID="BleachBit.BleachBit"};
-        "21" = @{Name="TreeSize"; ID="JAMSoftware.TreeSizeFree"}; "22" = @{Name="Rufus"; ID="Akeo.Rufus"}; "23" = @{Name="Unlocker"; ID="IObit.Unlocker"}; "24" = @{Name="Teracopy"; ID="CodeSector.TeraCopy"}; "25" = @{Name="PowerISO"; ID="PowerSoftware.PowerISO"};
-        "26" = @{Name="WhatsApp"; ID="9NBLGGH4LNS7"}; "27" = @{Name="Telegram"; ID="Telegram.TelegramDesktop"}; "28" = @{Name="Discord"; ID="Discord.Discord"}; "29" = @{Name="Zoom"; ID="Zoom.Zoom"}; "30" = @{Name="Skype"; ID="Microsoft.Skype"};
-        "31" = @{Name="Teams"; ID="Microsoft.Teams"}; "32" = @{Name="Signal"; ID="OpenWhisperSystems.Signal"}; "33" = @{Name="Line"; ID="LINE.LINE"}; "34" = @{Name="Viber"; ID="ViberMediaSarl.Viber"}; "35" = @{Name="Messenger"; ID="Facebook.Messenger"};
-        "36" = @{Name="VLC Player"; ID="VideoLAN.VLC"}; "37" = @{Name="Spotify"; ID="Spotify.Spotify"}; "38" = @{Name="OBS Studio"; ID="obsproject.obs-studio"}; "39" = @{Name="PotPlayer"; ID="Kakao.PotPlayer"}; "40" = @{Name="K-Lite Codecs"; ID="CodecGuide.K-LiteCodecPack.Full"};
-        "41" = @{Name="AIMP"; ID="ArtemIzmaylov.AIMP"}; "42" = @{Name="iTunes"; ID="Apple.iTunes"}; "43" = @{Name="Handbrake"; ID="HandBrake.HandBrake"}; "44" = @{Name="Plex"; ID="Plex.PlexDesktop"}; "45" = @{Name="Audacity"; ID="Audacity.Audacity"};
-        "46" = @{Name="CapCut"; ID="ByteDance.CapCut"}; "47" = @{Name="Canva"; ID="Canva.Canva"}; "48" = @{Name="GIMP"; ID="GIMP.GIMP"}; "49" = @{Name="Inkscape"; ID="Inkscape.Inkscape"}; "50" = @{Name="Krita"; ID="Krita.Krita"};
-        "51" = @{Name="Blender"; ID="BlenderFoundation.Blender"}; "52" = @{Name="Paint.NET"; ID="dotPDN.PaintDotNet"}; "53" = @{Name="Darktable"; ID="Darktable.Darktable"}; "54" = @{Name="DaVinci Resolve"; ID="BlackmagicDesign.DaVinciResolve"}; "55" = @{Name="Figma"; ID="Figma.Figma"};
-        "56" = @{Name="AnyDesk"; ID="AnyDesk.AnyDesk"}; "57" = @{Name="RustDesk"; ID="RustDesk.RustDesk"}; "58" = @{Name="CrystalDiskInfo"; ID="CrystalDiskInfo.CrystalDiskInfo"}; "59" = @{Name="CPU-Z"; ID="CPUID.CPU-Z"}; "60" = @{Name="GPU-Z"; ID="TechPowerUp.GPU-Z"};
-        "61" = @{Name="HWMonitor"; ID="CPUID.HWMonitor"}; "62" = @{Name="Recuva"; ID="Piriform.Recuva"}; "63" = @{Name="WinDirStat"; ID="WinDirStat.WinDirStat"}; "64" = @{Name="Wireshark"; ID="WiresharkFoundation.Wireshark"}; "65" = @{Name="Angry IP Scanner"; ID="AntonKeks.AngryIPScanner"};
-        "66" = @{Name="Putty"; ID="SimonTatham.PuTTY"}; "67" = @{Name="WinSCP"; ID="WinSCP.WinSCP"}; "68" = @{Name="FileZilla"; ID="TimKosse.FileZilla.Client"}; "69" = @{Name="Advanced IP Scanner"; ID="Famatech.AdvancedIPScanner"}; "70" = @{Name="Speccy"; ID="Piriform.Speccy"};
-        "71" = @{Name="Steam"; ID="Valve.Steam"}; "72" = @{Name="Epic Games"; ID="EpicGames.EpicGamesLauncher"}; "73" = @{Name="EA Desktop"; ID="ElectronicArts.EADesktop"}; "74" = @{Name="Ubisoft Connect"; ID="Ubisoft.Connect"}; "75" = @{Name="GOG Galaxy"; ID="GOG.Galaxy"};
-        "81" = @{Name="Razer Cortex"; ID="Razer.Cortex"}; "82" = @{Name="MSI Afterburner"; ID="MSI.Afterburner"}; "86" = @{Name="VS Code"; ID="Microsoft.VisualStudioCode"}; "87" = @{Name="Git"; ID="Git.Git"}; "90" = @{Name="Docker"; ID="Docker.DockerDesktop"};
-        "94" = @{Name="DirectX"; ID="Microsoft.DirectX"}; "95" = @{Name="Google Drive"; ID="Google.Drive"}; "98" = @{Name="Notepad++"; ID="Notepad++.Notepad++"}; "100" = @{Name="VirtualBox"; ID="Oracle.VirtualBox"}
+        # ========== 1-10: NAVEGADORES ==========
+        "1" = @{Name="Google Chrome"; ID="Google.Chrome"}
+        "2" = @{Name="Mozilla Firefox"; ID="Mozilla.Firefox"}
+        "3" = @{Name="Brave Browser"; ID="Brave.Brave"}
+        "4" = @{Name="Microsoft Edge"; ID="Microsoft.Edge"}
+        "5" = @{Name="Opera"; ID="Opera.Opera"}
+        "6" = @{Name="Vivaldi"; ID="VivaldiTechnologies.Vivaldi"}
+        "7" = @{Name="Tor Browser"; ID="TorProject.TorBrowser"}
+        "8" = @{Name="LibreWolf"; ID="LibreWolf.LibreWolf"}
+        "9" = @{Name="Waterfox"; ID="Waterfox.Waterfox"}
+        "10" = @{Name="Chromium"; ID="Chromium.Chromium"}
+        
+        # ========== 11-20: MENSAJERÍA Y COMUNICACIÓN ==========
+        "11" = @{Name="Discord"; ID="Discord.Discord"}
+        "12" = @{Name="Telegram Desktop"; ID="Telegram.TelegramDesktop"}
+        "13" = @{Name="Signal Desktop"; ID="OpenWhisperSystems.Signal"}
+        "14" = @{Name="Zoom"; ID="Zoom.Zoom"}
+        "15" = @{Name="Microsoft Teams Classic"; ID="Microsoft.Teams"}
+        "16" = @{Name="Slack"; ID="SlackTechnologies.Slack"}
+        "17" = @{Name="WhatsApp Desktop"; ID="WhatsApp.WhatsApp"}
+        "18" = @{Name="Element (Matrix)"; ID="Element.Element"}
+        "19" = @{Name="Proton Mail Desktop"; ID="ProtonTechnologies.ProtonMail"}
+        "20" = @{Name="Session"; ID="Oxen.Session"}
+        
+        # ========== 21-30: HERRAMIENTAS DE SISTEMA Y UTILIDADES ==========
+        "21" = @{Name="7-Zip"; ID="7zip.7zip"}
+        "22" = @{Name="WinRAR"; ID="RARLab.WinRAR"}
+        "23" = @{Name="Microsoft PowerToys"; ID="Microsoft.PowerToys"}
+        "24" = @{Name="Everything Search"; ID="voidtools.Everything"}
+        "25" = @{Name="BleachBit"; ID="BleachBit.BleachBit"}
+        "26" = @{Name="Revo Uninstaller"; ID="RevoUninstaller.RevoUninstaller"}
+        "27" = @{Name="Bulk Crap Uninstaller"; ID="BulkCrapUninstaller.BulkCrapUninstaller"}
+        "28" = @{Name="Process Lasso"; ID="Bitsum.ProcessLasso"}
+        "29" = @{Name="FanControl"; ID="FanControl.FanControl"}
+        "30" = @{Name="Open Shell (Start Menu)"; ID="OpenShell.OpenShell"}
+        
+        # ========== 31-40: GESTORES DE CONTRASEÑAS Y SEGURIDAD ==========
+        "31" = @{Name="Bitwarden"; ID="Bitwarden.Bitwarden"}
+        "32" = @{Name="1Password"; ID="AgileBits.1Password"}
+        "33" = @{Name="Proton Pass"; ID="ProtonTechnologies.ProtonPass"}
+        "34" = @{Name="KeePassXC"; ID="KeePassXCTeam.KeePassXC"}
+        "35" = @{Name="Malwarebytes"; ID="Malwarebytes.Malwarebytes"}
+        "36" = @{Name="Display Driver Uninstaller"; ID="DisplayDriverUninstaller.DisplayDriverUninstaller"}
+        "37" = @{Name="OpenHashTab"; ID="OpenHashTab.OpenHashTab"}
+        "38" = @{Name="NVCleanstall"; ID="TechPowerUp.NVCleanstall"}
+        "39" = @{Name="CrystalDiskInfo"; ID="CrystalDiskInfo.CrystalDiskInfo"}
+        "40" = @{Name="CrystalDiskMark"; ID="CrystalDiskMark.CrystalDiskMark"}
+        
+        # ========== 41-50: HARDWARE Y MONITOREO ==========
+        "41" = @{Name="CPU-Z"; ID="CPUID.CPU-Z"}
+        "42" = @{Name="GPU-Z"; ID="TechPowerUp.GPU-Z"}
+        "43" = @{Name="HWMonitor"; ID="CPUID.HWMonitor"}
+        "44" = @{Name="HWINFO"; ID="REALiX.HWiNFO"}
+        "45" = @{Name="MSI Afterburner"; ID="MSI.Afterburner"}
+        "46" = @{Name="Lenovo Legion Toolkit"; ID="LenovoLegionToolkit.LenovoLegionToolkit"}
+        "47" = @{Name="OpenRGB"; ID="OpenRGB.OpenRGB"}
+        "48" = @{Name="JoyToKey"; ID="JoyToKey.JoyToKey"}
+        "49" = @{Name="CapFrameX"; ID="CapFrameX.CapFrameX"}
+        "50" = @{Name="Intel PresentMon"; ID="Intel.PresentMon"}
+        
+        # ========== 51-60: HERRAMIENTAS DE DESARROLLO ==========
+        "51" = @{Name="Visual Studio Code"; ID="Microsoft.VisualStudioCode"}
+        "52" = @{Name="Git"; ID="Git.Git"}
+        "53" = @{Name="GitHub Desktop"; ID="GitHub.GitHubDesktop"}
+        "54" = @{Name="GitHub CLI"; ID="GitHub.cli"}
+        "55" = @{Name="Docker Desktop"; ID="Docker.DockerDesktop"}
+        "56" = @{Name="Cursor AI Editor"; ID="Cursor.Cursor"}
+        "57" = @{Name="CMake"; ID="Kitware.CMake"}
+        "58" = @{Name="Node.js"; ID="OpenJS.NodeJS"}
+        "59" = @{Name="Python 3"; ID="Python.Python.3"}
+        "60" = @{Name="Anaconda"; ID="Anaconda.Anaconda3"}
+        
+        # ========== 61-70: CLIENTES FTP / SSH / TRANSFERENCIA ==========
+        "61" = @{Name="PuTTY"; ID="PuTTY.PuTTY"}
+        "62" = @{Name="WinSCP"; ID="WinSCP.WinSCP"}
+        "63" = @{Name="FileZilla Client"; ID="FileZilla.Client"}
+        "64" = @{Name="qBittorrent"; ID="qBittorrent.qBittorrent"}
+        "65" = @{Name="Deluge"; ID="DelugeTeam.Deluge"}
+        "66" = @{Name="JDownloader"; ID="JDSoft.JDownloader"}
+        "67" = @{Name="Motrix Download Manager"; ID="Motrix.Motrix"}
+        "68" = @{Name="LocalSend"; ID="LocalSend.LocalSend"}
+        "69" = @{Name="Magic Wormhole"; ID="MagicWormhole.MagicWormhole"}
+        "70" = @{Name="croc"; ID="Schollz.croc"}
+        
+        # ========== 71-80: EDICIÓN DE IMAGEN / VIDEO ==========
+        "71" = @{Name="GIMP"; ID="GIMP.GIMP"}
+        "72" = @{Name="Inkscape"; ID="Inkscape.Inkscape"}
+        "73" = @{Name="Krita"; ID="KritaFoundation.Krita"}
+        "74" = @{Name="Blender"; ID="BlenderFoundation.Blender"}
+        "75" = @{Name="Paint.NET"; ID="dotPDN.PaintDotNet"}
+        "76" = @{Name="Darktable"; ID="Darktable.Darktable"}
+        "77" = @{Name="Figma"; ID="Figma.Figma"}
+        "78" = @{Name="CapCut"; ID="ByteDance.CapCut"}
+        "79" = @{Name="DaVinci Resolve"; ID="BlackmagicDesign.DaVinciResolve"}
+        "80" = @{Name="HandBrake"; ID="HandBrake.HandBrake"}
+        
+        # ========== 81-90: MULTIMEDIA ==========
+        "81" = @{Name="VLC Media Player"; ID="VideoLAN.VLC"}
+        "82" = @{Name="Spotify"; ID="Spotify.Spotify"}
+        "83" = @{Name="OBS Studio"; ID="OBSProject.OBSStudio"}
+        "84" = @{Name="Audacity"; ID="Audacity.Audacity"}
+        "85" = @{Name="AIMP Audio Player"; ID="AIMP.AIMP"}
+        "86" = @{Name="MusicBee"; ID="MusicBee.MusicBee"}
+        "87" = @{Name="K-Lite Codec Pack Full"; ID="CodecGuide.K-LiteCodecPack.Full"}
+        "88" = @{Name="Plex Media Server"; ID="Plex.PlexMediaServer"}
+        "89" = @{Name="Jellyfin"; ID="Jellyfin.Jellyfin"}
+        "90" = @{Name="Calibre E-book Management"; ID="Calibre.Calibre"}
+        
+        # ========== 91-100: PERSONALIZACIÓN Y PRODUCTIVIDAD ==========
+        "91" = @{Name="Lively Wallpaper"; ID="LivelyWallpaper.LivelyWallpaper"}
+        "92" = @{Name="Rainmeter"; ID="Rainmeter.Rainmeter"}
+        "93" = @{Name="Wallpaper Engine"; ID="WallpaperEngine.WallpaperEngine"}
+        "94" = @{Name="F.lux"; ID="f.lux.f.lux"}
+        "95" = @{Name="Auto Dark Mode"; ID="AutoDarkMode.AutoDarkMode"}
+        "96" = @{Name="Files (Modern File Manager)"; ID="Files.Files"}
+        "97" = @{Name="Flow Launcher"; ID="FlowLauncher.FlowLauncher"}
+        "98" = @{Name="Espanso Text Expander"; ID="Espanso.Espanso"}
+        "99" = @{Name="Ditto Clipboard Manager"; ID="Ditto.Ditto"}
+        "100" = @{Name="CopyQ Clipboard Manager"; ID="CopyQ.CopyQ"}
+        
+        # ========== 101-110: OFIMÁTICA ==========
+        "101" = @{Name="LibreOffice Fresh"; ID="TheDocumentFoundation.LibreOffice"}
+        "102" = @{Name="Microsoft 365 (Office)"; ID="Microsoft.Office"}
+        "103" = @{Name="WPS Office"; ID="Kingsoft.WPSOffice"}
+        "104" = @{Name="OnlyOffice"; ID="AscensioSystemSIA.OnlyOffice"}
+        "105" = @{Name="Notion"; ID="Notion.Notion"}
+        "106" = @{Name="Obsidian"; ID="Obsidian.Obsidian"}
+        "107" = @{Name="Logseq"; ID="Logseq.Logseq"}
+        "108" = @{Name="Joplin"; ID="Joplin.Joplin"}
+        "109" = @{Name="Zotero"; ID="Zotero.Zotero"}
+        "110" = @{Name="Mendeley Reference Manager"; ID="Mendeley.MendeleyDesktop"}
+        
+        # ========== 111-120: PDF Y LECTURA ==========
+        "111" = @{Name="Adobe Acrobat Reader DC"; ID="Adobe.Acrobat.Reader.64-bit"}
+        "112" = @{Name="Foxit PDF Reader"; ID="Foxit.FoxitReader"}
+        "113" = @{Name="SumatraPDF"; ID="SumatraPDF.SumatraPDF"}
+        "114" = @{Name="PDFsam Basic"; ID="PDFsam.PDFsam"}
+        "115" = @{Name="PDF24 Creator"; ID="PDF24.PDF24"}
+        "116" = @{Name="Okular"; ID="Okular.Okular"}
+        "117" = @{Name="Calibre"; ID="Calibre.Calibre"}
+        "118" = @{Name="Epub Reader"; ID="EpubReader.EpubReader"}
+        "119" = @{Name="Kindle"; ID="Amazon.Kindle"}
+        "120" = @{Name="Koodo Reader"; ID="KoodoReader.KoodoReader"}
+        
+        # ========== 121-130: REDES Y DIAGNÓSTICO ==========
+        "121" = @{Name="Wireshark"; ID="WiresharkFoundation.Wireshark"}
+        "122" = @{Name="Nmap"; ID="Nmap.Nmap"}
+        "123" = @{Name="Angry IP Scanner"; ID="AngryIPScanner.AngryIPScanner"}
+        "124" = @{Name="Advanced IP Scanner"; ID="Famatech.AdvancedIPScanner"}
+        "125" = @{Name="MobaXterm"; ID="Mobatek.MobaXterm"}
+        "126" = @{Name="Terminal Alacritty"; ID="Alacritty.Alacritty"}
+        "127" = @{Name="Windows Terminal"; ID="Microsoft.WindowsTerminal"}
+        "128" = @{Name="Fzf"; ID="Fzf.Fzf"}
+        "129" = @{Name="Bat (Cat)"; ID="Bat.Bat"}
+        "130" = @{Name="Neofetch"; ID="Neofetch.Neofetch"}
+        
+        # ========== 131-140: JUEGOS Y RENDIMIENTO ==========
+        "131" = @{Name="Steam"; ID="Valve.Steam"}
+        "132" = @{Name="Epic Games Launcher"; ID="EpicGames.EpicGamesLauncher"}
+        "133" = @{Name="EA Desktop"; ID="ElectronicArts.EADesktop"}
+        "134" = @{Name="Ubisoft Connect"; ID="Ubisoft.Connect"}
+        "135" = @{Name="GOG Galaxy"; ID="GOG.Galaxy"}
+        "136" = @{Name="Razer Cortex"; ID="Razer.Cortex"}
+        "137" = @{Name="Parsec"; ID="Parsec.Parsec"}
+        "138" = @{Name="OPAutoClicker"; ID="OPAutoClicker.OPAutoClicker"}
+        "139" = @{Name="JoyToKey"; ID="JoyToKey.JoyToKey"}
+        "140" = @{Name="MSI Afterburner"; ID="MSI.Afterburner"}
+        
+        # ========== 141-150: VIRTUALIZACIÓN Y EMULACIÓN ==========
+        "141" = @{Name="Oracle VM VirtualBox"; ID="Oracle.VirtualBox"}
+        "142" = @{Name="VMware Workstation Player"; ID="VMware.WorkstationPlayer"}
+        "143" = @{Name="Docker Desktop"; ID="Docker.DockerDesktop"}
+        "144" = @{Name="Raspberry Pi Imager"; ID="RaspberryPiFoundation.RaspberryPiImager"}
+        "145" = @{Name="OrcaSlicer"; ID="OrcaSlicer.OrcaSlicer"}
+        "146" = @{Name="PrusaSlicer"; ID="Prusa3D.PrusaSlicer"}
+        "147" = @{Name="QEMU"; ID="QEMU.QEMU"}
+        "148" = @{Name="WSL2 Kernel"; ID="Microsoft.WSL"}
+        "149" = @{Name="WSL2 Ubuntu"; ID="Canonical.Ubuntu"}
+        "150" = @{Name="Windows Sandbox Config"; ID="Microsoft.Sandbox"}
+        
+        # ========== 151-160: UTILIDADES DE RESPALDO ==========
+        "151" = @{Name="Duplicati"; ID="Duplicati.Duplicati"}
+        "152" = @{Name="Nextcloud Desktop"; ID="Nextcloud.NextcloudDesktop"}
+        "153" = @{Name="ownCloud Desktop"; ID="ownCloud.ownCloudDesktop"}
+        "154" = @{Name="Google Drive"; ID="Google.Drive"}
+        "155" = @{Name="Dropbox"; ID="Dropbox.Dropbox"}
+        "156" = @{Name="Proton Drive"; ID="ProtonTechnologies.ProtonDrive"}
+        "157" = @{Name="SyncThing"; ID="SyncThing.SyncThing"}
+        "158" = @{Name="Resilio Sync"; ID="Resilio.ResilioSync"}
+        "159" = @{Name="Rclone"; ID="Rclone.Rclone"}
+        "160" = @{Name="FreeFileSync"; ID="FreeFileSync.FreeFileSync"}
+        
+        # ========== 161-170: HERRAMIENTAS DE MONITOREO ==========
+        "161" = @{Name="HWMonitor"; ID="CPUID.HWMonitor"}
+        "162" = @{Name="HWINFO"; ID="REALiX.HWiNFO"}
+        "163" = @{Name="Open Hardware Monitor"; ID="OpenHardwareMonitor.OpenHardwareMonitor"}
+        "164" = @{Name="Core Temp"; ID="CoreTemp.CoreTemp"}
+        "165" = @{Name="FurMark"; ID="Geeks3D.FurMark"}
+        "166" = @{Name="Cinebench R23"; ID="Maxon.Cinebench"}
+        "167" = @{Name="Geekbench 6"; ID="PrimateLabs.Geekbench.6"}
+        "168" = @{Name="Prime95"; ID="Prime95.Prime95"}
+        "169" = @{Name="MemTest64"; ID="MemTest86.MemTest86"}
+        "170" = @{Name="WinDirStat"; ID="WinDirStat.WinDirStat"}
+        
+        # ========== 171-180: RENOMBRADO Y LIMPIEZA ==========
+        "171" = @{Name="Bulk Rename Utility"; ID="BulkRenameUtility.BulkRenameUtility"}
+        "172" = @{Name="Advanced Renamer"; ID="AdvancedRenamer.AdvancedRenamer"}
+        "173" = @{Name="FFmpeg Batch AV Converter"; ID="FFmpegBatchAVConverter.FFmpegBatchAVConverter"}
+        "174" = @{Name="ExifCleaner"; ID="ExifCleaner.ExifCleaner"}
+        "175" = @{Name="File Converter"; ID="FileConverter.FileConverter"}
+        "176" = @{Name="DevToys"; ID="DevToys.DevToys"}
+        "177" = @{Name="Easy Context Menu"; ID="EasyContextMenu.EasyContextMenu"}
+        "178" = @{Name="Nilesoft Shell"; ID="Nilesoft.Shell"}
+        "179" = @{Name="OpenShell"; ID="OpenShell.OpenShell"}
+        "180" = @{Name="MSEdgeRedirect"; ID="MSEdgeRedirect.MSEdgeRedirect"}
+        
+        # ========== 181-190: REMOTO Y ACCESO ==========
+        "181" = @{Name="AnyDesk"; ID="AnyDesk.AnyDesk"}
+        "182" = @{Name="RustDesk"; ID="RustDesk.RustDesk"}
+        "183" = @{Name="TeamViewer"; ID="TeamViewer.TeamViewer"}
+        "184" = @{Name="Barrier (KVM)"; ID="Barrier.Barrier"}
+        "185" = @{Name="KDE Connect"; ID="KDE.KDEConnect"}
+        "186" = @{Name="Citrix Workspace"; ID="Citrix.CitrixWorkspaceApp"}
+        "187" = @{Name="Microsoft Remote Desktop"; ID="Microsoft.RemoteDesktopClient"}
+        "188" = @{Name="VNC Viewer"; ID="RealVNC.VNCViewer"}
+        "189" = @{Name="TightVNC"; ID="TightVNC.TightVNC"}
+        "190" = @{Name="UltraVNC"; ID="UltraVNC.UltraVNC"}
+        
+        # ========== 191-200: EXTRAS Y UTILIDADES ==========
+        "191" = @{Name="AutoHotkey"; ID="AutoHotkey.AutoHotkey"}
+        "192" = @{Name="Espanso"; ID="Espanso.Espanso"}
+        "193" = @{Name="GlazeWM (Tiling WM)"; ID="GlazeWM.GlazeWM"}
+        "194" = @{Name="FancyZones (PowerToys)"; ID="Microsoft.PowerToys"}
+        "195" = @{Name="Gsudo"; ID="Gsudo.Gsudo"}
+        "196" = @{Name="Nushell"; ID="Nushell.Nushell"}
+        "197" = @{Name="Fastfetch"; ID="Fastfetch.Fastfetch"}
+        "198" = @{Name="Dual Monitor Tools"; ID="DualMonitorTools.DualMonitorTools"}
+        "199" = @{Name="Monitorian"; ID="Monitorian.Monitorian"}
+        "200" = @{Name="Power Automate Desktop"; ID="Microsoft.PowerAutomateDesktop"}
     }
+
+    # Resto del código de la función (el bucle while, el menú, etc.) se mantiene igual
     $prefs = Get-Prefs
     $lastOpt = $null
     try { $lastOpt = $prefs.lastKitOption } catch { $lastOpt = $null }
@@ -301,11 +761,11 @@ function Invoke-KitPostFormat {
     while($true){
         Clear-Host
         Show-MainTitle
-        Write-Host "`n KIT POST FORMAT - INSTALACION INTELIGENTE" -ForegroundColor $COLOR_PRIMARY
+        Write-Host "`n KIT POST FORMAT - INSTALACION INTELIGENTE (200 APPS)" -ForegroundColor $COLOR_PRIMARY
         Write-Host ' [0] LIMPIEZA DE BLOATWARE (CandyCrush, Netflix, etc.)'
         Write-Host ' [1] PERFIL BASICO (Chrome, 7Zip, VLC, AnyDesk, Zoom)'
-        Write-Host ' [2] PERFIL GAMING (Steam, Discord, VLC, DirectX)'
-        Write-Host ' [3] SELECCION MANUAL (Listado Completo)'
+        Write-Host ' [2] PERFIL GAMING (Steam, Discord, OBS, DirectX)'
+        Write-Host ' [3] SELECCION MANUAL (Listado Completo 200 apps)'
         Write-Host " [4] ACTUALIZAR TODO EL SOFTWARE"
         Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
         if($lastOpt){ Write-Host " [ENTER] Repetir última selección: $lastOpt" -ForegroundColor $COLOR_MENU }
@@ -327,26 +787,115 @@ function Invoke-KitPostFormat {
                 foreach($b in $bloat){ Get-AppxPackage $b | Remove-AppxPackage -ErrorAction SilentlyContinue }
                 Pause-Enter " OK. ENTER"
             }
-            "1" { $selection = "1","16","36","56","29" }
-            "2" { $selection = "71","28","36","94" }
+            "1" { $selection = "1","21","81","181","15" }  # Chrome, 7-Zip, VLC, AnyDesk, Teams
+            "2" { $selection = "131","11","81","94" }      # Steam, Discord, VLC, DirectX
             "3" {
+                # Bloque de selección manual con paginación y buscador (igual que antes, pero adaptado a 200 apps)
                 Clear-Host
                 Show-MainTitle
-                Write-Host "`n LISTADO MAESTRO" -ForegroundColor $COLOR_MENU
-                $sortedKeys = $apps.Keys | Sort-Object {[int]$_}
-                for ($i=0; $i -lt $sortedKeys.Count; $i += 3) {
-                    $row = ""
-                    for ($j=0; $j -lt 3; $j++) {
-                        if (($i + $j) -lt $sortedKeys.Count) {
-                            $key = $sortedKeys[$i + $j]
-                            $row += "[$($key.PadLeft(3))] $($apps[$key].Name.PadRight(18)) "
+                Write-Host "`n LISTADO MAESTRO (200 APPS) - PAGINADO + BUSCADOR" -ForegroundColor $COLOR_MENU
+                $sortedKeysAll = $apps.Keys | Sort-Object {[int]$_}
+                $filteredKeys = $sortedKeysAll
+                $searchText = ""
+                $appsPerPage = 40
+                $totalPages = [math]::Ceiling($filteredKeys.Count / $appsPerPage)
+                $currentPage = 1
+                $cols = 4
+
+                while ($true) {
+                    Clear-Host
+                    Show-MainTitle
+                    $totalFiltered = $filteredKeys.Count
+                    $totalPages = [math]::Ceiling($totalFiltered / $appsPerPage)
+                    if ($currentPage -gt $totalPages) { $currentPage = $totalPages }
+                    if ($currentPage -lt 1) { $currentPage = 1 }
+                    
+                    Write-Host "`n LISTADO MAESTRO - PÁGINA $currentPage DE $totalPages" -ForegroundColor $COLOR_MENU
+                    if ($searchText) { Write-Host " BUSCANDO: '$searchText' (Total: $totalFiltered apps)" -ForegroundColor $COLOR_ALERT }
+                    Write-Host "`n APPS DISPONIBLES:" -ForegroundColor $COLOR_PRIMARY
+                    
+                    $startIdx = ($currentPage - 1) * $appsPerPage
+                    $endIdx = [math]::Min($startIdx + $appsPerPage, $totalFiltered) - 1
+                    
+                    $pageApps = @($filteredKeys[$startIdx..$endIdx])
+                    for ($i = 0; $i -lt $pageApps.Count; $i += $cols) {
+                        $row = ""
+                        for ($j = 0; $j -lt $cols; $j++) {
+                            if (($i + $j) -lt $pageApps.Count) {
+                                $key = $pageApps[$i + $j]
+                                $name = $apps[$key].Name
+		# Truncar nombres largos a 22 caracteres (ej: "NombreMuyLargoDeEjemplo..." )
+				if ($name.Length -gt 22) {
+ 				   $displayName = $name.Substring(0, 19) + "..."
+				} else {
+				    $displayName = $name
+				}
+				$row += "[$($key.ToString().PadLeft(3))] $($displayName.PadRight(22))"
+                            }
                         }
+                        Write-Host " $row"
                     }
-                    Write-Host " $row"
+                    
+                    Write-Host "`n CONTROLES:" -ForegroundColor $COLOR_ALERT
+                    Write-Host " [N] Siguiente página   [P] Página anterior   [G] Ir a página   [B] Buscar por nombre"
+                    Write-Host " [R] Reiniciar búsqueda   [X] Cancelar   [ENTER] Continuar con selección" -ForegroundColor $COLOR_MENU
+                    
+                    $optPage = Read-Host "`n ``>"
+                    switch ($optPage.ToUpper()) {
+                        "N" { if ($currentPage -lt $totalPages) { $currentPage++ } else { Write-Host " Ya es la última página." -ForegroundColor $COLOR_DANGER; Start-Sleep -Seconds 1 } }
+                        "P" { if ($currentPage -gt 1) { $currentPage-- } else { Write-Host " Ya es la primera página." -ForegroundColor $COLOR_DANGER; Start-Sleep -Seconds 1 } }
+                        "G" {
+                            $pg = Read-Host " Número de página (1-$totalPages)"
+                            if ($pg -match '^\d+$' -and [int]$pg -ge 1 -and [int]$pg -le $totalPages) { $currentPage = [int]$pg }
+                            else { Write-Host " Número inválido." -ForegroundColor $COLOR_DANGER; Start-Sleep -Seconds 1 }
+                        }
+                        "B" {
+                            $searchText = Read-Host " INGRESE TEXTO A BUSCAR (nombre parcial)"
+                            if ($searchText) {
+                                $filteredKeys = @($sortedKeysAll | Where-Object { $apps[$_].Name -like "*$searchText*" })
+                                if ($filteredKeys.Count -eq 0) {
+                                    Write-Host " No se encontraron apps con '$searchText'." -ForegroundColor $COLOR_DANGER
+                                    Start-Sleep -Seconds 1
+                                    $filteredKeys = $sortedKeysAll
+                                    $searchText = ""
+                                } else {
+                                    $currentPage = 1
+                                }
+                            }
+                        }
+                        "R" {
+                            $filteredKeys = $sortedKeysAll
+                            $searchText = ""
+                            $currentPage = 1
+                            Write-Host " Búsqueda reiniciada." -ForegroundColor $COLOR_PRIMARY
+                            Start-Sleep -Seconds 1
+                        }
+                        "X" { $manual = "X"; break }
+                        default { break }
+                    }
+                    if ($optPage.ToUpper() -eq "X") { break }
+                    if ($optPage -eq "") { break }
                 }
-                $manual = Read-Host "`n ``> INGRESE NUMEROS SEPARADOS POR COMA ``(X para cancelar`)"
+                
+                if ($optPage.ToUpper() -eq "X") { continue }
+                
+                Write-Host "`n CONSEJO: Puedes escribir rangos (ej: 1-10) o lista separada por comas (1,5,20)" -ForegroundColor $COLOR_ALERT
+                $manual = Read-Host "`n ``> INGRESE NUMEROS SEPARADOS POR COMA O RANGOS (X para cancelar)"
                 if($manual -eq "X"){ continue }
-                $selection = $manual.Split(",").Trim()
+                
+                $finalSelection = @()
+                $parts = $manual -split ','
+                foreach($part in $parts){
+                    $part = $part.Trim()
+                    if($part -match '^(\d+)-(\d+)$'){
+                        $start = [int]$matches[1]
+                        $end = [int]$matches[2]
+                        for($k=$start; $k -le $end; $k++){ $finalSelection += $k.ToString() }
+                    } else {
+                        $finalSelection += $part
+                    }
+                }
+                $selection = $finalSelection
             }
             "4" { 
                 if(Get-Command winget -ErrorAction SilentlyContinue){
@@ -373,6 +922,8 @@ function Invoke-KitPostFormat {
                     }
                     Write-Log "KIT" "Install app=$($apps[$item].Name) result=$res"
                     $results += "[ $res ] $($apps[$item].Name)"
+                } else {
+                    Write-Host " [!] Número inválido: $item" -ForegroundColor $COLOR_DANGER
                 }
             }
             Show-MainTitle
@@ -893,15 +1444,21 @@ function Invoke-WingetMenu {
         Write-Host " [B] WINGET: LISTAR DISPONIBLES          [E] CHOCO: ACTUALIZAR TODO"
         Write-Host " [C] WINGET: REPARAR CLIENTE             [F] CHOCO: BUSCAR PAQUETE"
         Write-Host ' [G] INSTALAR POR NOMBRE (AUTO-SEARCH)'
-        Write-Host ' [H] INSTALAR WINGET (APP INSTALLER)'
+Write-Host ' [H] INSTALAR WINGET (APP INSTALLER)'
+        Write-Host ' [I] SCOOP: Instalar/Setup Scoop + buckets'
+        Write-Host ' [J] SCOOP: Buscar/Instalar app'
+        Write-Host ' [K] SCOOP: Listar actualizaciones'
+        Write-Host ' [L] MULTI-SEARCH: Buscar en todas las fuentes'
         Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
         $hasWinget = [bool](Get-Command winget -ErrorAction SilentlyContinue)
         $hasChoco  = [bool](Get-Command choco -ErrorAction SilentlyContinue)
+        $hasScoop  = [bool](Get-Command scoop -ErrorAction SilentlyContinue)
         Write-Host "`n ESTADO:" -ForegroundColor Gray
         Write-Host ("  - winget: {0}" -f ($(if($hasWinget){"OK"}else{"NO"}))) -ForegroundColor $COLOR_MENU
         Write-Host ("  - choco : {0}" -f ($(if($hasChoco){"OK"}else{"NO"}))) -ForegroundColor $COLOR_MENU
+        Write-Host ("  - scoop : {0}" -f ($(if($hasScoop){"OK"}else{"NO"}))) -ForegroundColor $COLOR_MENU
 
-        $o = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","E","F","G","H","X")
+$o = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","E","F","G","H","I","J","K","L","X")
         if($o -eq "X"){break}
         
         if($o -eq "A"){
@@ -910,6 +1467,92 @@ function Invoke-WingetMenu {
             $out = winget upgrade --all --accept-package-agreements --accept-source-agreements 2>&1
             Write-Log "PKG" ("winget upgrade all exit={0}" -f $LASTEXITCODE)
             Pause-Enter "`n FIN. ENTER"
+        }
+        if($o -eq "I"){
+            Show-MainTitle
+            Write-Host "`n [I] SCOOP MANAGER - MÚLTIPLES MÉTODOS" -ForegroundColor $COLOR_PRIMARY
+            Write-Host " [1] MÉTODO OFICIAL (scoop.sh - recomendado)"
+            Write-Host " [2] MÉTODO MANUAL (PowerShell Gallery)"
+            Write-Host " [3] MÉTODO BINARIO (GitHub latest)"
+            Write-Host " [4] MÉTODO CHOCO (choco install scoop)"
+            Write-Host "`n [X] Cancelar"
+            
+            $metodo = Read-MenuOption "`n ``> MÉTODO" -Valid @("1","2","3","4","X")
+            if($metodo -eq "X"){ continue }
+            
+            if($hasScoop){
+                Write-Host "`n[+] Actualizando Scoop..." -ForegroundColor $COLOR_PRIMARY
+                scoop update
+                scoop update *
+                Pause-Enter "`n ✅ Scoop actualizado. ENTER"
+                continue
+            }
+            
+            switch($metodo){
+                "1" {
+                    if(Confirm-RemoteScript "https://scoop.sh"){
+                        iex (iwr -useb get.scoop.sh)
+                        Write-Log "PKG" "Scoop método 1 (oficial)"
+                    }
+                }
+                "2" {
+                    if(Confirm-RemoteScript "https://raw.githubusercontent.com/ScoopInstaller/Install/master/install.ps1"){
+                        irm get.scoop.sh | iex
+                        Write-Log "PKG" "Scoop método 2 (Gallery)"
+                    }
+                }
+                "3" {
+                    $scoopUrl = "https://github.com/ScoopInstaller/Install/releases/latest/download/scoop-install.ps1"
+                    $tempFile = "$env:TEMP\scoop-install.ps1"
+                    Invoke-WebRequest -Uri $scoopUrl -OutFile $tempFile
+                    iex $tempFile
+                    Remove-Item $tempFile -Force
+                    Write-Log "PKG" "Scoop método 3 (directo GitHub)"
+                }
+                "4" {
+                    if($hasChoco){
+                        choco install scoop -y
+                        Write-Log "PKG" "Scoop vía Chocolatey"
+                    } else {
+                        Write-Host " [!] Chocolatey no disponible" -ForegroundColor $COLOR_DANGER
+                    }
+                }
+            }
+            $hasScoop = [bool](Get-Command scoop -ErrorAction SilentlyContinue)
+            if($hasScoop){
+                Write-Host "`n ✅ Scoop instalado correctamente!" -ForegroundColor $COLOR_PRIMARY
+                Pause-Enter " ENTER"
+            } else {
+                Write-Host "`n [!] Falló la instalación" -ForegroundColor $COLOR_DANGER
+                Pause-Enter " ENTER"
+            }
+        }
+        if($o -eq "J"){
+            $app = Read-Host "`n ``> NOMBRE APP SCOOP"
+            if($app){
+                scoop search $app
+                $confirm = Read-Host "Instalar? (S/N)"
+                if($confirm -eq "S"){
+                    scoop install $app
+                }
+            }
+            Pause-Enter "`n ENTER"
+        }
+        if($o -eq "K"){
+            scoop status
+            Pause-Enter "`n ENTER"
+        }
+        if($o -eq "L"){
+            $app = Read-Host "`n ``> APP A BUSCAR EN TODAS FUENTES"
+            if($app){
+                Write-Host "`n[+] Buscando en Winget..." -ForegroundColor $COLOR_MENU
+                winget search $app
+                Write-Host "`n[+] Buscando en Scoop..." -ForegroundColor $COLOR_MENU
+                scoop search $app
+                Write-Host "`n[+] Buscando en Choco..." -ForegroundColor $COLOR_MENU
+                choco search $app
+            }
+            Pause-Enter "`n ENTER"
         }
         if($o -eq "B"){
             if(-not $hasWinget){ Write-Host "`n [!] winget no está disponible." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
@@ -1255,6 +1898,193 @@ function Invoke-DriverManagement {
         }
     }
 }
+
+function Show-BatteryHealth {
+    Show-MainTitle
+    Write-Host "`n ===== SALUD DE BATERÍA =====`n" -ForegroundColor Cyan
+    
+    # Verificar si hay batería
+    $battery = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue
+    if (-not $battery) {
+        Write-Host " [!] No se detectó ninguna batería en este equipo." -ForegroundColor $COLOR_DANGER
+        Write-Host "     (Equipo de escritorio o batería no compatible)" -ForegroundColor $COLOR_ALERT
+        Pause-Enter " ENTER"
+        return
+    }
+    
+    # Mostrar información básica
+    $charge = if ($battery.EstimatedChargeRemaining) { "$($battery.EstimatedChargeRemaining)%" } else { "N/A" }
+    $status = switch ($battery.BatteryStatus) {
+        1 { "Otra" }
+        2 { "Desconocido" }
+        3 { "Cargando completamente" }
+        4 { "Carga baja" }
+        5 { "Cargando" }
+        6 { "Nivel crítico" }
+        7 { "Cargando (alta)" }
+        8 { "Cargando (tiempo limitado)" }
+        9 { "Carga activa" }
+        10 { "No cargando" }
+        default { "Desconocido ($($battery.BatteryStatus))" }
+    }
+    
+    Write-Host " ESTADO ACTUAL:" -ForegroundColor $COLOR_PRIMARY
+    Write-Host "   Estado   : $status" -ForegroundColor $COLOR_MENU
+    Write-Host "   Carga    : $charge" -ForegroundColor $COLOR_MENU
+    
+    # Intentar obtener capacidad de diseño y actual
+    $design = $battery.DesignCapacity
+    $full = $battery.FullChargeCapacity
+    if ($design -and $full -and $design -gt 0) {
+        $health = [math]::Round(($full / $design) * 100, 1)
+        Write-Host "   Salud    : $health% (Cap. actual: $full mAh / Diseño: $design mAh)" -ForegroundColor $(if ($health -lt 50) { $COLOR_DANGER } else { $COLOR_PRIMARY })
+    } else {
+        Write-Host "   Salud    : No disponible (usa el reporte HTML para más detalles)" -ForegroundColor $COLOR_ALERT
+    }
+    
+    # Generar reporte HTML en una ubicación SEGURA (primero en TEMP)
+    $tempDir = $env:TEMP
+    if (-not $tempDir) { $tempDir = "C:\Windows\Temp" }
+    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $tempHtml = Join-Path $tempDir "BatteryReport_$timestamp.html"
+    
+    Write-Host "`n [+] Generando reporte detallado..." -ForegroundColor $COLOR_ALERT
+    try {
+        # Ejecutar powercfg y guardar en TEMP
+        powercfg /batteryreport /output "$tempHtml" 2>&1 | Out-Null
+        
+        if (Test-Path $tempHtml) {
+            # Intentar mover al escritorio (si es posible)
+            $desktop = [Environment]::GetFolderPath("Desktop")
+            if ($desktop -and (Test-Path $desktop)) {
+                $finalReport = Join-Path $desktop "BatteryReport_$timestamp.html"
+                Move-Item -Path $tempHtml -Destination $finalReport -Force -ErrorAction SilentlyContinue
+                Write-Host " [✔] Reporte guardado en: $finalReport" -ForegroundColor Green
+                $open = Read-Host "`n ¿Abrir el reporte HTML en el navegador? (S/N)"
+                if ($open -eq "S") { Start-Process $finalReport }
+            } else {
+                # Si no hay escritorio, dejar en TEMP
+                Write-Host " [✔] Reporte guardado en: $tempHtml" -ForegroundColor Green
+                $open = Read-Host "`n ¿Abrir el reporte HTML en el navegador? (S/N)"
+                if ($open -eq "S") { Start-Process $tempHtml }
+            }
+        } else {
+            Write-Host " [✘] No se pudo generar el reporte. Intenta ejecutar PowerShell como administrador." -ForegroundColor $COLOR_DANGER
+        }
+    } catch {
+        Write-Host " [✘] Error al generar el reporte: $($_.Exception.Message)" -ForegroundColor $COLOR_DANGER
+    }
+    
+    Pause-Enter "`n ENTER"
+}
+function Show-FullSystemInfo {
+    Show-MainTitle
+    Write-Host "`n ===== INFORME TÉCNICO COMPLETO =====`n" -ForegroundColor Cyan
+    Write-Host " GENERANDO INFORMACIÓN, ESPERE..." -ForegroundColor Yellow
+    Write-Log "INFO" "Show-FullSystemInfo iniciado"
+
+    $output = @()
+    $computerName = $env:COMPUTERNAME
+    $output += "EQUIPO: $computerName"
+    
+    $cs = Get-CimInstance Win32_ComputerSystemProduct -ErrorAction SilentlyContinue
+    $model = if ($cs) { $cs.Name } else { "No disponible" }
+    $serial = if ($cs) { $cs.IdentifyingNumber } else { "No disponible" }
+    $output += "MODELO: $model"
+    $output += "SERIE: $serial"
+
+    $cpu = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue
+    if ($cpu) {
+        $cpuName = $cpu.Name.Trim()
+        $cores = $cpu.NumberOfCores
+        $logical = $cpu.NumberOfLogicalProcessors
+        $output += "PROCESADOR: $cpuName"
+        $output += "  > Núcleos físicos: $cores | Lógicos: $logical"
+    } else {
+        $output += "PROCESADOR: No disponible"
+    }
+
+    $physMem = Get-CimInstance Win32_PhysicalMemory -ErrorAction SilentlyContinue
+    $totalInstalledGB = if ($physMem) { [math]::Round(($physMem | Measure-Object Capacity -Sum).Sum / 1GB, 2) } else { 0 }
+    $memArray = Get-CimInstance Win32_PhysicalMemoryArray -ErrorAction SilentlyContinue
+    $maxCapacityGB = if ($memArray -and $memArray.MaxCapacity) { [math]::Round($memArray.MaxCapacity / 1MB, 0) } else { "No disponible" }
+    $output += "MEMORIA RAM INSTALADA: ${totalInstalledGB} GB"
+    $output += "SOPORTE MÁXIMO PLACA: ${maxCapacityGB} GB"
+
+    $mb = Get-CimInstance Win32_BaseBoard -ErrorAction SilentlyContinue
+    $mbProduct = if ($mb) { $mb.Product } else { "No disponible" }
+    $mbManufacturer = if ($mb) { $mb.Manufacturer } else { "No disponible" }
+    $output += "PLACA BASE: $mbProduct ($mbManufacturer)"
+
+    $gpus = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike "*Remote*" -and $_.Name -notlike "*Mirror*" }
+    if ($gpus) {
+        $output += "TARJETA(S) GRÁFICA(S):"
+        foreach ($gpu in $gpus) {
+            $gpuName = $gpu.Name.Trim()
+            $vram = if ($gpu.AdapterRAM) { [math]::Round($gpu.AdapterRAM / 1GB, 2) } else { "?" }
+            $output += "  - $gpuName (VRAM: ${vram} GB)"
+        }
+    } else {
+        $output += "TARJETA GRÁFICA: No disponible"
+    }
+
+    $output += "`n--- ALMACENAMIENTO ---"
+    $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue
+    if ($disks) {
+        foreach ($disk in $disks) {
+            $friendly = $disk.FriendlyName
+            $sizeGB = [math]::Round($disk.Size / 1GB, 2)
+            $mediaType = $disk.MediaType
+            $busType = $disk.BusType
+            $health = $disk.HealthStatus
+            $healthColor = if ($health -eq 'Healthy') { "BUENO" } else { $health }
+            $output += "UNIDAD: $friendly [$mediaType, $busType]"
+            $output += "  > CAPACIDAD: ${sizeGB} GB"
+            $output += "  > SALUD: $healthColor"
+        }
+    } else {
+        $output += "No se pudo obtener información de discos."
+    }
+
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+    if ($os) {
+        $caption = $os.Caption
+        $version = $os.Version
+        $build = $os.BuildNumber
+        $output += "`n--- SISTEMA OPERATIVO ---"
+        $output += "EDICIÓN: $caption"
+        $output += "VERSIÓN: $version (Build $build)"
+    } else {
+        $output += "SISTEMA OPERATIVO: No disponible"
+    }
+
+    Clear-Host
+    Show-MainTitle
+    Write-Host "`n ===== INFORME TÉCNICO COMPLETO =====`n" -ForegroundColor Cyan
+    foreach ($line in $output) {
+        if ($line -match "^EQUIPO|^MODELO|^SERIE|^PROCESADOR|^MEMORIA|^SOPORTE|^PLACA|^TARJETA|^UNIDAD|^EDICIÓN|^VERSIÓN") {
+            Write-Host $line -ForegroundColor Green
+        } elseif ($line -match "^  >") {
+            Write-Host $line -ForegroundColor Yellow
+        } elseif ($line -match "^---") {
+            Write-Host $line -ForegroundColor Cyan
+        } else {
+            Write-Host $line
+        }
+    }
+
+    $save = Read-Host "`n ¿Guardar informe en archivo de texto? (S/N)"
+    if ($save -eq "S") {
+        $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+        $reportFile = Join-Path $PSScriptRoot "TechFlow_SystemInfo_$timestamp.txt"
+        $output | Out-File -FilePath $reportFile -Encoding utf8
+        Write-Host "`n [+] Informe guardado en: $reportFile" -ForegroundColor Green
+        Write-Log "INFO" "System info saved to $reportFile"
+    }
+    Write-Log "INFO" "Show-FullSystemInfo finalizado"
+    Pause-Enter "`n PRESIONE ENTER PARA CONTINUAR"
+}
+
 # --- MENU PRINCIPAL ---
 while ($true) {
     Show-MainTitle
@@ -1395,157 +2225,223 @@ while ($true) {
         "I" { Invoke-KitPostFormat }
         "J" { 
             while($true){ 
-                Show-MainTitle; Write-Host "`n GESTION USUARIOS" -ForegroundColor $COLOR_MENU
-                Write-Host " [A] LISTAR USUARIOS`n [B] CREAR LOCAL ADMIN`n [C] ELIMINAR USUARIO"
-                Write-Host " [D] ACTIVAR SUPER ADMIN`n [F] CAMBIAR PASSWORD"
-                Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-                $u = Read-MenuOption ([Environment]::NewLine + ' >') -Valid @("A","B","C","D","F","X")
-                if(-not $u){ continue }
-                if($u -eq "X"){break}
+                Show-MainTitle
+                Write-Host "`n GESTION USUARIOS" -ForegroundColor $COLOR_MENU
+                Write-Host " Usuarios locales / administrar comun" -ForegroundColor $COLOR_PRIMARY
+                Write-Host "  [A] LISTAR USUARIOS"
+                Write-Host "  [B] CREAR LOCAL ADMIN"
+                Write-Host "  [C] ELIMINAR USUARIO`n" -ForegroundColor $COLOR_MENU
+                Write-Host " Admin Oculto" -ForegroundColor $COLOR_PRIMARY
+                Write-Host "  [D] ACTIVAR SUPER ADMIN"
+                Write-Host "  [E] DESACTIVAR SUPER ADMIN"
+                Write-Host "  [F] CAMBIAR PASSWORD"
+
+                Write-Host ""
+                Write-Host "Ejecutar el comando: Escribe net user administrador /active:yes (o net user administrator /active:yes si tu Windows está en inglés) y presiona Enter." -ForegroundColor $COLOR_ALERT
+                Write-Host "para activar y desactivar`n" -ForegroundColor $COLOR_MENU
+                Write-Host " CONTROL" -ForegroundColor Gray
+                Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
+                Write-Host "  [X] VOLVER" -ForegroundColor $COLOR_DANGER
+$u = Read-MenuOption "`n `> SELECCIONE:" -Valid @("A","B","C","D","E","F","X")
+                if($u -eq "X"){ break }
 
                 if(-not (Require-Admin "gestión de usuarios")){ continue }
 
-                if($u -eq "A"){
-                    net user
+                switch($u){
+                    "A" {
+                        Show-MainTitle
+                        Write-Host " Listando usuarios..." -ForegroundColor $COLOR_PRIMARY
+                        net user
+                        Pause-Enter " ENTER PARA CONTINUAR"
+                    }
+                    "B" {
+                        Show-MainTitle
+                        Write-Host " Creando local admin..." -ForegroundColor $COLOR_PRIMARY
+                        $n = (Read-Host " NOMBRE").Trim()
+                        if($n){
+                            net user "$n" /add
+                            net localgroup administrators "$n" /add
+                            Write-Log "USER" "Created admin user=$n"
+                            Write-Host " ✅ Usuario admin '$n' creado correctamente" -ForegroundColor $COLOR_PRIMARY
+                        }
+                        Pause-Enter " ENTER PARA CONTINUAR"
+                    }
+                    "C" {
+                        Show-MainTitle
+                        Write-Host " Eliminando usuario..." -ForegroundColor $COLOR_PRIMARY
+                        $n = (Read-Host " NOMBRE").Trim()
+                        if($n -and ($n.ToLower() -ne $env:USERNAME.ToLower())){
+                            if (Confirm-Critical "ELIMINAR USUARIO '$n'" "BORRAR"){
+                                net user "$n" /delete
+                                Write-Host " ✅ Usuario '$n' eliminado" -ForegroundColor $COLOR_PRIMARY
+                                Write-Log "USER" "Deleted user=$n"
+                            }
+                        } else {
+                            Write-Host "`n [!] No se puede eliminar el usuario actual ($env:USERNAME)." -ForegroundColor $COLOR_DANGER
+                        }
+                        Pause-Enter " ENTER PARA CONTINUAR"
+                    }
+                    "D" {
+                        Show-MainTitle
+                        if(-not (Confirm-Critical "ACTIVAR CUENTA ADMINISTRATOR (SUPER ADMIN)" "APLICAR")){ break }
+                        $adminUser = Get-AdminUsername
+                        net user $adminUser /active:yes
+                        Write-Host " ✅ Super administrador ACTIVADO ($adminUser)" -ForegroundColor $COLOR_PRIMARY
+                        Write-Log "USER" ("Activated built-in administrator account: " + $adminUser)
+                        Pause-Enter " ENTER PARA CONTINUAR"
+                    }
+                    "E" {
+                        Show-MainTitle
+                        if(-not (Confirm-Critical "DESACTIVAR CUENTA ADMINISTRATOR (SUPER ADMIN)" "APLICAR")){ break }
+                        $adminUser = Get-AdminUsername
+                        net user $adminUser /active:no
+                        Write-Host " ✅ Super administrador DESACTIVADO ($adminUser)" -ForegroundColor $COLOR_PRIMARY
+                        Write-Log "USER" ("Deactivated built-in administrator account: " + $adminUser)
+                        Pause-Enter " ENTER PARA CONTINUAR"
+                    }
+                    "F" {
+                        Show-MainTitle
+                        Write-Host " Cambiando password..." -ForegroundColor $COLOR_PRIMARY
+                        $n = (Read-Host " USUARIO").Trim()
+                        $p = Read-Host " CLAVE NUEVA" 
+                        if($n -and $p){
+                            if (Confirm-Critical "CAMBIAR PASSWORD DE '$n'" "APLICAR"){
+                                net user "$n" $p
+                                Write-Host " ✅ Password de '$n' actualizada" -ForegroundColor $COLOR_PRIMARY
+                                Write-Log "USER" "Password changed for user=$n"
+                            }
+                        }
+                        Pause-Enter " ENTER PARA CONTINUAR"
+                    }
+                    default {
+                        Write-Host " [!] Opción no válida. Intenta de nuevo." -ForegroundColor $COLOR_DANGER
+                        Start-Sleep 1.5
+                    }
+                }
+            }
+        }
+"K" { 
+    while($true){ 
+        Show-MainTitle
+        Write-Host "`n SOPORTE TECNICO PRO" -ForegroundColor $COLOR_MENU
+        Write-Host " [A] SALUD DISCO"
+        Write-Host " [B] REPARAR SISTEMA"
+        Write-Host " [C] CLAVE BIOS - Recupera la licencia original del equipo."
+        Write-Host " [D] SINCRONIZAR HORA"
+        Write-Host " [F] SALUD DE BATERIA"
+        Write-Host " [G] INFO TÉCNICA COMPLETA (HW/SW)"
+        Write-Host "`n CONTROL" -ForegroundColor Gray
+        Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
+        Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+
+        $s = Read-MenuOption ([Environment]::NewLine + ' >') -Valid @("A","B","C","D","F","G","X")
+        if ($s -eq "X") { break }
+
+        if ($s -eq "A") {
+            Write-Host "`n[+] Verificando salud de discos..." -ForegroundColor $COLOR_PRIMARY
+            Get-PhysicalDisk | Format-Table -AutoSize FriendlyName, MediaType, HealthStatus, OperationalStatus
+            chkdsk C:
+            Pause-Enter "`n ENTER"
+        }
+        if ($s -eq "B") {
+            if (-not (Require-Admin "reparar el sistema")) { continue }
+            Write-Host "`n[+] Ejecutando SFC /SCANNOW..." -ForegroundColor $COLOR_PRIMARY
+            sfc /scannow
+            Write-Host "`n[+] Ejecutando DISM /RestoreHealth..." -ForegroundColor $COLOR_PRIMARY
+            dism /online /cleanup-image /restorehealth
+            Pause-Enter "`n ENTER"
+        }
+        if ($s -eq "C") {
+            Write-Host "`n[+] Recuperando clave de producto OEM (BIOS)..." -ForegroundColor $COLOR_PRIMARY
+            $key = (Get-WmiObject -Class SoftwareLicensingService).OA3xOriginalProductKey
+            if ($key) { Write-Host " CLAVE ORIGINAL: $key" -ForegroundColor Green }
+            else { Write-Host " No se encontró clave OEM en la BIOS." -ForegroundColor $COLOR_DANGER }
+            Pause-Enter "`n ENTER"
+        }
+        if ($s -eq "D") {
+            if (-not (Require-Admin "sincronizar hora")) { continue }
+            Write-Host "`n[+] Sincronizando hora..." -ForegroundColor $COLOR_PRIMARY
+            net stop w32time | Out-Null; net start w32time | Out-Null
+            w32tm /resync /force
+            Write-Host " Hora sincronizada." -ForegroundColor Green
+            Pause-Enter " ENTER"
+        }
+
+        if ($s -eq "F") {
+            Show-BatteryHealth
+        }
+        if ($s -eq "G") {
+            Show-FullSystemInfo
+        }
+    }
+}
+
+        "L" { 
+            while($true){ 
+                Show-MainTitle
+                Write-Host "`n BYPASS WINDOWS 11" -ForegroundColor $COLOR_ALERT
+                Write-Host " [A] BYPASS HARDWARE   - Omitir TPM, SecureBoot y chequeos de RAM"
+                Write-Host " [B] BYPASS INTERNET   - Evitar conexión a Internet durante la instalación"
+                Write-Host " [C] VER ESTADO ACTUAL (REGISTRO)"
+                Write-Host " [D] REVERTIR BYPASS HARDWARE"
+                Write-Host "`n CONTROL" -ForegroundColor Gray
+                Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
+                Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+
+                $b = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","X")
+                if (-not $b) { continue }
+                if ($b -eq "X") { break }
+
+                $reg = "HKLM:\System\Setup\LabConfig"
+
+                if ($b -eq "A") {
+                    if (-not (Require-Admin "aplicar bypass Windows 11")) { continue }
+                    if (-not (Confirm-Critical "BYPASS HARDWARE (LabConfig)" "APLICAR")) { continue }
+                    Write-Host "`n [+] Aplicando bypass de hardware..." -ForegroundColor $COLOR_PRIMARY
+                    if (-not (Test-Path $reg)) { New-Item $reg -Force | Out-Null }
+                    "BypassTPMCheck","BypassSecureBootCheck","BypassRAMCheck" | ForEach-Object {
+                        New-ItemProperty -Path $reg -Name $_ -Value 1 -PropertyType DWord -Force | Out-Null
+                    }
+                    Write-Log "BYPASS" "Applied hardware bypass LabConfig"
+                    Pause-Enter " OK"
+                }
+
+                if ($b -eq "B") {
+                    Write-Host "`n [+] Aplicando bypass de Internet..." -ForegroundColor $COLOR_PRIMARY
+                    if (Test-Path "$env:SystemRoot\System32\oobe\bypassnro.cmd") {
+                        & "$env:SystemRoot\System32\oobe\bypassnro.cmd"
+                        Write-Log "BYPASS" "Ran bypassnro.cmd"
+                    } else {
+                        Write-Host " [!] El archivo bypassnro.cmd no existe. Este bypass solo funciona durante la instalación (OOBE)." -ForegroundColor $COLOR_DANGER
+                    }
+                    Pause-Enter " OK"
+                }
+
+                if ($b -eq "C") {
+                    Show-MainTitle
+                    Write-Host "`n ESTADO LabConfig:" -ForegroundColor $COLOR_ALERT
+                    if (Test-Path $reg) {
+                        Get-ItemProperty $reg -ErrorAction SilentlyContinue | Select-Object BypassTPMCheck, BypassSecureBootCheck, BypassRAMCheck | Format-List
+                    } else {
+                        Write-Host " (No existe)" -ForegroundColor $COLOR_MENU
+                    }
                     Pause-Enter " ENTER"
                 }
-                if($u -eq "B"){
-                    if(-not (Confirm-Critical "CREAR USUARIO LOCAL ADMIN" "APLICAR")){ continue }
-                    $n = (Read-Host " NOMBRE").Trim()
-                    if($n){
-                        net user "$n" /add
-                        net localgroup administrators "$n" /add
-                        Write-Log "USER" "Created admin user=$n"
+
+                if ($b -eq "D") {
+                    if (-not (Require-Admin "revertir bypass Windows 11")) { continue }
+                    if (-not (Confirm-Critical "REVERTIR BYPASS HARDWARE (LabConfig)" "APLICAR")) { continue }
+                    if (Test-Path $reg) {
+                        "BypassTPMCheck","BypassSecureBootCheck","BypassRAMCheck" | ForEach-Object {
+                            try { Remove-ItemProperty -Path $reg -Name $_ -ErrorAction SilentlyContinue } catch {}
+                        }
                     }
-                    Pause-Enter " OK"
-                }
-                if($u -eq "C"){
-                    $n = (Read-Host " NOMBRE").Trim()
-                    if($n -and ($n.ToLower() -ne $env:USERNAME.ToLower())){
-                        if(-not (Confirm-Critical "ELIMINAR USUARIO '$n'" "BORRAR")){ continue }
-                        net user "$n" /delete
-                        Write-Log "USER" "Deleted user=$n"
-                    } else {
-                        Write-Host "`n [!] No se puede eliminar el usuario actual ($env:USERNAME)." -ForegroundColor $COLOR_DANGER
-                    }
-                    Pause-Enter " OK"
-                }
-                if($u -eq "D"){
-                    if(-not (Confirm-Critical "ACTIVAR CUENTA ADMINISTRATOR (SUPER ADMIN)" "APLICAR")){ continue }
-                    net user administrator /active:yes
-                    Write-Log "USER" "Activated built-in administrator"
-                    Pause-Enter " OK"
-                }
-                if($u -eq "F"){
-                    $n = (Read-Host " USUARIO").Trim()
-                    $p = Read-Host " CLAVE"
-                    if($n -and $p){
-                        if(-not (Confirm-Critical "CAMBIAR PASSWORD DE '$n'" "APLICAR")){ continue }
-                        net user "$n" $p
-                        Write-Log "USER" "Password changed for user=$n"
-                    }
+                    Write-Log "BYPASS" "Reverted hardware bypass LabConfig"
                     Pause-Enter " OK"
                 }
             }
         }
-        "K" { 
-            while($true){ Show-MainTitle; Write-Host "`n SOPORTE TECNICO PRO" -ForegroundColor $COLOR_MENU
-            Write-Host " [A] SALUD DISCO`n [B] REPARAR SISTEMA`n [C] CLAVE BIOS - Recupera la licencia original del equipo.`n [D] SINCRONIZAR HORA"
-            Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-            $s = Read-MenuOption ([Environment]::NewLine + ' >') -Valid @("A","B","C","D","X")
-            if(-not $s){ continue }
-            if($s -eq "X"){break}
-            if($s -eq "A"){
-                Get-PhysicalDisk | Format-Table
-                Write-Log "SUPPORT" "Disk health queried"
-                Pause-Enter " ENTER"
-            }
-            if($s -eq "B"){
-                if(-not (Require-Admin "reparar sistema (SFC/DISM)")){ continue }
-                if(-not (Confirm-Critical "REPARAR SISTEMA (SFC + DISM)" "APLICAR")){ continue }
-                $outFile = Join-Path $PSScriptRoot ("support_repair_" + (Get-Date).ToString("yyyyMMdd_HHmmss") + ".txt")
-                Write-Host "`n [+] Ejecutando SFC..." -ForegroundColor $COLOR_MENU
-                $sfcOut = (sfc /scannow 2>&1 | Out-String)
-                Write-Host "`n [+] Ejecutando DISM..." -ForegroundColor $COLOR_MENU
-                $dismOut = (dism /online /cleanup-image /restorehealth 2>&1 | Out-String)
-                ($sfcOut + "`n`n--- DISM ---`n`n" + $dismOut) | Out-File -FilePath $outFile -Encoding utf8 -Force
-                Write-Log "SUPPORT" "Repair ran. OutputFile=$outFile"
-                Write-Host "`n [+] Salida guardada en: $outFile" -ForegroundColor $COLOR_PRIMARY
-                Pause-Enter " OK"
-            }
-            if($s -eq "C"){
-                $key = (Get-CimInstance SoftwareLicensingService).OA3xOriginalProductKey
-                Write-Host $key
-                Write-Log "SUPPORT" "OA3 key queried"
-                Pause-Enter " OK"
-            } 
-            if($s -eq "D"){ 
-                net stop w32time 
-                w32tm /config /syncfromflags:manual /manualpeerlist:"time.windows.com" 
-                net start w32time 
-                $syncResult = w32tm /resync 2>&1 
-                if ($LASTEXITCODE -eq 0) { 
-                    Write-Host "`n [+] SINCRONIZACION EXITOSA" -ForegroundColor $COLOR_PRIMARY 
-                    Write-Host "`n ESTADO DE SINCRONIZACION:" -ForegroundColor $COLOR_ALERT 
-                    w32tm /query /source | ForEach-Object { Write-Host (' > ' + $_) } 
-                    w32tm /query /status | ForEach-Object { Write-Host (' > ' + $_) } 
-                } else { 
-                    Write-Host "`n [!] ERROR AL SINCRONIZAR:" -ForegroundColor $COLOR_DANGER 
-                    $syncResult | ForEach-Object { Write-Host (' > ' + $_) } 
-                } 
-                Write-Log "SUPPORT" ("Time sync exit={0}" -f $LASTEXITCODE)
-                Pause-Enter " OK" 
-            } }
-        }
-        "L" { 
-            while($true){ Show-MainTitle; Write-Host "`n BYPASS WINDOWS 11" -ForegroundColor $COLOR_ALERT
-            Write-Host " [A] BYPASS HARDWARE   - Omitir TPM, SecureBoot y chequeos de RAM para continuar la instalación" -ForegroundColor $COLOR_MENU
-            Write-Host " [B] BYPASS INTERNET  - Evitar la necesidad de conexión a Internet durante la instalación" -ForegroundColor $COLOR_MENU
-            Write-Host " [C] VER ESTADO ACTUAL (REGISTRO)" -ForegroundColor $COLOR_MENU
-            Write-Host " [D] REVERTIR BYPASS HARDWARE" -ForegroundColor $COLOR_MENU
-            Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-            $b = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","X")
-            if(-not $b){ continue }
-            if($b -eq "X"){break}
-            $reg="HKLM:\System\Setup\LabConfig"
-            if($b -eq "A"){
-                if(-not (Require-Admin "aplicar bypass Windows 11")){ continue }
-                if(-not (Confirm-Critical "BYPASS HARDWARE (LabConfig)" "APLICAR")){ continue }
-                Write-Host "`n [+] Aplicando bypass de hardware..." -ForegroundColor $COLOR_PRIMARY
-                if(!(Test-Path $reg)){New-Item $reg -Force | Out-Null}
-                "BypassTPMCheck","BypassSecureBootCheck","BypassRAMCheck" | ForEach-Object {New-ItemProperty $reg $_ -Value 1 -PropertyType DWord -Force | Out-Null}
-                Write-Log "BYPASS" "Applied hardware bypass LabConfig"
-                Pause-Enter " OK"
-            }
-            if($b -eq "B"){
-                Write-Host "`n [+] Aplicando bypass de Internet..." -ForegroundColor $COLOR_PRIMARY
-                & $env:SystemRoot\System32\oobe\bypassnro.cmd
-                Write-Log "BYPASS" "Ran bypassnro.cmd"
-                Pause-Enter " OK"
-            }
-            if($b -eq "C"){
-                Show-MainTitle
-                Write-Host "`n ESTADO LabConfig:" -ForegroundColor $COLOR_ALERT
-                if(Test-Path $reg){
-                    Get-ItemProperty $reg -ErrorAction SilentlyContinue | Select-Object BypassTPMCheck,BypassSecureBootCheck,BypassRAMCheck | Format-List
-                } else {
-                    Write-Host " (No existe)" -ForegroundColor $COLOR_MENU
-                }
-                Pause-Enter " ENTER"
-            }
-            if($b -eq "D"){
-                if(-not (Require-Admin "revertir bypass Windows 11")){ continue }
-                if(-not (Confirm-Critical "REVERTIR BYPASS HARDWARE (LabConfig)" "APLICAR")){ continue }
-                if(Test-Path $reg){
-                    "BypassTPMCheck","BypassSecureBootCheck","BypassRAMCheck" | ForEach-Object {
-                        try { Remove-ItemProperty -Path $reg -Name $_ -ErrorAction SilentlyContinue } catch {}
-                    }
-                }
-                Write-Log "BYPASS" "Reverted hardware bypass LabConfig"
-                Pause-Enter " OK"
-            }
-            }
-        }
+
         "M" {  
             while($true){ 
                 Show-MainTitle; Write-Host "`n RED Y REPARACION" -ForegroundColor $COLOR_MENU
