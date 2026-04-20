@@ -1,4 +1,6 @@
-﻿Clear-Host #nuevo﻿
+Clear-Host
+$ErrorActionPreference = "SilentlyContinue"
+
 # ============================================================
 # [SISTEMA] - AUTO-ELEVACIÓN A ADMINISTRADOR
 # ============================================================
@@ -7,45 +9,42 @@ if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     exit
 }
 
-# --- CONFIGURACIÓN DE RUTAS, COLORES Y VARIABLES GLOBALES ---
+# ============================================================
+# CONFIGURACIÓN INICIAL
+# ============================================================
+$LOG_FILE = Join-Path $PSScriptRoot ("techflowlog_" + (Get-Date).ToString("yyyyMMdd") + ".log")
+$PREFS_FILE = Join-Path $PSScriptRoot "suite_prefs.json"
 $CONFIG_FILE = "$PSScriptRoot\suite_config.dat"
 $COLOR_PRIMARY = "Green"; $COLOR_ALERT = "Yellow"; $COLOR_DANGER = "Red"; $COLOR_MENU = "Cyan"
 $Global:MenuHorizontal = $true
 
-# --- GESTIÓN DE CREDENCIALES Y ACCESO (MASTER PASSWORD) ---
-if (!(Test-Path $CONFIG_FILE)) { "ADMIN2026" | Out-File $CONFIG_FILE -Encoding ascii -Force }
-$Global:MasterPass = (Get-Content $CONFIG_FILE -Raw).Trim()
-
-# --- DEFINICIÓN DE ESTRUCTURA DE USUARIO Y BACKUP ---
-$USER_FOLDER_NAMES = @("Desktop", "Documents", "Pictures", "Videos", "Music", "Downloads", "Favorites", "Contacts")
-$USER_FOLDERS = $USER_FOLDER_NAMES
-$DEFAULT_BACKUP_BASE = "$env:SystemDrive\Backups"
-
-# --- INICIALIZACIÓN DE ARCHIVOS DE REGISTRO (LOGS) Y PREFERENCIAS ---
-$LOG_FILE = Join-Path $PSScriptRoot ("techflowlog_" + (Get-Date).ToString("yyyyMMdd") + ".log")
-$PREFS_FILE = Join-Path $PSScriptRoot "suite_prefs.json"
-
-# ========== NUEVA FUNCIÓN: ROTACIÓN DE LOGS ==========
+# ============================================================
+# ROTACIÓN DE LOGS
+# ============================================================
 function Rotate-Log {
     param([string]$LogPath = $LOG_FILE)
+    
+    # DEPURACIÓN: Verificar si $LOG_FILE está vacío
+    if (-not $LogPath) {
+        Write-Host "[LOG] ADVERTENCIA: La ruta del log está vacía. No se puede rotar." -ForegroundColor DarkGray
+        return
+    }
+    
     try {
         if (Test-Path $LogPath) {
             $fileInfo = Get-Item $LogPath -ErrorAction SilentlyContinue
-            if ($fileInfo.Length -gt 10MB) {  # 10 MB
+            if ($fileInfo.Length -gt 10MB) {
                 $oldLog = $LogPath -replace '\.log$', '_old.log'
-                # Eliminar backup anterior si existe
                 if (Test-Path $oldLog) {
                     Remove-Item $oldLog -Force -ErrorAction SilentlyContinue
                     Write-Host "[LOG] Backup anterior eliminado" -ForegroundColor DarkGray
                 }
-                # Mover el log actual a backup
                 Move-Item $LogPath $oldLog -Force -ErrorAction Stop
                 Write-Host "[LOG] Rotación completada: $oldLog" -ForegroundColor Green
                 Write-Log "INFO" "Log rotated (size >10MB). Old log: $oldLog"
             }
         }
     } catch {
-        # No falla el script si la rotación tiene error
         Write-Host "[LOG] Error en rotación: $($_.Exception.Message)" -ForegroundColor DarkGray
     }
 }
@@ -53,19 +52,16 @@ function Rotate-Log {
 # Ejecutar rotación al inicio del script
 Rotate-Log
 
-function Clear-PendingDeletes {
-    $pendingDir = "$env:TEMP\_pending_delete_"
-    if (Test-Path $pendingDir) {
-        Write-Host "[LIMPIADOR] Eliminando archivos pendientes del reinicio anterior..." -ForegroundColor DarkGray
-        try {
-            Remove-Item "$pendingDir\*" -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item $pendingDir -Force -ErrorAction SilentlyContinue
-        } catch {}
-    }
-}
-Clear-PendingDeletes
+# ============================================================
+# DEFINICIÓN DE ESTRUCTURA DE USUARIO Y BACKUP
+# ============================================================
+$USER_FOLDER_NAMES = @("Desktop", "Documents", "Pictures", "Videos", "Music", "Downloads", "Favorites", "Contacts")
+$USER_FOLDERS = $USER_FOLDER_NAMES
+$DEFAULT_BACKUP_BASE = "$env:SystemDrive\Backups"
 
-# --- MOTOR DE LOGGING Y REGISTRO DE EVENTOS ---
+# ============================================================
+# MOTOR DE LOGGING Y REGISTRO DE EVENTOS
+# ============================================================
 function Write-Log {
     param(
         [Parameter(Mandatory = $true)][string]$Level,
@@ -75,10 +71,8 @@ function Write-Log {
     $ts = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     $logEntry = "$ts [$Level] $Message"
     
-    # Escribir en archivo
     Add-Content -Path $LOG_FILE -Value $logEntry -Encoding utf8 -ErrorAction SilentlyContinue
     
-    # Mostrar en consola (excepto si NoConsole está activado)
     if (-not $NoConsole) {
         switch ($Level) {
             "ERROR"   { Write-Host $logEntry -ForegroundColor Red }
@@ -90,7 +84,9 @@ function Write-Log {
     }
 }
 
-# Agregar función para obtener estadísticas del log
+# ============================================================
+# ESTADÍSTICAS DE LOG
+# ============================================================
 function Get-LogStats {
     if (Test-Path $LOG_FILE) {
         $lines = Get-Content $LOG_FILE -ErrorAction SilentlyContinue
@@ -105,7 +101,171 @@ function Get-LogStats {
         Write-Host "  Advertencias: $warnCount"
     }
 }
-# --- LECTURA DE CONFIGURACION PERSISTENTE ---
+
+# ============================================================
+# LIMPIEZA DE ARCHIVOS PENDIENTES
+# ============================================================
+function Clear-PendingDeletes {
+    $pendingDir = "$env:TEMP\_pending_delete_"
+    if (Test-Path $pendingDir) {
+        Write-Host "[LIMPIADOR] Eliminando archivos pendientes del reinicio anterior..." -ForegroundColor DarkGray
+        Start-Process -NoNewWindow -Wait cmd -ArgumentList "/c rmdir /s /q `"$pendingDir`"" -WindowStyle Hidden
+    }
+}
+Clear-PendingDeletes
+
+# ============================================================
+# MOSTRAR TÍTULO
+# ============================================================
+Write-Host @"
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║    ████████╗███████╗ ██████╗██╗  ██╗    ███████╗██╗      ██████╗ ██╗    ██╗   ║
+║    ╚══██╔══╝██╔════╝██╔════╝██║  ██║    ██╔════╝██║     ██╔═══██╗██║    ██║   ║
+║       ██║   █████╗  ██║     ███████║    █████╗  ██║     ██║   ██║██║ █╗ ██║   ║
+║       ██║   ██╔══╝  ██║     ██╔══██║    ██╔══╝  ██║     ██║   ██║██║███╗██║   ║
+║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝   ║
+║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝    ║
+║                                                                               ║
+║                                PRO EDITION v5.3                               ║
+║                                                                               ║
+║                    SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+"@ -ForegroundColor Cyan
+
+# ============================================================
+# AUTO-ACTUALIZACIÓN
+# ============================================================
+$currentVersion = "5.3"
+$repoOwner = "LUISFGARCIAE"
+$repoName = "TechFlow_Suite_Pro"
+
+Write-Host "`n[+] Verificando actualizaciones..." -ForegroundColor DarkGray
+
+try {
+    $apiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases/latest"
+    $latestRelease = Invoke-RestMethod -Uri $apiUrl -ErrorAction SilentlyContinue
+    $latestVersion = $latestRelease.tag_name -replace 'v', ''
+    
+    Write-Host "[DEBUG] Versión local: v$currentVersion" -ForegroundColor DarkGray
+    Write-Host "[DEBUG] Versión remota: v$latestVersion" -ForegroundColor DarkGray
+    
+    if ($latestVersion -and ($latestVersion -ne $currentVersion)) {
+        Write-Host "`n============================================================" -ForegroundColor Yellow
+        Write-Host "  [!] NUEVA VERSIÓN DISPONIBLE!" -ForegroundColor Yellow
+        Write-Host "      Actual: v$currentVersion -> Nueva: v$latestVersion" -ForegroundColor Cyan
+        Write-Host "============================================================" -ForegroundColor Yellow
+        
+        $update = Read-Host "`n ¿Deseas actualizar ahora? (S/N)"
+        
+        if ($update -eq "S") {
+            Write-Host "[DEBUG] Entrando en bloque de actualización..." -ForegroundColor Cyan
+            
+            $asset = $latestRelease.assets | Where-Object { $_.name -like "*.exe" } | Select-Object -First 1
+            
+            if (-not $asset) {
+                Write-Host "[ERROR] No se encontró ningún archivo .exe en la release." -ForegroundColor Red
+                Write-Host "Presiona ENTER para continuar..."
+                Read-Host
+            } else {
+                Write-Host "[DEBUG] Asset encontrado: $($asset.name)" -ForegroundColor Cyan
+                
+                try {
+                    Write-Host "[+] Descargando nueva versión..." -ForegroundColor Yellow
+                    
+                    if (-not $PSCommandPath) {
+                        $currentExe = $MyInvocation.MyCommand.Path
+                    } else {
+                        $currentExe = $PSCommandPath
+                    }
+                    
+                    if (-not $currentExe) {
+                        $currentExe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+                    }
+                    
+                    $currentDir = Split-Path $currentExe -Parent
+                    $tempFile = "$env:TEMP\TechFlow_Suite_Pro_new.exe"
+                    $newExe = "$currentDir\TechFlow_Suite_Pro.exe"
+                    
+                    Write-Host "[DEBUG] currentExe: $currentExe" -ForegroundColor DarkGray
+                    Write-Host "[DEBUG] currentDir: $currentDir" -ForegroundColor DarkGray
+                    Write-Host "[DEBUG] tempFile: $tempFile" -ForegroundColor DarkGray
+                    Write-Host "[DEBUG] newExe: $newExe" -ForegroundColor DarkGray
+                    
+                    if (-not $currentDir -or -not $tempFile -or -not $newExe) {
+                        throw "Una o más rutas están vacías"
+                    }
+                    
+                    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tempFile -UseBasicParsing
+                    Write-Host "[DEBUG] Descarga completada" -ForegroundColor Cyan
+                    
+                    $updateScript = @"
+`$tempFile = "$tempFile"
+`$newExe = "$newExe"
+
+Start-Sleep -Seconds 3
+
+try {
+    Get-Process -Name "TechFlow_Suite_Pro" -ErrorAction SilentlyContinue | Stop-Process -Force
+} catch {}
+
+Start-Sleep -Seconds 2
+
+if (Test-Path `$newExe) {
+    Remove-Item `$newExe -Force -ErrorAction SilentlyContinue
+}
+
+Start-Sleep -Seconds 1
+
+Copy-Item `$tempFile `$newExe -Force
+
+Remove-Item `$tempFile -Force -ErrorAction SilentlyContinue
+
+Start-Sleep -Seconds 2
+
+Start-Process `$newExe
+
+Remove-Item `$MyInvocation.MyCommand.Path -Force
+"@
+                    $scriptPath = "$env:TEMP\update_script.ps1"
+                    $updateScript | Out-File -FilePath $scriptPath -Encoding ascii
+                    
+                    Write-Host "[DEBUG] Script temporal creado en: $scriptPath" -ForegroundColor Cyan
+                    
+                    Write-Host "[+] Aplicando actualización..." -ForegroundColor Yellow
+                    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`"" -Verb RunAs
+                    
+                    Write-Host "[✔] Actualización aplicada. La nueva versión se abrirá en unos segundos." -ForegroundColor Green
+                    Write-Host ""
+                    Write-Host "============================================================" -ForegroundColor Yellow
+                    Write-Host "  Presiona ENTER para cerrar esta ventana." -ForegroundColor Yellow
+                    Write-Host "============================================================" -ForegroundColor Yellow
+                    Read-Host
+                    exit
+                    
+                } catch {
+                    Write-Host "[ERROR] Ocurrió un problema: $($_.Exception.Message)" -ForegroundColor Red
+                    Write-Host "Presiona ENTER para continuar..."
+                    Read-Host
+                }
+            }
+        }
+    } else {
+        Write-Host "[✔] Versión actualizada (v$currentVersion)" -ForegroundColor DarkGray
+    }
+} catch {
+    Write-Host "[!] No se pudo verificar actualizaciones: $($_.Exception.Message)" -ForegroundColor DarkGray
+}
+
+# ============================================================
+# CONTINÚA CON EL RESTO DE TU SCRIPT
+# ============================================================
+Write-Host "`n[+] Cargando menú principal..." -ForegroundColor Green
+
+# ============================================================
+# LECTURA DE CONFIGURACION PERSISTENTE
+# ============================================================
 function Get-Prefs {
     if(Test-Path $PREFS_FILE){
         try { 
@@ -123,7 +283,9 @@ function Get-Prefs {
     return [pscustomobject]@{ lastKitOption = $null }
 }
 
-# --- GUARDADO DE CONFIGURACION PERSISTENTE ---
+# ============================================================
+# GUARDADO DE CONFIGURACION PERSISTENTE
+# ============================================================
 function Save-Prefs($prefs){
     try {
         ($prefs | ConvertTo-Json -Depth 5) | Out-File -FilePath $PREFS_FILE -Encoding utf8 -Force
@@ -133,13 +295,17 @@ function Save-Prefs($prefs){
     }
 }
 
-# --- PAUSA ESTANDAR CON MENSAJE ---
+# ============================================================
+# PAUSA ESTANDAR CON MENSAJE
+# ============================================================
 function Pause-Enter {
     param([string]$Message = " PRESIONE ENTER PARA VOLVER")
     Read-Host $Message | Out-Null
 }
 
-# --- LECTOR DE OPCIONES DE MENU ROBUSTO ---
+# ============================================================
+# LECTOR DE OPCIONES DE MENU ROBUSTO
+# ============================================================
 function Read-MenuOption {
     param(
         [Parameter(Mandatory = $true)][string]$Prompt,
@@ -159,7 +325,9 @@ function Read-MenuOption {
     }
 }
 
-# --- DETECTOR DE PERMISOS ADMINISTRADOR (VERIFICA TOKEN DE SEGURIDAD) ---
+# ============================================================
+# DETECTOR DE PERMISOS ADMINISTRADOR (VERIFICA TOKEN DE SEGURIDAD)
+# ============================================================
 function Test-IsAdmin {
     try {
         $id = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -170,7 +338,9 @@ function Test-IsAdmin {
     }
 }
 
-# --- IDENTIFICADOR DE USUARIO ADMIN LOCALIZADO (DETECTA ESPAÑOL/INGLES) ---
+# ============================================================
+# IDENTIFICADOR DE USUARIO ADMIN LOCALIZADO (DETECTA ESPAÑOL/INGLES)
+# ============================================================
 function Get-AdminUsername {
     $locale = (Get-WinSystemLocale).Name
     if ($locale -like "*es*") {
@@ -180,7 +350,9 @@ function Get-AdminUsername {
     }
 }
 
-# --- VALIDADOR Y SOLICITADOR DE ADMIN (VERIFICA Y ADVIERTE SI NO ES ADMIN) ---
+# ============================================================
+# VALIDADOR Y SOLICITADOR DE ADMIN (VERIFICA Y ADVIERTE SI NO ES ADMIN)
+# ============================================================
 function Require-Admin {
     param([string]$ActionName = "esta operación")
     if (-not (Test-IsAdmin)) {
@@ -193,7 +365,9 @@ function Require-Admin {
     return $true
 }
 
-# --- DETECTOR DE CONEXION A INTERNET (PING A 1.1.1.1) ---
+# ============================================================
+# DETECTOR DE CONEXION A INTERNET (PING A 1.1.1.1)
+# ============================================================
 function Test-HasInternet {
 
     try {
@@ -203,7 +377,9 @@ function Test-HasInternet {
     }
 }
 
-# --- CONFIRMACION DE OPERACIONES CRITICAS (PIN + KEYWORD) ---
+# ============================================================
+# CONFIRMACION DE OPERACIONES CRITICAS (PIN + KEYWORD)
+# ============================================================
 function Confirm-Critical {
 
     param(
@@ -232,7 +408,9 @@ function Confirm-Critical {
     return $true
 }
 
-# --- CONFIRMACION DE SCRIPTS REMOTOS (URL + INTERNET) ---
+# ============================================================
+# CONFIRMACION DE SCRIPTS REMOTOS (URL + INTERNET)
+# ============================================================
 function Confirm-RemoteScript {
 
     param([Parameter(Mandatory = $true)][string]$Url)
@@ -255,7 +433,9 @@ function Confirm-RemoteScript {
     return $true
 }
 
-# --- FORMATEO DE BYTES A UNIDADES LEGIBLES (B/KB/MB/GB/TB) ---
+# ============================================================
+# FORMATEO DE BYTES A UNIDADES LEGIBLES (B/KB/MB/GB/TB)
+# ============================================================
 function Format-Bytes([Int64]$Bytes) {
 
     if ($Bytes -lt 1KB) { return "$Bytes B" }
@@ -265,7 +445,9 @@ function Format-Bytes([Int64]$Bytes) {
     return "{0:N2} TB" -f ($Bytes / 1TB)
 }
 
-# --- CALCULO DE TAMAÑO TOTAL DE CARPETA (RECURSIVO) ---
+# ============================================================
+# CALCULO DE TAMAÑO TOTAL DE CARPETA (RECURSIVO)
+# ============================================================
 function Get-FolderSizeBytes {
 
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -279,7 +461,9 @@ function Get-FolderSizeBytes {
     }
 }
 
-# --- OBTENER ESPACIO LIBRE DISPONIBLE EN UNA UNIDAD ---
+# ============================================================
+# OBTENER ESPACIO LIBRE DISPONIBLE EN UNA UNIDAD
+# ============================================================
 function Get-DriveFreeBytes {
     param([Parameter(Mandatory = $true)][string]$Path)
     try {
@@ -291,14 +475,18 @@ function Get-DriveFreeBytes {
     } catch { return 0L }
 }
 
-# --- VALIDACIÓN DE RUTA DE RESPALDO (EVITAR CARPETAS DE SISTEMA) ---
+# ============================================================
+# VALIDACIÓN DE RUTA DE RESPALDO (EVITAR CARPETAS DE SISTEMA)
+# ============================================================
 function Is-SuspiciousBackupBase {
     param([Parameter(Mandatory = $true)][string]$Base)
     $b = $Base.Trim().ToLower()
     return ($b -like "*\\windows*" -or $b -like "*\\system32*" -or $b -like "*\\program files*")
 }
 
-# --- DETECCIÓN DE UNIDADES EXTRAÍBLES CONECTADAS (USB/DISCOS) ---
+# ============================================================
+# DETECCIÓN DE UNIDADES EXTRAÍBLES CONECTADAS (USB/DISCOS)
+# ============================================================
 function Select-RemovableVolumes {
     try {
         return Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -eq 2 }
@@ -307,7 +495,9 @@ function Select-RemovableVolumes {
     }
 }
 
-# --- DESCARGA DE SCRIPTS EXTERNOS A CARPETA TEMPORAL ---
+# ============================================================
+# DESCARGA DE SCRIPTS EXTERNOS A CARPETA TEMPORAL
+# ============================================================
 function Download-RemoteScript {
     param([Parameter(Mandatory = $true)][string]$Url)
     $dest = Join-Path $env:TEMP ("techflow_remote_" + (Get-Date).ToString("yyyyMMdd_HHmmss") + ".ps1")
@@ -315,7 +505,9 @@ function Download-RemoteScript {
     return $dest
 }
 
-# --- GENERACIÓN DE HASH SHA256 PARA VERIFICACIÓN DE ARCHIVOS ---
+# ============================================================
+# GENERACIÓN DE HASH SHA256 PARA VERIFICACIÓN DE ARCHIVOS
+# ============================================================
 function Get-FileHashSafe {
     param([Parameter(Mandatory = $true)][string]$Path)
     try {
@@ -325,7 +517,9 @@ function Get-FileHashSafe {
     }
 }
 
-# --- OBTENER RUTAS DE PERFILES DE USUARIO ACTIVOS EN EL DISCO ---
+# ============================================================
+# OBTENER RUTAS DE PERFILES DE USUARIO ACTIVOS EN EL DISCO
+# ============================================================
 function Get-UserProfilePaths {
     $profilesPath = "$env:SystemDrive\Users"
     Get-ChildItem -Path $profilesPath -Directory | Where-Object {
@@ -333,7 +527,9 @@ function Get-UserProfilePaths {
     } | Select-Object -ExpandProperty FullName
 }
 
-# --- GENERAR Y CREAR NUEVA CARPETA DE RESPALDO NUMERADA (Backup_01...) ---
+# ============================================================
+# GENERAR Y CREAR NUEVA CARPETA DE RESPALDO NUMERADA (Backup_01...)
+# ============================================================
 function Get-BackupRoot($basePath) {
     $existing = Get-ChildItem -Path $basePath -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "Backup_*" } | ForEach-Object { $_.Name -replace "Backup_", "" } | Where-Object { $_ -match "^\d+$" } | Sort-Object {[int]$_} -Descending
     if ($existing) { $next = [int]$existing[0] + 1 } else { $next = 1 }
@@ -342,7 +538,9 @@ function Get-BackupRoot($basePath) {
     return $root
 }
 
-# --- EJECUCIÓN DE COPIA DE SEGURIDAD DE PERFIL (ROBOCOPY) ---
+# ============================================================
+# EJECUCIÓN DE COPIA DE SEGURIDAD DE PERFIL (ROBOCOPY)
+# ============================================================
 function Backup-ProfileData($profilePath, $backupRoot) {
     $userName = Split-Path $profilePath -Leaf
     $destRoot = Join-Path $backupRoot $userName
@@ -356,7 +554,9 @@ function Backup-ProfileData($profilePath, $backupRoot) {
     }
 }
 
-# --- EJECUCIÓN DE RESTAURACIÓN DE DATOS HACIA PERFIL DE USUARIO ---
+# ============================================================
+# EJECUCIÓN DE RESTAURACIÓN DE DATOS HACIA PERFIL DE USUARIO
+# ============================================================
 function Restore-ProfileData($backupProfilePath, $TargetUsersRoot = $null) {
     $profileName = Split-Path $backupProfilePath -Leaf
     if(-not $TargetUsersRoot){ $TargetUsersRoot = "$env:SystemDrive\Users" }
@@ -370,7 +570,9 @@ function Restore-ProfileData($backupProfilePath, $TargetUsersRoot = $null) {
     }
 }
 
-# --- INTERFAZ: DIBUJAR TÍTULO Y LOGO PRINCIPAL DE LA SUITE ---
+# ============================================================
+# INTERFAZ: DIBUJAR TÍTULO Y LOGO PRINCIPAL DE LA SUITE
+# ============================================================
 function Show-MainTitle {
     Clear-Host
     Write-Host @"
@@ -383,7 +585,7 @@ function Show-MainTitle {
  ║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝      ║
  ║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝       ║
  ║                                                                                  ║
- ║                                PRO EDITION v5.2                                  ║
+ ║                                PRO EDITION v5.3                                  ║
  ║                                                                                  ║
  ║                    SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                   ║
  ║                                                                                  ║
@@ -397,7 +599,9 @@ function Pause-Enter {
     $null = Read-Host
 }
 
-# --- MOTOR DE INSTALACION HIBRIDA INTELIGENTE (CON MAPEO CHOCOLATEY) ---
+# ============================================================
+# MOTOR DE INSTALACION HIBRIDA INTELIGENTE (CON MAPEO CHOCOLATEY)
+# ============================================================
 function Invoke-SmartInstall ($AppID, $AppName) {
     Write-Host "`n [!] INSTALANDO: $AppName..." -ForegroundColor $COLOR_MENU
     
@@ -596,8 +800,9 @@ if (`$LASTEXITCODE -eq 0) {
         return "ERROR"
     }
 }
-
-# --- KIT POST FORMAT V5 (125 APPS CONFIABLES) ---
+# ============================================================
+# KIT POST FORMAT V5 (125 APPS CONFIABLES)
+# ============================================================
 function Invoke-KitPostFormat {
     # Diccionario de URLs oficiales para descarga manual
     $manualUrls = @{
@@ -1037,7 +1242,9 @@ function Invoke-KitPostFormat {
         }
     }
 }
-# --- MOTOR DE RESPALDO Y RESTAURACION ---
+# ============================================================
+# MOTOR DE RESPALDO Y RESTAURACION
+# ============================================================
 function Invoke-Engine ($Mode, $Msg) {
     Show-MainTitle
     $DriveLetter = if ($PSScriptRoot -and $PSScriptRoot.Length -ge 2) { $PSScriptRoot.Substring(0,2) } else { "C:" }
@@ -1491,7 +1698,9 @@ function Invoke-Engine ($Mode, $Msg) {
     }
 }
 
-# --- PAUSA ESTANDAR CON MENSAJE ---
+# ============================================================
+# PAUSA ESTANDAR CON MENSAJE
+# ============================================================
 function Pause-Enter {
     param([string]$Message = " PRESIONE ENTER PARA VOLVER")
     Read-Host $Message | Out-Null
@@ -1533,7 +1742,9 @@ function Remove-LockedFileSafely {
     }
 }
 
-# --- OPTIMIZADOR DE TEMPORALES ---
+# ============================================================
+# OPTIMIZADOR DE TEMPORALES
+# ============================================================
 function Invoke-TempOptimizer {
     Clear-Host
     # Definición local de colores para evitar errores de variables nulas
@@ -1595,14 +1806,18 @@ function Invoke-TempOptimizer {
         $demoMode = (Read-Host " ¿Ejecutar en MODO DEMO? (S/N)").ToUpper()
         $isDemo = ($demoMode -eq "S")
 
-        # --- EJECUCIÓN: PAPELERA ---
+# ============================================================
+# EJECUCIÓN: PAPELERA
+# ============================================================
         if ($clearTrash -and -not $isDemo) {
             Write-Host "`n [*] Vaciando Papelera..." -ForegroundColor $C_WARN
             Clear-RecycleBin -Confirm:$false -ErrorAction SilentlyContinue
             Write-Host " [+] Papelera limpia." -ForegroundColor $C_PRIMARY
         }
 
-        # --- EJECUCIÓN: TEMPORALES ---
+        # ============================================================
+# EJECUCIÓN: TEMPORALES
+# ============================================================
         if ($targets.Count -gt 0) {
             Write-Host "`n [*] Eliminando archivos temporales..." -ForegroundColor $C_WARN
             $failCount = 0
@@ -1662,7 +1877,9 @@ function Invoke-TempOptimizer {
             }
         }
 
-        # --- RESULTADOS ---
+        # ============================================================
+# RESULTADOS
+# ============================================================
         if (-not $isDemo) {
             Write-Host "`n [+] PROCESO FINALIZADO." -ForegroundColor $C_PRIMARY
             if ($failCount -gt 0) {
@@ -1677,7 +1894,9 @@ function Invoke-TempOptimizer {
     }
 }
 
-# --- GESTION DE PAQUETES (WINGET/CHOCO) ---
+# ============================================================
+# GESTION DE PAQUETES (WINGET/CHOCO)
+# ============================================================
 function Invoke-WingetMenu {
 	Clear-Host #nuevo
     while($true){
@@ -1854,7 +2073,9 @@ $o = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","E","F","G","H
     }
 }
 
-# --- MONITOR DE SISTEMA PRO ---
+# ============================================================
+# MONITOR DE SISTEMA PRO
+# ============================================================
 function Show-LiveMonitor {
 	Clear-Host #nuevo
     $refreshMs = 1500
@@ -1965,7 +2186,9 @@ function Show-LiveMonitor {
     }
 }
 
-# --- ACTIVACIÓN INTEGRADA (MASSGRAVE) ---
+# ============================================================
+# ACTIVACIÓN INTEGRADA (MASSGRAVE)
+# ============================================================
 function Invoke-MassGraveIntegrated {
     Show-MainTitle
     Write-Host "`n ACTIVACIÓN DE WINDOWS/OFFICE (MASSGRAVE)" -ForegroundColor $COLOR_MENU
@@ -1989,7 +2212,9 @@ function Invoke-MassGraveIntegrated {
     Pause-Enter "`n PRESIONE ENTER CUANDO TERMINE"
 }
 
-# --- CONTROL DE DEFENDER ---
+# ============================================================
+# CONTROL DE DEFENDER
+# ============================================================
 function Invoke-DefenderControl {
 	
 	Clear-Host #nuevo
@@ -2023,7 +2248,9 @@ function Invoke-DefenderControl {
     }
 }
 
-# --- PERFIL DE MANTENIMIENTO AUTOMATIZADO (EXPRESS) ---
+# ============================================================
+# PERFIL DE MANTENIMIENTO AUTOMATIZADO (EXPRESS)
+# ============================================================
 function Invoke-AutoFlow {
 	Clear-Host #nuevo
     Show-MainTitle
@@ -2039,7 +2266,9 @@ function Invoke-AutoFlow {
     Write-Host " [X]     VOLVER AL MENU PRINCIPAL" -ForegroundColor $COLOR_DANGER
     Write-Host " ---------------------------------------------------" -ForegroundColor Gray
 
-    # --- MOTOR DE DETECCION DE TECLAS (X o ENTER) ---
+    # ============================================================
+# MOTOR DE DETECCION DE TECLAS (X o ENTER)
+# ============================================================
     $Decision = $null
     while ($true) {
         if ($Host.UI.RawUI.KeyAvailable) {
@@ -2053,7 +2282,9 @@ function Invoke-AutoFlow {
         Start-Sleep -Milliseconds 100
     }
 
-    # --- LOGICA DE SALIDA ---
+    # ============================================================
+# LOGICA DE SALIDA
+# ============================================================
     if ($Decision -eq "SALIR") {
         Write-Host "`n [X] REGRESANDO AL MENU..." -ForegroundColor $COLOR_ALERT
         Start-Sleep -Seconds 1
@@ -2076,7 +2307,9 @@ function Invoke-AutoFlow {
         return $false
     }
 
-    # --- PASO 1: BLOATWARE ---
+    # ============================================================
+# PASO 1: BLOATWARE
+# ============================================================
     Write-Host "`n [+] Paso 1/3: Eliminando Bloatware..." -ForegroundColor $COLOR_MENU
     $bloat = @("*CandyCrush*", "*Disney*", "*Netflix*", "*TikTok*", "*Instagram*")
     foreach($b in $bloat){ 
@@ -2084,7 +2317,9 @@ function Invoke-AutoFlow {
         Get-AppxPackage $b | Remove-AppxPackage -ErrorAction SilentlyContinue 
     }
     
-    # --- PASO 2: TEMPORALES ---
+    # ============================================================
+# PASO 2: TEMPORALES
+# ============================================================
     if (& $CheckAbort) { return }
     Write-Host " [+] Paso 2/3: Limpiando temporales..." -ForegroundColor $COLOR_MENU
     $targets = @("$env:TEMP\*", "C:\Windows\Temp\*")
@@ -2093,7 +2328,9 @@ function Invoke-AutoFlow {
         Remove-Item $_ -Recurse -Force -ErrorAction SilentlyContinue 
     }
 
-    # --- PASO 3: INSTALACION ---
+    # ============================================================
+# PASO 3: INSTALACION
+# ============================================================
     if (& $CheckAbort) { return }
     Write-Host " [+] Paso 3/3: Instalando apps esenciales..." -ForegroundColor $COLOR_MENU
     $basico = @(
@@ -2110,7 +2347,9 @@ function Invoke-AutoFlow {
     Read-Host " PRESIONE ENTER PARA VOLVER"
 }
 
-# --- GESTION DE DRIVERS MEJORADA (OFICIAL MS) ---
+# ============================================================
+# GESTION DE DRIVERS MEJORADA (OFICIAL MS)
+# ============================================================
 function Invoke-DriverManagement {
     while($true){ 
         Show-MainTitle
@@ -2162,7 +2401,9 @@ function Invoke-DriverManagement {
         if($o -eq "C") {
             if(-not (Require-Admin "buscar drivers en Windows Update")){ continue }
             Write-Host "`n [+] CONFIGURANDO ENTORNO SEGURO..." -ForegroundColor Gray
-            # --- MEJORA CRITICA: Bypass de confirmaciones y protocolos ---
+            # ============================================================
+# MEJORA CRITICA: Bypass de confirmaciones y protocolos
+# ============================================================
             Set-ExecutionPolicy Bypass -Scope Process -Force
             [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
             
@@ -2206,7 +2447,9 @@ function Invoke-DriverManagement {
     }
 }
 
-# --- ANÁLISIS DE SALUD Y REPORTE DE BATERÍA ---
+# ============================================================
+# ANÁLISIS DE SALUD Y REPORTE DE BATERÍA
+# ============================================================
 function Show-BatteryHealth {
 	Clear-Host #nuevo	
     Show-MainTitle
@@ -2287,7 +2530,9 @@ function Show-BatteryHealth {
     Pause-Enter "`n ENTER"
 }
 
-# --- GENERACIÓN DE INFORME TÉCNICO DE HARDWARE ---
+# ============================================================
+# GENERACIÓN DE INFORME TÉCNICO DE HARDWARE
+# ============================================================
 function Show-FullSystemInfo {
 	Clear-Host #nuevo
     Show-MainTitle
@@ -2397,7 +2642,9 @@ function Show-FullSystemInfo {
     Pause-Enter "`n PRESIONE ENTER PARA CONTINUAR"
 }
 
-# --- PROCESOS Y HANDLES (INTEGRACIÓN CON SYSINTERNALS) ---
+# ============================================================
+# PROCESOS Y HANDLES (INTEGRACIÓN CON SYSINTERNALS)
+# ============================================================
 function Invoke-ProcessExplorer {
 	Clear-Host #nuevo
     $arch = if ([Environment]::Is64BitOperatingSystem) { "procexp64.exe" } else { "procexp.exe" }
@@ -2418,7 +2665,9 @@ function Invoke-ProcessExplorer {
     Start-Process $dest -Verb RunAs
 }
 
-# --- VISUALIZACIÓN DE JERARQUÍA DE PROCESOS (ÁRBOL) ---
+# ============================================================
+# VISUALIZACIÓN DE JERARQUÍA DE PROCESOS (ÁRBOL)
+# ============================================================
 function Show-ProcessTree {
 	Clear-Host #nuevo
     Show-MainTitle
@@ -2466,7 +2715,9 @@ function Show-ProcessTree {
     Pause-Enter "`n ENTER"
 }
 
-# --- DETECCIÓN DE PROCESOS QUE BLOQUEAN ARCHIVOS (HANDLE) ---
+# ============================================================
+# DETECCIÓN DE PROCESOS QUE BLOQUEAN ARCHIVOS (HANDLE)
+# ============================================================
 function Get-FileLockingProcess {
 	
 	Clear-Host #nuevo
@@ -2498,7 +2749,9 @@ function Get-FileLockingProcess {
     Pause-Enter "`n ENTER"
 }
 
-# --- ESCRITORIO REMOTO ---
+# ============================================================
+# ESCRITORIO REMOTO
+# ============================================================
 function Invoke-RemoteDesktop {
     while ($true) {
         Clear-Host
@@ -2565,7 +2818,9 @@ function Invoke-RemoteDesktop {
     }
 }
 
-# --- MENU PRINCIPAL ---
+# ============================================================
+# MENU PRINCIPAL
+# ============================================================
 while ($true) {
 	Clear-Host #nuevo
     Show-MainTitle
