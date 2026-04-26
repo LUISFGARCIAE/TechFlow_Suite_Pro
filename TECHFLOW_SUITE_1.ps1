@@ -1,13 +1,47 @@
-Clear-Host
+##[Ps1 To Exe]
+##
+##Kd3HDZOFADWE8uO1
+##Nc3NCtDXTlaDjofG5iZk2UrqT2ElUuGeqr2zy5GAy8/PkxnYB5MXRjQ=
+##Kd3HFJGZHWLWoLaVvnQnhQ==
+##LM/RF4eFHHGZ7/K1
+##K8rLFtDXTiW5
+##OsHQCZGeTiiZ4NI=
+##OcrLFtDXTiW5
+##LM/BD5WYTiiZ4tI=
+##McvWDJ+OTiiZ4tI=
+##OMvOC56PFnzN8u+Vs1Q=
+##M9jHFoeYB2Hc8u+Vs1Q=
+##PdrWFpmIG2HcofKIo2QX
+##OMfRFJyLFzWE8uK1
+##KsfMAp/KUzWI0g==
+##OsfOAYaPHGbQvbyVvnQX
+##LNzNAIWJGmPcoKHc7Do3uAuO
+##LNzNAIWJGnvYv7eVvnRH12SuZ0wCWuy0l/axkc/pnw==
+##M9zLA5mED3nfu77Q7TV64AuzAgg=
+##NcDWAYKED3nfu77Q7TV64AuzAgg=
+##OMvRB4KDHmHQvbyVvnQX
+##P8HPFJGEFzWE8tI=
+##KNzDAJWHD2fS8u+Vgw==
+##P8HSHYKDCX3N8u+Vgw==
+##LNzLEpGeC3fMu77Ro2k3hQ==
+##L97HB5mLAnfMu77Ro2k3hQ==
+##P8HPCZWEGmaZ7/K1
+##L8/UAdDXTlaDjofG5iZk2UrqT2ElUuGeqr2zy5GAy8/PkxntTJkcb1h4gRbPEUKpXM0iR/pbsckUNQ==
+##Kc/BRM3KXhU=
+##
+##
+##fd6a9f26a06ea3bc99616d4851b372ba
+if ($Host.Name -ne "ConsoleHost") { Clear-Host } else { [System.Console]::Clear() }
 $ErrorActionPreference = "SilentlyContinue"
 
 # ============================================================
 # [SISTEMA] - AUTO-ELEVACIÓN A ADMINISTRADOR
 # ============================================================
-if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Start-Process powershell.exe "-NoProfile -nologo -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs -WindowStyle Hidden
-    exit
-}
+
+#if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+#    Start-Process powershell.exe "-NoProfile -nologo -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs -WindowStyle Hidden
+#    exit
+#}
 
 # ============================================================
 # CONFIGURACIÓN INICIAL
@@ -37,7 +71,7 @@ function Rotate-Log {
                 $oldLog = $LogPath -replace '\.log$', '_old.log'
                 if (Test-Path $oldLog) {
                     Remove-Item $oldLog -Force -ErrorAction SilentlyContinue
-                    Write-Host "[LOG] Backup anterior eliminado" -ForegroundColor DarkGray
+                    Write-Host "[LOG] BACKOP anterior eliminado" -ForegroundColor DarkGray
                 }
                 Move-Item $LogPath $oldLog -Force -ErrorAction Stop
                 Write-Host "[LOG] Rotación completada: $oldLog" -ForegroundColor Green
@@ -53,11 +87,11 @@ function Rotate-Log {
 Rotate-Log
 
 # ============================================================
-# DEFINICIÓN DE ESTRUCTURA DE USUARIO Y BACKUP
+# DEFINICIÓN DE ESTRUCTURA DE USUARIO Y BACKOP
 # ============================================================
 $USER_FOLDER_NAMES = @("Desktop", "Documents", "Pictures", "Videos", "Music", "Downloads", "Favorites", "Contacts")
 $USER_FOLDERS = $USER_FOLDER_NAMES
-$DEFAULT_BACKUP_BASE = "$env:SystemDrive\Backups"
+$DEFAULT_BACKOP_BASE = "$env:SystemDrive\BACKOPs"
 
 # ============================================================
 # MOTOR DE LOGGING Y REGISTRO DE EVENTOS
@@ -127,7 +161,7 @@ Write-Host @"
 ║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝   ║
 ║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝    ║
 ║                                                                               ║
-║                                PRO EDITION v5.3                               ║
+║                                PRO EDITION v5.5                               ║
 ║                                                                               ║
 ║                    SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                ║
 ║                                                                               ║
@@ -137,7 +171,7 @@ Write-Host @"
 # ============================================================
 # AUTO-ACTUALIZACIÓN
 # ============================================================
-$currentVersion = "5.3"
+$currentVersion = "5.5"
 $repoOwner = "LUISFGARCIAE"
 $repoName = "TechFlow_Suite_Pro"
 
@@ -478,7 +512,7 @@ function Get-DriveFreeBytes {
 # ============================================================
 # VALIDACIÓN DE RUTA DE RESPALDO (EVITAR CARPETAS DE SISTEMA)
 # ============================================================
-function Is-SuspiciousBackupBase {
+function Is-SuspiciousBACKOPBase {
     param([Parameter(Mandatory = $true)][string]$Base)
     $b = $Base.Trim().ToLower()
     return ($b -like "*\\windows*" -or $b -like "*\\system32*" -or $b -like "*\\program files*")
@@ -528,12 +562,12 @@ function Get-UserProfilePaths {
 }
 
 # ============================================================
-# GENERAR Y CREAR NUEVA CARPETA DE RESPALDO NUMERADA (Backup_01...)
+# GENERAR Y CREAR NUEVA CARPETA DE RESPALDO NUMERADA (BACKOP_01...)
 # ============================================================
-function Get-BackupRoot($basePath) {
-    $existing = Get-ChildItem -Path $basePath -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "Backup_*" } | ForEach-Object { $_.Name -replace "Backup_", "" } | Where-Object { $_ -match "^\d+$" } | Sort-Object {[int]$_} -Descending
+function Get-BACKOPRoot($basePath) {
+    $existing = Get-ChildItem -Path $basePath -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "BACKOP_*" } | ForEach-Object { $_.Name -replace "BACKOP_", "" } | Where-Object { $_ -match "^\d+$" } | Sort-Object {[int]$_} -Descending
     if ($existing) { $next = [int]$existing[0] + 1 } else { $next = 1 }
-    $root = Join-Path $basePath ("Backup_" + $next.ToString("00"))
+    $root = Join-Path $basePath ("BACKOP_" + $next.ToString("00"))
     if (!(Test-Path $root)) { New-Item -Path $root -ItemType Directory -Force | Out-Null }
     return $root
 }
@@ -541,9 +575,9 @@ function Get-BackupRoot($basePath) {
 # ============================================================
 # EJECUCIÓN DE COPIA DE SEGURIDAD DE PERFIL (ROBOCOPY)
 # ============================================================
-function Backup-ProfileData($profilePath, $backupRoot) {
+function BACKOP-ProfileData($profilePath, $BACKOPRoot) {
     $userName = Split-Path $profilePath -Leaf
-    $destRoot = Join-Path $backupRoot $userName
+    $destRoot = Join-Path $BACKOPRoot $userName
     foreach ($folder in $USER_FOLDER_NAMES) {
         $source = Join-Path $profilePath $folder
         $target = Join-Path $destRoot $folder
@@ -557,12 +591,12 @@ function Backup-ProfileData($profilePath, $backupRoot) {
 # ============================================================
 # EJECUCIÓN DE RESTAURACIÓN DE DATOS HACIA PERFIL DE USUARIO
 # ============================================================
-function Restore-ProfileData($backupProfilePath, $TargetUsersRoot = $null) {
-    $profileName = Split-Path $backupProfilePath -Leaf
+function Restore-ProfileData($BACKOPProfilePath, $TargetUsersRoot = $null) {
+    $profileName = Split-Path $BACKOPProfilePath -Leaf
     if(-not $TargetUsersRoot){ $TargetUsersRoot = "$env:SystemDrive\Users" }
     $targetRoot = Join-Path $TargetUsersRoot $profileName
     if (!(Test-Path $targetRoot)) { New-Item -Path $targetRoot -ItemType Directory -Force | Out-Null }
-    Get-ChildItem -Path $backupProfilePath -Directory | ForEach-Object {
+    Get-ChildItem -Path $BACKOPProfilePath -Directory | ForEach-Object {
         $source = $_.FullName
         $dest = Join-Path $targetRoot $_.Name
         Write-Host " [+] RESTAURANDO $profileName\$($_.Name) ..." -ForegroundColor $COLOR_PRIMARY
@@ -574,8 +608,11 @@ function Restore-ProfileData($backupProfilePath, $TargetUsersRoot = $null) {
 # INTERFAZ: DIBUJAR TÍTULO Y LOGO PRINCIPAL DE LA SUITE
 # ============================================================
 function Show-MainTitle {
-    Clear-Host
+    # Esto es como usar un borrador de pizarra real, no solo bajar la página
+    [System.Console]::Clear() 
+    
     Write-Host @"
+	
  ╔══════════════════════════════════════════════════════════════════════════════════╗
  ║                                                                                  ║
  ║    ████████╗███████╗ ██████╗██╗  ██╗    ███████╗██╗      ██████╗ ██╗    ██╗      ║
@@ -585,7 +622,7 @@ function Show-MainTitle {
  ║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝      ║
  ║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝       ║
  ║                                                                                  ║
- ║                                PRO EDITION v5.3                                  ║
+ ║                                PRO EDITION v5.5                                  ║
  ║                                                                                  ║
  ║                    SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                   ║
  ║                                                                                  ║
@@ -1249,30 +1286,33 @@ function Invoke-Engine ($Mode, $Msg) {
     Show-MainTitle
     $DriveLetter = if ($PSScriptRoot -and $PSScriptRoot.Length -ge 2) { $PSScriptRoot.Substring(0,2) } else { "C:" }
 
-    if ($Mode -eq "BACKUP") {
-         Write-Host "`n BACKUP TOTAL - SELECCIONA EL TIPO DE RESPALDO" -ForegroundColor $COLOR_ALERT
+    if ($Mode -eq "BACKOP") {
+         Write-Host "`n BACKOP TOTAL - SELECCIONA EL TIPO DE RESPALDO" -ForegroundColor $COLOR_ALERT
          Write-Host " [A] PERFIL ACTUAL - Respaldar tu usuario (Escritorio, Documentos, etc.)" -ForegroundColor $COLOR_PRIMARY
          Write-Host " [B] TODOS LOS PERFILES LOCALES - Respaldar todos los usuarios del equipo" -ForegroundColor $COLOR_PRIMARY
          Write-Host " [C] EXPORTAR INVENTARIO - Lista de programas instalados y drivers" -ForegroundColor $COLOR_PRIMARY
-         Write-Host " [D] DUPLICATI - Backup avanzado a la nube (encriptado, programado)" -ForegroundColor $COLOR_PRIMARY
+         Write-Host " [D] DUPLICATI - BACKOP avanzado a la nube (encriptado, programado)" -ForegroundColor $COLOR_PRIMARY
          Write-Host "`n CONTROL" -ForegroundColor Gray
          Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
          Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-	$choice = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","X")
-        if ($choice -eq "X") { return }
+	$o = Read-MenuOption "`n > SELECCIONE" -Valid @("A","B","C","D","X")
+        if($o -eq "X"){ return }
 
-        $Base = Read-Host (' RUTA DESTINO PARA BACKUP (ENTER para ' + $DEFAULT_BACKUP_BASE + ')')
-        if (-not $Base) { $Base = $DEFAULT_BACKUP_BASE }
+        # --- CAMBIO AQUÍ: Solo pide ruta si NO es la opción D ---
+        if ($o -ne "D") {
+            $Base = Read-Host (' RUTA DESTINO PARA BACKOP (ENTER para ' + $DEFAULT_BACKOP_BASE + ')')
+            if (-not $Base) { $Base = $DEFAULT_BACKOP_BASE }
 
-        if (Is-SuspiciousBackupBase $Base) {
-            Write-Host "`n [!] ADVERTENCIA: la ruta destino parece sensible: $Base" -ForegroundColor $COLOR_ALERT
-            if (-not (Confirm-Critical "DESTINO DE BACKUP SENSIBLE ($Base)" "APLICAR")) { return }
+            if (Is-SuspiciousBACKOPBase $Base) {
+                Write-Host "`n [!] ADVERTENCIA: la ruta destino parece sensible: $Base" -ForegroundColor $COLOR_ALERT
+                if (-not (Confirm-Critical "DESTINO DE BACKOP SENSIBLE ($Base)" "APLICAR")) { return }
+            }
         }
 
-        # Resumen + tamaño aproximado (solo para backups de perfil)
+        # Resumen + tamaño aproximado (solo para BACKOPs de perfil)
         if ($choice -eq "A" -or $choice -eq "B") {
             Show-MainTitle
-            Write-Host "`n RESUMEN DE BACKUP" -ForegroundColor $COLOR_MENU
+            Write-Host "`n RESUMEN DE BACKOP" -ForegroundColor $COLOR_MENU
             Write-Host " DESTINO BASE: $Base" -ForegroundColor $COLOR_PRIMARY
             Write-Host " CARPETAS INCLUIDAS:" -ForegroundColor $COLOR_PRIMARY
             $USER_FOLDER_NAMES | ForEach-Object { Write-Host "  - $_" -ForegroundColor $COLOR_MENU }
@@ -1295,7 +1335,7 @@ function Invoke-Engine ($Mode, $Msg) {
             $freeBytes = Get-DriveFreeBytes $Base
             Write-Host "`n TAMAÑO APROX (SUMA DE CARPETAS): $(Format-Bytes $estBytes)" -ForegroundColor $COLOR_ALERT
             Write-Host " ESPACIO LIBRE DESTINO:            $(Format-Bytes $freeBytes)" -ForegroundColor $COLOR_ALERT
-            Write-Log "BACKUP" "EstimateBytes=$estBytes FreeBytes=$freeBytes Base=$Base Choice=$choice"
+            Write-Log "BACKOP" "EstimateBytes=$estBytes FreeBytes=$freeBytes Base=$Base Choice=$choice"
             if ($freeBytes -gt 0 -and $estBytes -gt 0 -and $freeBytes -lt ($estBytes * 1.2)) {
                 Write-Host "`n [!] POSIBLE FALTA DE ESPACIO (recomendado >= 20% extra)." -ForegroundColor $COLOR_DANGER
                 if (-not (Confirm-Critical "CONTINUAR CON POSIBLE POCO ESPACIO" "APLICAR")) { return }
@@ -1304,66 +1344,131 @@ function Invoke-Engine ($Mode, $Msg) {
             }
         }
 
-        $BackupRoot = Get-BackupRoot $Base
-        Write-Log "BACKUP" "BackupRoot=$BackupRoot Base=$Base Choice=$choice"
+        $BACKOPRoot = Get-BACKOPRoot $Base
+        Write-Log "BACKOP" "BACKOPRoot=$BACKOPRoot Base=$Base Choice=$choice"
 
         if ($choice -eq "A") {
-            Write-Log "BACKUP" "Choice=A ProfileRoot=$env:USERPROFILE"
-            Backup-ProfileData $env:USERPROFILE $BackupRoot
-            $verify = Read-MenuOption "`n VERIFICAR BACKUP (conteo rápido)? (S/N)" -Valid @("S","N")
+            Write-Log "BACKOP" "Choice=A ProfileRoot=$env:USERPROFILE"
+            BACKOP-ProfileData $env:USERPROFILE $BACKOPRoot
+            $verify = Read-MenuOption "`n VERIFICAR BACKOP (conteo rápido)? (S/N)" -Valid @("S","N")
             if($verify -eq "S"){
-                $count = (Get-ChildItem -Path $BackupRoot -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
-                Write-Host " [+] ARCHIVOS EN BACKUP: $count" -ForegroundColor $COLOR_PRIMARY
-                Write-Log "BACKUP" "VerifyFiles=$count BackupRoot=$BackupRoot"
+                $count = (Get-ChildItem -Path $BACKOPRoot -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+                Write-Host " [+] ARCHIVOS EN BACKOP: $count" -ForegroundColor $COLOR_PRIMARY
+                Write-Log "BACKOP" "VerifyFiles=$count BACKOPRoot=$BACKOPRoot"
             }
-            Pause-Enter "`n BACKUP DE PERFIL ACTUAL COMPLETADO EN: $BackupRoot. ENTER"
+            Pause-Enter "`n BACKOP DE PERFIL ACTUAL COMPLETADO EN: $BACKOPRoot. ENTER"
             return
         }
 
         if ($choice -eq "B") {
             $profiles = Get-UserProfilePaths
-            Write-Log "BACKUP" "Choice=B ProfilesCount=$(@($profiles).Count) BackupRoot=$BackupRoot"
+            Write-Log "BACKOP" "Choice=B ProfilesCount=$(@($profiles).Count) BACKOPRoot=$BACKOPRoot"
             foreach ($profile in $profiles) {
-                Backup-ProfileData $profile $BackupRoot
+                BACKOP-ProfileData $profile $BACKOPRoot
             }
-            $verify = Read-MenuOption "`n VERIFICAR BACKUP (conteo rápido)? (S/N)" -Valid @("S","N")
+            $verify = Read-MenuOption "`n VERIFICAR BACKOP (conteo rápido)? (S/N)" -Valid @("S","N")
             if($verify -eq "S"){
-                $count = (Get-ChildItem -Path $BackupRoot -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
-                Write-Host " [+] ARCHIVOS EN BACKUP: $count" -ForegroundColor $COLOR_PRIMARY
-                Write-Log "BACKUP" "VerifyFiles=$count BackupRoot=$BackupRoot"
+                $count = (Get-ChildItem -Path $BACKOPRoot -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+                Write-Host " [+] ARCHIVOS EN BACKOP: $count" -ForegroundColor $COLOR_PRIMARY
+                Write-Log "BACKOP" "VerifyFiles=$count BACKOPRoot=$BACKOPRoot"
             }
-            Pause-Enter "`n BACKUP DE TODOS LOS PERFILES COMPLETADO EN: $BackupRoot. ENTER"
+            Pause-Enter "`n BACKOP DE TODOS LOS PERFILES COMPLETADO EN: $BACKOPRoot. ENTER"
             return
         }
 
         if ($choice -eq "C") {
-            if (!(Test-Path $BackupRoot)) { New-Item -Path $BackupRoot -ItemType Directory -Force | Out-Null }
-            $appsFile = Join-Path $BackupRoot "InstalledApps_$((Get-Date).ToString('yyyyMMdd_HHmmss')).txt"
-            $driversPath = Join-Path $BackupRoot "Drivers"
-            Write-Log "BACKUP" "Choice=C Export Apps+Drivers to $BackupRoot"
+            if (!(Test-Path $BACKOPRoot)) { New-Item -Path $BACKOPRoot -ItemType Directory -Force | Out-Null }
+            $appsFile = Join-Path $BACKOPRoot "InstalledApps_$((Get-Date).ToString('yyyyMMdd_HHmmss')).txt"
+            $driversPath = Join-Path $BACKOPRoot "Drivers"
+            Write-Log "BACKOP" "Choice=C Export Apps+Drivers to $BACKOPRoot"
             Write-Host "`n [+] EXPORTANDO LISTA DE PROGRAMAS INSTALADOS..." -ForegroundColor $COLOR_PRIMARY
             Get-Package | Sort-Object Name | Format-Table -AutoSize | Out-String | Out-File $appsFile -Encoding utf8
             Write-Host "[+] EXPORTANDO DRIVERS INSTALADOS..." -ForegroundColor $COLOR_PRIMARY
             if (!(Test-Path $driversPath)) { New-Item -Path $driversPath -ItemType Directory -Force | Out-Null }
             Export-WindowsDriver -Online -Destination $driversPath | Out-Null
-            Pause-Enter "`n INVENTARIO CREADO EN: $BackupRoot. ENTER"
+            Pause-Enter "`n INVENTARIO CREADO EN: $BACKOPRoot. ENTER"
             return
         }
 	
-         if ($choice -eq "D") {
-             $installed = Get-Command duplicati -ErrorAction SilentlyContinue
-             if (-not $installed) {
-                 Write-Host "`n [+] Instalando Duplicati..." -ForegroundColor Yellow
-                 winget install Duplicati.Duplicati --silent
-                 Start-Sleep -Seconds 5
-                 Write-Host " [✔] Duplicati instalado." -ForegroundColor Green
-             }
-             Write-Host "`n [+] Por favor, abre Duplicati manualmente desde el menú inicio." -ForegroundColor Yellow
-             Write-Host "     (Para backups programados y encriptados a la nube)" -ForegroundColor Gray
-             Pause-Enter " ENTER después de cerrar Duplicati"
-             return
-         }	
+if ($o -eq "D") {
+        # Submenú de Duplicati
+        while ($true) {
+            Clear-Host
+            Show-MainTitle
+            Write-Host "`n DUPLICATI - BACKUP EN LA NUBE (Encriptado + Programado)" -ForegroundColor $COLOR_MENU
+            Write-Host " -----------------------------------------------------------------------------"
+            
+            # Verificar si Duplicati está instalado
+            $duplicatiExe = Get-ChildItem -Path @(
+                "$env:ProgramFiles\Duplicati*",
+                "${env:ProgramFiles(x86)}\Duplicati*",
+                "$env:LOCALAPPDATA\Programs\Duplicati*"
+            ) -Filter "Duplicati.Server.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            
+            $duplicatiService = Get-Service -Name "Duplicati" -ErrorAction SilentlyContinue
+            $isInstalled = ($duplicatiExe -ne $null) -or ($duplicatiService -ne $null)
+            
+            if ($isInstalled) {
+                Write-Host "                             [OK] Duplicati ya está instalado" -ForegroundColor Green
+            } else {
+                Write-Host "                             [!] Duplicati NO está instalado" -ForegroundColor Red
+            }
+            
+            Write-Host "`n OPCIONES:" -ForegroundColor $COLOR_PRIMARY
+            Write-Host " -----------------------------------------------------------------------------"
+            Write-Host " [1] ABRIR PANEL DE CONTROL (WEB) - http://localhost:8200"
+            Write-Host " [2] REINICIAR SERVICIO / RESTAURAR ICONO DE BANDEJA"
+            Write-Host " [3] INSTALAR / REPARAR DUPLICATI"
+            Write-Host " [4] DESINSTALAR DUPLICATI"
+            Write-Host "`n CONTROL" -ForegroundColor Gray
+            Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
+            Write-Host " [X] VOLVER AL MENÚ DE BACKUP" -ForegroundColor $COLOR_DANGER
+            
+            $dupOpt = Read-MenuOption "`n > SELECCIONE" -Valid @("1","2","3","4","X")
+            
+            # Si el usuario presiona X dentro de Duplicati, rompemos el bucle 'while'
+            if ($dupOpt -eq "X") { break }
 
+            switch ($dupOpt) {
+                "1" {
+                    Write-Host "`n [+] Abriendo panel de Duplicati en el navegador..." -ForegroundColor $COLOR_PRIMARY
+                    $serviceRunning = Get-Service -Name "Duplicati" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }
+                    if (-not $serviceRunning -and $isInstalled) {
+                        Write-Host " [!] El servicio de Duplicati no está corriendo. Iniciando..." -ForegroundColor Yellow
+                        Start-Service -Name "Duplicati" -ErrorAction SilentlyContinue
+                        Start-Sleep -Seconds 3
+                    }
+                    try { Start-Process "http://localhost:8200" } catch { Write-Host " [✘] Error al abrir navegador." -ForegroundColor $COLOR_DANGER }
+                    Pause-Enter "`n ENTER para volver"
+                }
+                "2" {
+                    Write-Host "`n [+] Reiniciando servicio..." -ForegroundColor $COLOR_PRIMARY
+                    if (-not $isInstalled) { Write-Host " [!] No instalado."; Pause-Enter " ENTER"; continue }
+                    Stop-Service -Name "Duplicati" -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 2
+                    Start-Service -Name "Duplicati" -ErrorAction SilentlyContinue
+                    Write-Host " [✔] Servicio reiniciado." -ForegroundColor Green
+                    Pause-Enter "`n ENTER para volver"
+                }
+                "3" {
+                    if ($isInstalled) { if ((Read-MenuOption " ¿Reinstalar? (S/N)" -Valid @("S","N")) -ne "S") { continue } }
+                    Write-Host "`n [+] Instalando..." -ForegroundColor Yellow
+                    winget install Duplicati.Duplicati --silent --accept-package-agreements
+                    Pause-Enter "`n ENTER para volver"
+                }
+                "4" {
+                    if (-not $isInstalled) { Pause-Enter " [!] No instalado."; continue }
+                    if (-not (Confirm-Critical "DESINSTALAR DUPLICATI" "BORRAR")) { continue }
+                    winget uninstall Duplicati.Duplicati --silent
+                    Write-Host " [✔] Desinstalado." -ForegroundColor Green
+                    Pause-Enter " ENTER para volver"
+                }
+            }
+        }
+        # Al salir del bucle 'while' (cuando presionas X), volvemos al menú anterior
+        return
+    }
+	
         Write-Host "`n OPCION NO VALIDA. VUELVE A INTENTARLO." -ForegroundColor $COLOR_DANGER
         Start-Sleep -Seconds 1
         return
@@ -1371,9 +1476,9 @@ function Invoke-Engine ($Mode, $Msg) {
 
     if ($Mode -eq "RESTORE") {
         Write-Host "`n RESTORE TOTAL" -ForegroundColor $COLOR_ALERT
-        Write-Host ' [A] RESTAURAR DESDE UBICACIÓN PREDETERMINADA (LISTAR BACKUPS DISPONIBLES)' -ForegroundColor $COLOR_PRIMARY
+        Write-Host ' [A] RESTAURAR DESDE UBICACIÓN PREDETERMINADA (LISTAR BACKOPS DISPONIBLES)' -ForegroundColor $COLOR_PRIMARY
         Write-Host " [B] ESPECIFICAR RUTA MANUAL" -ForegroundColor $COLOR_PRIMARY
-        Write-Host " [C] RESTAURAR EL ÚLTIMO BACKUP AUTOMÁTICAMENTE" -ForegroundColor $COLOR_PRIMARY
+        Write-Host " [C] RESTAURAR EL ÚLTIMO BACKOP AUTOMÁTICAMENTE" -ForegroundColor $COLOR_PRIMARY
         Write-Host "`n CONTROL" -ForegroundColor Gray
         Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
         Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
@@ -1381,29 +1486,29 @@ function Invoke-Engine ($Mode, $Msg) {
         if ($choice.ToUpper() -eq "X") { return }
 
         if ($choice.ToUpper() -eq "A") {
-            $base = $DEFAULT_BACKUP_BASE
-            $backups = @()
+            $base = $DEFAULT_BACKOP_BASE
+            $BACKOPs = @()
             if (Test-Path $base) {
-                $backups = Get-ChildItem -Path $base -Directory -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name -like "Backup_*" } |
+                $BACKOPs = Get-ChildItem -Path $base -Directory -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -like "BACKOP_*" } |
                     Sort-Object CreationTime -Descending
             }
-            if (!$backups) {
+            if (!$BACKOPs) {
                 # Si no está en la ubicación predeterminada, buscar en todas las unidades locales
-                Write-Host "`n [!] No se encontraron backups en la ubicación predeterminada." -ForegroundColor $COLOR_DANGER
-                Write-Host " [+] Buscando carpetas 'Backup_*' en unidades disponibles..." -ForegroundColor $COLOR_PRIMARY
-                $backups = @()
+                Write-Host "`n [!] No se encontraron BACKOPs en la ubicación predeterminada." -ForegroundColor $COLOR_DANGER
+                Write-Host " [+] Buscando carpetas 'BACKOP_*' en unidades disponibles..." -ForegroundColor $COLOR_PRIMARY
+                $BACKOPs = @()
                 $seen = @{}
                 $disks = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -in 2,3 }
                 foreach($disk in $disks){
                     $root = ($disk.DeviceID + "\")
                     if(Test-Path $root){
-                        # Nivel 1: E:\Backup_01 (directo en la raiz)
+                        # Nivel 1: E:\BACKOP_01 (directo en la raiz)
                         Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue |
-                            Where-Object { $_.Name -like "Backup_*" } |
+                            Where-Object { $_.Name -like "BACKOP_*" } |
                             ForEach-Object {
                                 if(-not $seen.ContainsKey($_.FullName)){
-                                    $backups += [pscustomobject]@{
+                                    $BACKOPs += [pscustomobject]@{
                                         Name         = $_.Name
                                         FullName     = $_.FullName
                                         CreationTime = $_.CreationTime
@@ -1413,14 +1518,14 @@ function Invoke-Engine ($Mode, $Msg) {
                                 }
                             }
 
-                        # Nivel 2: E:\Carpeta\Backup_01 (un nivel debajo)
+                        # Nivel 2: E:\Carpeta\BACKOP_01 (un nivel debajo)
                         $parents = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue
                         foreach($p in $parents){
                             Get-ChildItem -Path $p.FullName -Directory -ErrorAction SilentlyContinue |
-                                Where-Object { $_.Name -like "Backup_*" } |
+                                Where-Object { $_.Name -like "BACKOP_*" } |
                                 ForEach-Object {
                                     if(-not $seen.ContainsKey($_.FullName)){
-                                        $backups += [pscustomobject]@{
+                                        $BACKOPs += [pscustomobject]@{
                                             Name         = $_.Name
                                             FullName     = $_.FullName
                                             CreationTime = $_.CreationTime
@@ -1433,42 +1538,42 @@ function Invoke-Engine ($Mode, $Msg) {
                     }
                 }
 
-                if (!$backups -or $backups.Count -eq 0) {
-                    Write-Host "`n [!] NO SE ENCONTRARON BACKUPS EN NINGUNA UNIDAD." -ForegroundColor $COLOR_DANGER
+                if (!$BACKOPs -or $BACKOPs.Count -eq 0) {
+                    Write-Host "`n [!] NO SE ENCONTRARON BACKOPS EN NINGUNA UNIDAD." -ForegroundColor $COLOR_DANGER
                     Start-Sleep -Seconds 2
                     return
                 }
-                $backups = $backups | Sort-Object CreationTime -Descending
+                $BACKOPs = $BACKOPs | Sort-Object CreationTime -Descending
             }
-            Write-Host "`n BACKUPS DISPONIBLES:" -ForegroundColor $COLOR_PRIMARY
-            for ($i = 0; $i -lt $backups.Count; $i++) {
-                Write-Host " [$($i+1)] $($backups[$i].Name) - $($backups[$i].CreationTime)"
+            Write-Host "`n BACKOPS DISPONIBLES:" -ForegroundColor $COLOR_PRIMARY
+            for ($i = 0; $i -lt $BACKOPs.Count; $i++) {
+                Write-Host " [$($i+1)] $($BACKOPs[$i].Name) - $($BACKOPs[$i].CreationTime)"
             }
             Write-Host ' [L] ÚLTIMO (MÁS RECIENTE)' -ForegroundColor $COLOR_MENU
             Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-            $sel = Read-Host "``> SELECCIONE BACKUP"
+            $sel = Read-Host "``> SELECCIONE BACKOP"
             if ($sel.ToUpper() -eq "X") { return }
             if ($sel.ToUpper() -eq "L") {
-                $BackupRoot = $backups[0].FullName
-            } elseif ($sel -match "^\d+$" -and [int]$sel -le $backups.Count) {
-                $BackupRoot = $backups[[int]$sel - 1].FullName
+                $BACKOPRoot = $BACKOPs[0].FullName
+            } elseif ($sel -match "^\d+$" -and [int]$sel -le $BACKOPs.Count) {
+                $BACKOPRoot = $BACKOPs[[int]$sel - 1].FullName
             } else {
                 Write-Host "`n [!] SELECCIÓN INVÁLIDA." -ForegroundColor $COLOR_DANGER
                 Start-Sleep -Seconds 2
                 return
             }
-            Write-Log "RESTORE" "Choice=A BackupRoot=$BackupRoot"
+            Write-Log "RESTORE" "Choice=A BACKOPRoot=$BACKOPRoot"
         } elseif ($choice.ToUpper() -eq "B") {
-            # Busca auto en USB conectadas (carpetas Backup_* directamente en la raiz, p.ej. E:\Backup_01)
+            # Busca auto en USB conectadas (carpetas BACKOP_* directamente en la raiz, p.ej. E:\BACKOP_01)
             $found = @()
             $seenUsb = @{}
             $usbDisks = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -eq 2 }
             foreach($disk in $usbDisks){
                 $root = ($disk.DeviceID + "\")
                 if(Test-Path $root){
-                    # Nivel 1: E:\Backup_01
+                    # Nivel 1: E:\BACKOP_01
                     Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue |
-                        Where-Object { $_.Name -like "Backup_*" } |
+                        Where-Object { $_.Name -like "BACKOP_*" } |
                         ForEach-Object {
                             if(-not $seenUsb.ContainsKey($_.FullName)){
                                 $found += [pscustomobject]@{
@@ -1481,11 +1586,11 @@ function Invoke-Engine ($Mode, $Msg) {
                             }
                         }
 
-                    # Nivel 2: E:\Carpeta\Backup_01
+                    # Nivel 2: E:\Carpeta\BACKOP_01
                     $parents = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue
                     foreach($p in $parents){
                         Get-ChildItem -Path $p.FullName -Directory -ErrorAction SilentlyContinue |
-                            Where-Object { $_.Name -like "Backup_*" } |
+                            Where-Object { $_.Name -like "BACKOP_*" } |
                             ForEach-Object {
                                 if(-not $seenUsb.ContainsKey($_.FullName)){
                                     $found += [pscustomobject]@{
@@ -1503,46 +1608,46 @@ function Invoke-Engine ($Mode, $Msg) {
 
             if($found.Count -gt 0){
                 $found = $found | Sort-Object CreationTime -Descending
-                Write-Host "`n BACKUPS ENCONTRADOS EN USB:" -ForegroundColor $COLOR_PRIMARY
+                Write-Host "`n BACKOPS ENCONTRADOS EN USB:" -ForegroundColor $COLOR_PRIMARY
                 for ($i = 0; $i -lt $found.Count; $i++) {
                     Write-Host " [$($i+1)] $($found[$i].Drive)\$($found[$i].Name) - $($found[$i].CreationTime) - $($found[$i].FullName)" -ForegroundColor $COLOR_MENU
                 }
                 Write-Host " [M] MANUAL - INGRESAR RUTA COMPLETA" -ForegroundColor $COLOR_MENU
                 Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-                $sel = (Read-Host "``> SELECCIONE BACKUP (NUMERO)") 
+                $sel = (Read-Host "``> SELECCIONE BACKOP (NUMERO)") 
                 if($sel.ToUpper() -eq "X"){ return }
                 if($sel.ToUpper() -eq "M"){
-                    $BackupRoot = Read-Host ' > INGRESE LA RUTA COMPLETA AL BACKUP'
+                    $BACKOPRoot = Read-Host ' > INGRESE LA RUTA COMPLETA AL BACKOP'
                 } elseif ($sel -match "^\d+$" -and [int]$sel -ge 1 -and [int]$sel -le $found.Count) {
-                    $BackupRoot = $found[[int]$sel - 1].FullName
+                    $BACKOPRoot = $found[[int]$sel - 1].FullName
                 } else {
                     Write-Host "`n [!] SELECCIÓN INVÁLIDA." -ForegroundColor $COLOR_DANGER
                     Start-Sleep -Seconds 2
                     return
                 }
             } else {
-                $BackupRoot = Read-Host ' > NO SE ENCONTRARON BACKUPS EN USB. INGRESE LA RUTA COMPLETA AL BACKUP'
+                $BACKOPRoot = Read-Host ' > NO SE ENCONTRARON BACKOPS EN USB. INGRESE LA RUTA COMPLETA AL BACKOP'
             }
 
-            Write-Log "RESTORE" "Choice=B BackupRoot=$BackupRoot"
-            if (-not $BackupRoot -or -not (Test-Path $BackupRoot)) {
+            Write-Log "RESTORE" "Choice=B BACKOPRoot=$BACKOPRoot"
+            if (-not $BACKOPRoot -or -not (Test-Path $BACKOPRoot)) {
                 Write-Host "`n [!] RUTA NO VÁLIDA O NO EXISTE." -ForegroundColor $COLOR_DANGER
                 Start-Sleep -Seconds 2
                 return
             }
         } elseif ($choice.ToUpper() -eq "C") {
-            $base = $DEFAULT_BACKUP_BASE
-            # Listar TODOS los backups en todas las unidades y permitir elegir (Enter = más reciente)
-            Write-Host "`n [+] Buscando backups en todas las unidades..." -ForegroundColor $COLOR_PRIMARY
-            $backups = @()
+            $base = $DEFAULT_BACKOP_BASE
+            # Listar TODOS los BACKOPs en todas las unidades y permitir elegir (Enter = más reciente)
+            Write-Host "`n [+] Buscando BACKOPs en todas las unidades..." -ForegroundColor $COLOR_PRIMARY
+            $BACKOPs = @()
             $seen = @{}
 
             if (Test-Path $base) {
                 Get-ChildItem -Path $base -Directory -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name -like "Backup_*" } |
+                    Where-Object { $_.Name -like "BACKOP_*" } |
                     ForEach-Object {
                         if(-not $seen.ContainsKey($_.FullName)){
-                            $backups += [pscustomobject]@{
+                            $BACKOPs += [pscustomobject]@{
                                 Name         = $_.Name
                                 FullName     = $_.FullName
                                 CreationTime = $_.CreationTime
@@ -1559,10 +1664,10 @@ function Invoke-Engine ($Mode, $Msg) {
                 if(Test-Path $root){
                     # Nivel 1
                     Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue |
-                        Where-Object { $_.Name -like "Backup_*" } |
+                        Where-Object { $_.Name -like "BACKOP_*" } |
                         ForEach-Object {
                             if(-not $seen.ContainsKey($_.FullName)){
-                                $backups += [pscustomobject]@{
+                                $BACKOPs += [pscustomobject]@{
                                     Name         = $_.Name
                                     FullName     = $_.FullName
                                     CreationTime = $_.CreationTime
@@ -1576,10 +1681,10 @@ function Invoke-Engine ($Mode, $Msg) {
                     $parents = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue
                     foreach($p in $parents){
                         Get-ChildItem -Path $p.FullName -Directory -ErrorAction SilentlyContinue |
-                            Where-Object { $_.Name -like "Backup_*" } |
+                            Where-Object { $_.Name -like "BACKOP_*" } |
                             ForEach-Object {
                                 if(-not $seen.ContainsKey($_.FullName)){
-                                    $backups += [pscustomobject]@{
+                                    $BACKOPs += [pscustomobject]@{
                                         Name         = $_.Name
                                         FullName     = $_.FullName
                                         CreationTime = $_.CreationTime
@@ -1592,48 +1697,48 @@ function Invoke-Engine ($Mode, $Msg) {
                 }
             }
 
-            if(!$backups -or $backups.Count -eq 0){
-                Write-Host "`n [!] NO SE ENCONTRARON BACKUPS EN NINGUNA UNIDAD." -ForegroundColor $COLOR_DANGER
+            if(!$BACKOPs -or $BACKOPs.Count -eq 0){
+                Write-Host "`n [!] NO SE ENCONTRARON BACKOPS EN NINGUNA UNIDAD." -ForegroundColor $COLOR_DANGER
                 Start-Sleep -Seconds 2
                 return
             }
 
-            $backups = $backups | Sort-Object CreationTime -Descending
-            Write-Host "`n BACKUPS ENCONTRADOS (TODAS LAS UNIDADES):" -ForegroundColor $COLOR_PRIMARY
-            for ($i = 0; $i -lt $backups.Count; $i++) {
-                Write-Host " [$($i+1)] $($backups[$i].Drive)\$($backups[$i].Name) - $($backups[$i].CreationTime) - $($backups[$i].FullName)" -ForegroundColor $COLOR_MENU
+            $BACKOPs = $BACKOPs | Sort-Object CreationTime -Descending
+            Write-Host "`n BACKOPS ENCONTRADOS (TODAS LAS UNIDADES):" -ForegroundColor $COLOR_PRIMARY
+            for ($i = 0; $i -lt $BACKOPs.Count; $i++) {
+                Write-Host " [$($i+1)] $($BACKOPs[$i].Drive)\$($BACKOPs[$i].Name) - $($BACKOPs[$i].CreationTime) - $($BACKOPs[$i].FullName)" -ForegroundColor $COLOR_MENU
             }
             Write-Host " [ENTER] Usar el más reciente" -ForegroundColor $COLOR_MENU
             Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
 
-            $sel = Read-Host "``> SELECCIONE BACKUP (NUMERO/ENTER)"
+            $sel = Read-Host "``> SELECCIONE BACKOP (NUMERO/ENTER)"
             if($sel -and $sel.ToUpper() -eq "X"){ return }
 
-            $latest = $backups[0]
-            if($sel -match "^\d+$" -and [int]$sel -ge 1 -and [int]$sel -le $backups.Count){
-                $latest = $backups[[int]$sel - 1]
+            $latest = $BACKOPs[0]
+            if($sel -match "^\d+$" -and [int]$sel -ge 1 -and [int]$sel -le $BACKOPs.Count){
+                $latest = $BACKOPs[[int]$sel - 1]
             }
 
-            $BackupRoot = $latest.FullName
-            Write-Log "RESTORE" "Choice=C BackupRoot=$BackupRoot"
-            Write-Host "`n [+] USANDO BACKUP: $($latest.Name)" -ForegroundColor $COLOR_PRIMARY
+            $BACKOPRoot = $latest.FullName
+            Write-Log "RESTORE" "Choice=C BACKOPRoot=$BACKOPRoot"
+            Write-Host "`n [+] USANDO BACKOP: $($latest.Name)" -ForegroundColor $COLOR_PRIMARY
         } else {
             Write-Host "`n OPCIÓN NO VÁLIDA." -ForegroundColor $COLOR_DANGER
             Start-Sleep -Seconds 1
             return
         }
 
-        $backupProfiles = Get-ChildItem -Path $BackupRoot -Directory -ErrorAction SilentlyContinue
-        if (!$backupProfiles) {
-            Write-Host "`n [!] NO SE ENCONTRARON PERFILES DE BACKUP EN LA RUTA ESPECIFICADA." -ForegroundColor $COLOR_DANGER
+        $BACKOPProfiles = Get-ChildItem -Path $BACKOPRoot -Directory -ErrorAction SilentlyContinue
+        if (!$BACKOPProfiles) {
+            Write-Host "`n [!] NO SE ENCONTRARON PERFILES DE BACKOP EN LA RUTA ESPECIFICADA." -ForegroundColor $COLOR_DANGER
             Start-Sleep -Seconds 2
             return
         }
-        Write-Log "RESTORE" "BackupRoot=$BackupRoot BackupProfiles=$(@($backupProfiles).Count)"
+        Write-Log "RESTORE" "BACKOPRoot=$BACKOPRoot BACKOPProfiles=$(@($BACKOPProfiles).Count)"
 
         # Validación rápida del layout esperado (que los perfiles tengan al menos una carpeta típica)
         $hasExpectedLayout = $false
-        foreach($profile in $backupProfiles){
+        foreach($profile in $BACKOPProfiles){
             foreach($rel in $USER_FOLDER_NAMES){
                 $checkPath = Join-Path $profile.FullName $rel
                 if(Test-Path $checkPath){
@@ -1644,13 +1749,13 @@ function Invoke-Engine ($Mode, $Msg) {
             if($hasExpectedLayout){ break }
         }
         if(-not $hasExpectedLayout){
-            Write-Host "`n [!] El backup no parece tener el layout esperado (no se encuentran carpetas típicas dentro de los perfiles)." -ForegroundColor $COLOR_DANGER
+            Write-Host "`n [!] El BACKOP no parece tener el layout esperado (no se encuentran carpetas típicas dentro de los perfiles)." -ForegroundColor $COLOR_DANGER
             Start-Sleep -Seconds 2
             return
         }
 
-        Write-Host "`n PERFILES EN EL BACKUP:" -ForegroundColor $COLOR_PRIMARY
-        $backupProfiles | ForEach-Object { Write-Host " [ ] $($_.Name)" -ForegroundColor $COLOR_MENU }
+        Write-Host "`n PERFILES EN EL BACKOP:" -ForegroundColor $COLOR_PRIMARY
+        $BACKOPProfiles | ForEach-Object { Write-Host " [ ] $($_.Name)" -ForegroundColor $COLOR_MENU }
         Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
         $profileChoice = Read-Host ' NOMBRE DE PERFIL A RESTAURAR (ENTER PARA TODOS, X PARA VOLVER)'
         if ($profileChoice -and $profileChoice.ToUpper() -eq "X") {
@@ -1666,8 +1771,8 @@ function Invoke-Engine ($Mode, $Msg) {
         Write-Log "RESTORE" "TargetUsersRoot=$targetUsersRoot"
 
         if (-not $profileChoice) {
-            Write-Log "RESTORE" "Restoring ALL profiles Count=$(@($backupProfiles).Count)"
-            foreach ($profile in $backupProfiles) {
+            Write-Log "RESTORE" "Restoring ALL profiles Count=$(@($BACKOPProfiles).Count)"
+            foreach ($profile in $BACKOPProfiles) {
                 Write-Log "RESTORE" "Restoring profile=$($profile.Name)"
                 $dest = Join-Path $targetUsersRoot $profile.Name
                 if(Test-Path $dest){
@@ -1679,7 +1784,7 @@ function Invoke-Engine ($Mode, $Msg) {
             return
         }
 
-        $selected = $backupProfiles | Where-Object { $_.Name -ieq $profileChoice }
+        $selected = $BACKOPProfiles | Where-Object { $_.Name -ieq $profileChoice }
         if ($selected) {
             $selProfile = $selected | Select-Object -First 1
             Write-Log "RESTORE" "Restoring profile choice=$profileChoice Actual=$($selProfile.Name)"
@@ -1692,7 +1797,7 @@ function Invoke-Engine ($Mode, $Msg) {
             return
         }
 
-        Write-Host "`n [!] PERFIL NO ENCONTRADO EN EL BACKUP." -ForegroundColor $COLOR_DANGER
+        Write-Host "`n [!] PERFIL NO ENCONTRADO EN EL BACKOP." -ForegroundColor $COLOR_DANGER
         Start-Sleep -Seconds 2
         return
     }
@@ -2354,8 +2459,8 @@ function Invoke-DriverManagement {
     while($true){ 
         Show-MainTitle
         Write-Host "`n GESTION DE DRIVERS PRO" -ForegroundColor $COLOR_MENU
-        Write-Host ' [A] EXPORTAR DRIVERS (BACKUP LOCAL EN USB/SCRIPT)'
-        Write-Host ' [B] RE-INSTALAR DRIVERS (DESDE BACKUP)'
+        Write-Host ' [A] EXPORTAR DRIVERS (BACKOP LOCAL EN USB/SCRIPT)'
+        Write-Host ' [B] RE-INSTALAR DRIVERS (DESDE BACKOP)'
         Write-Host ' [C] BUSCAR EN SERVIDORES OFICIALES (WINDOWS UPDATE)'
         Write-Host ' [D] VER IDENTIFICADORES DE HARDWARE (SIN DRIVER)'
         Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
@@ -2370,14 +2475,14 @@ function Invoke-DriverManagement {
             Write-Host " [+] Exportando drivers instalados... esto puede tardar." -ForegroundColor $COLOR_MENU
             Export-WindowsDriver -Online -Destination $p
             Write-Log "DRIVER" "Export drivers to $p"
-            Pause-Enter " [+] BACKUP CREADO EN: $p. ENTER PARA VOLVER"
+            Pause-Enter " [+] BACKOP CREADO EN: $p. ENTER PARA VOLVER"
         }
 
         if($o -eq "B") {
             if(-not (Require-Admin "instalar drivers")){ continue }
             $path = "$PSScriptRoot\Drivers_$env:COMPUTERNAME"
             if(Test-Path $path){
-                Write-Host " [+] Re-instalando drivers desde backup..." -ForegroundColor $COLOR_PRIMARY
+                Write-Host " [+] Re-instalando drivers desde BACKOP..." -ForegroundColor $COLOR_PRIMARY
                 $infs = Get-ChildItem "$path\*.inf" -Recurse -ErrorAction SilentlyContinue
                 $count = if($infs){$infs.Count}else{0}
                 Write-Host " [+] INF encontrados: $count" -ForegroundColor $COLOR_MENU
@@ -2393,7 +2498,7 @@ function Invoke-DriverManagement {
                 }
                 Pause-Enter " [+] PROCESO TERMINADO. ENTER"
             } else { 
-                Write-Host " [!] NO SE ENCONTRO CARPETA DE BACKUP." -ForegroundColor $COLOR_DANGER
+                Write-Host " [!] NO SE ENCONTRO CARPETA DE BACKOP." -ForegroundColor $COLOR_DANGER
                 Start-Sleep -Seconds 2 
             }
         }
@@ -2819,6 +2924,76 @@ function Invoke-RemoteDesktop {
 }
 
 # ============================================================
+# PURGA Y FORMATEO - HERRAMIENTAS DE LIMPIEZA AVANZADA
+# ============================================================
+function Show-DiagnosticMenu {
+    while($true){
+        Clear-Host
+        Show-MainTitle
+        Write-Host "`n PURGA Y FORMATEO - LIMPIEZA AVANZADA" -ForegroundColor $COLOR_DANGER
+        Write-Host " ---------------------------------------------------------------------------"
+        Write-Host " [1] LIMPIAR ARCHIVOS TEMPORALES PROFUNDO"
+        Write-Host " [2] LIMPIAR CACHÉ DE WINDOWS (WinSxS)"
+        Write-Host " [3] ELIMINAR RESTOS DE ACTUALIZACIONES ANTIGUAS"
+        Write-Host " [4] ANALIZAR Y LIMPIAR DISCO (cleanmgr)"
+        Write-Host " [5] FORMATEO RÁPIDO DE UNIDAD USB (DiskPart)"
+        Write-Host " [6] CREAR USB BOOTEABLE (Rufus - web)"
+        Write-Host "`n CONTROL" -ForegroundColor Gray
+        Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
+        Write-Host " [X] VOLVER"
+        
+        $opt = Read-MenuOption "`n > SELECCIONE" -Valid @("1","2","3","4","5","6","X")
+        
+        if($opt -eq "X") { break }
+        
+        switch($opt) {
+            "1" {
+                Write-Host "`n[+] Limpieza profunda de temporales..." -ForegroundColor Yellow
+                Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+                Remove-Item "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+                Write-Host "[✔] Completado" -ForegroundColor Green
+                Pause-Enter
+            }
+            "2" {
+                if(-not (Require-Admin "limpiar WinSxS")) { continue }
+                Write-Host "`n[+] Limpiando WinSxS..." -ForegroundColor Yellow
+                dism /online /Cleanup-Image /StartComponentCleanup /ResetBase
+                Write-Host "[✔] Completado" -ForegroundColor Green
+                Pause-Enter
+            }
+            "3" {
+                if(-not (Require-Admin "limpiar actualizaciones")) { continue }
+                Write-Host "`n[+] Eliminando versiones antiguas de Windows..." -ForegroundColor Yellow
+                dism /online /Cleanup-Image /SPSuperseded
+                Write-Host "[✔] Completado" -ForegroundColor Green
+                Pause-Enter
+            }
+            "4" {
+                Write-Host "`n[+] Abriendo Liberador de espacio en disco..." -ForegroundColor Yellow
+                Start-Process "cleanmgr.exe"
+                Pause-Enter " ENTER después de cerrar"
+            }
+            "5" {
+                Write-Host "`n[!] ADVERTENCIA: Esto formateará una unidad USB" -ForegroundColor Red
+                $driveLetter = Read-Host " LETRA DE LA UNIDAD USB (ej: D, sin dos puntos)"
+                if($driveLetter -and (Confirm-Critical "FORMATEAR UNIDAD $($driveLetter):" "FORMATEAR")) {
+                    Write-Host "[+] Ejecutando format..." -ForegroundColor Yellow
+                    & cmd /c "format $($driveLetter): /FS:FAT32 /Q /Y"
+                    Write-Host "[✔] Formateo completado" -ForegroundColor Green
+                }
+                Pause-Enter
+            }
+            "6" {
+                Write-Host "`n[+] Abriendo página de Rufus..." -ForegroundColor Cyan
+                Start-Process "https://rufus.ie/es/"
+                Write-Host " Descarga Rufus para crear USB booteable" -ForegroundColor Yellow
+                Pause-Enter
+            }
+        }
+    }
+}
+
+# ============================================================
 # MENU PRINCIPAL
 # ============================================================
 while ($true) {
@@ -2829,7 +3004,7 @@ while ($true) {
     Write-Host " -----------------------------------------------------------------------------" -ForegroundColor Gray
     
     if ($Global:MenuHorizontal) {
-        Write-Host "    [A]  BACKUP TOTAL             [E]  OPTIMIZAR TEMP           [I]  KIT POST FORMAT" -ForegroundColor Green
+        Write-Host "    [A]  BACKOP TOTAL             [E]  OPTIMIZAR TEMP           [I]  KIT POST FORMAT" -ForegroundColor Green
         Write-Host "    [B]  RESTORE TOTAL            [F]  WIN UTIL TITUS           [J]  GESTION USUARIOS" -ForegroundColor Green
         Write-Host "    [C]  GESTION DRIVERS          [G]  MASSGRAVE ACT            [K]  SOPORTE TECNICO PRO" -ForegroundColor Green
         Write-Host "    [D]  PURGA Y FORMATEO         [H]  GESTION PAQUETES PRO     [L]  BYPASS WINDOWS 11" -ForegroundColor Green
@@ -2837,7 +3012,7 @@ while ($true) {
         Write-Host '    [P]  WINDOWS DEFENDER TOTAL   [Q]  AUTO-FLOW (EXPRESS)      [U]  SYSINTERNALS KIT' -ForegroundColor Green
         Write-Host '    [T]  ESCRITORIO REMOTO                                                           ' -ForegroundColor Green	
          } else {
-             Write-Host "    [A] BACKUP TOTAL"
+             Write-Host "    [A] BACKOP TOTAL"
              Write-Host "    [B] RESTORE TOTAL"
              Write-Host "    [C] GESTION DRIVERS"
              Write-Host "    [D] PURGA Y FORMATEO"
@@ -2923,7 +3098,7 @@ while ($true) {
     }
 }
 	"T" { Invoke-RemoteDesktop }
-        "A" { Invoke-Engine "BACKUP" "RESPALDO" }
+        "A" { Invoke-Engine "BACKOP" "RESPALDO" }
         "B" { Invoke-Engine "RESTORE" "RESTAURACION" }
         "C" { Invoke-DriverManagement }
         "D" { Show-DiagnosticMenu }
