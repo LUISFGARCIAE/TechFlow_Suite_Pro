@@ -1,4 +1,4 @@
-# 🚀 TECH FLOW SUITE PRO v5.3
+# 🚀 TECH FLOW SUITE PRO v5.5
 
 [![Descargar EXE](https://img.shields.io/badge/DESCARGAR-EJECUTABLE_PRO-green?style=for-the-badge&logo=windows)](https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro/releases/latest)
 
@@ -7,11 +7,11 @@ Suite definitiva de herramientas IT para optimización de sistemas, backups de a
 ---
 
 ## 🧐 ¿Qué es Tech Flow Suite Pro?
-Es una solución de automatización de nivel profesional diseñada para **especialistas en soporte TI**. La v5.3 redefine el flujo de trabajo desde el despliegue inicial (Post-Format) hasta el mantenimiento crítico. Desarrollada en PowerShell y optimizada como ejecutable para garantizar portabilidad, seguridad y una experiencia de usuario fluida.
+Es una solución de automatización de nivel profesional diseñada para **especialistas en soporte TI**. La v5.5 redefine el flujo de trabajo desde el despliegue inicial (Post-Format) hasta el mantenimiento crítico. Desarrollada en PowerShell y optimizada como ejecutable para garantizar portabilidad, seguridad y una experiencia de usuario fluida.
 
 ---
 
-## ✨ Novedades en v5.3 (Últimas integraciones)
+## ✨ Novedades en v5.5 (Últimas integraciones)
 
 | Área | Mejora |
 |------|--------|
@@ -57,7 +57,7 @@ Diseñado para adaptarse a la carga de trabajo del taller:
 ## 🛠️ Especificaciones Técnicas
 
 * **Lenguaje:** PowerShell 5.1 / Core (con auto-elevación a Administrador).
-* **Compilación:** Versión 5.3 optimizada para estabilidad.
+* **Compilación:** Versión 5.5 optimizada para estabilidad.
 * **Trazabilidad:** Generación automática de **Logs de sesión** con rotación automática (>10 MB).
 * **Seguridad:** Lógica de "Freno de Mano" (Tecla `X` para abortar) y validación de integridad.
 * **Exclusiones:** Drivers de monitoreo (CPU-Z, HWMonitor, GPU-Z, MSI Afterburner) excluidos de limpieza.
