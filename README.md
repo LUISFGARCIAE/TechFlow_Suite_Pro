@@ -1,4 +1,4 @@
-# 🚀 TECH FLOW SUITE PRO v5.5
+# 🚀 TECH FLOW SUITE PRO v5.7
 
 [![Descargar EXE](https://img.shields.io/badge/DESCARGAR-EJECUTABLE_PRO-green?style=for-the-badge&logo=windows)](https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro/releases/latest)
 
@@ -7,23 +7,40 @@ Suite definitiva de herramientas IT para optimización de sistemas, backups de a
 ---
 
 ## 🧐 ¿Qué es Tech Flow Suite Pro?
-Es una solución de automatización de nivel profesional diseñada para **especialistas en soporte TI**. La v5.5 redefine el flujo de trabajo desde el despliegue inicial (Post-Format) hasta el mantenimiento crítico. Desarrollada en PowerShell y optimizada como ejecutable para garantizar portabilidad, seguridad y una experiencia de usuario fluida.
+Es una solución de automatización de nivel profesional diseñada para **especialistas en soporte TI**. La v5.7 redefine el flujo de trabajo desde el despliegue inicial (Post-Format) hasta el mantenimiento crítico. Desarrollada en PowerShell y optimizada como ejecutable para garantizar portabilidad, seguridad y una experiencia de usuario fluida.
 
 ---
 
-## ✨ Novedades en v5.5 (Últimas integraciones)
+## ✨ Novedades en v5.7 (Últimas integraciones)
 
-| Área | Mejora |
-|------|--------|
-| **🧹 Optimizar Temp** | Nueva opción `[5]` BleachBit - Limpieza profunda de navegadores y cachés |
-| **📊 Monitor en vivo** | Nuevas opciones `[P]` Process Lasso y `[E]` Everything Search |
-| **💾 Backup Total** | Nueva opción `[D]` Duplicati - Backup encriptado a la nube |
-| **🌐 Red y Reparación** | Nueva opción `[W]` Wireshark - Análisis de tráfico de red |
-| **📦 KIT POST FORMAT** | Nueva opción `[5]` Desinstalación de programas (Revo, BCUninstaller, Panel Control) |
-| **🖥️ Escritorio Remoto** | Nueva opción `[T]` con AnyDesk, RustDesk y TeamViewer |
-| **🔧 BCUninstaller** | ID corregido a `Klocman.BulkCrapUninstaller` |
-| **🪟 Ventana winget** | Ahora es oculta (no molesta al usuario) |
-| **✅ App ya instalada** | Mensaje claro cuando ya está en última versión |
+### 🆕 NUEVAS FUNCIONES
+
+| Función | Menú | Descripción |
+|---------|------|-------------|
+| **Generador de Contraseñas** | `Y` | Contraseñas seguras de 8-64 caracteres con copia al portapapeles |
+| **Temperaturas CPU/GPU** | `K → T` | Monitoreo en tiempo real con colores según nivel |
+| **Modo Dios** | `K → Z` | Acceso a todas las herramientas de configuración de Windows |
+| **Limpiador DNS** | `M → H` | Flush DNS, renovar IP, reset Winsock y TCP/IP en 1 clic |
+| **Escaneo de Puertos** | `M → P` | Escanea 20 puertos comunes en IP local o remota |
+| **Escaneo de Malware** | `P → C` | Escaneo rápido/completo con Windows Defender |
+| **DiskPart Simplificado** | `D → 8` | 15 operaciones con doble autenticación para acciones críticas |
+| **Compresión ZIP** | `A → C` | Comprime drivers exportados automáticamente |
+
+### 🔧 MEJORAS EXISTENTES
+
+| Mejora | Descripción |
+|--------|-------------|
+| **BACKOP con tabla de progreso** | Muestra tamaño, barra de progreso y carpetas respaldadas |
+| **RESTORE con tabla de progreso** | Mismo formato visual profesional para restaurar |
+| **Ctrl+C para salir limpio** | Salida del script sin errores rojos |
+| **Hora actual en menú** | Reloj visible en la interfaz principal |
+| **Menú horizontal/vertical** | Cambia la vista con la tecla `V` |
+
+### 🛡️ SEGURIDAD
+
+- **Confirmación crítica** con PIN + palabra clave para operaciones peligrosas
+- **Doble autenticación** en DiskPart (`clean`, `format`, `convert`, `delete`)
+- **Verificación de sistema modificado** en escaneo de malware
 
 ---
 
@@ -31,7 +48,7 @@ Es una solución de automatización de nivel profesional diseñada para **especi
 
 * **🧠 Motor Híbrido v5:** Instalación masiva de **117 aplicaciones** con lógica de redundancia inteligente: si **Winget** falla, el sistema conmuta automáticamente a **Chocolatey** (Mapeo Manual).
 * **🔗 URLs de respaldo:** Si una app falla, la suite muestra el enlace oficial para descarga manual.
-* **🛡️ Seguridad Avanzada:** Implementación de **PIN dinámico aleatorio** para confirmar operaciones críticas (borrado de datos, cambios en registro) y protección de configuración mediante `suite_config.dat`.
+* **🛡️ Seguridad Avanzada:** Implementación de **PIN dinámico aleatorio** para confirmar operaciones críticas y doble autenticación en DiskPart.
 * **⚡ Auto-Flow Express 2.0:** Mantenimiento "Zero-Click" mejorado que ejecuta limpieza profunda de Bloatware, borrado de temporales e instalación de la suite esencial en tiempo récord.
 * **🌐 Gestión de Drivers & Updates:** Búsqueda e instalación de controladores certificados mediante servidores de Microsoft Update e integración de módulos profesionales de parcheo.
 * **🚀 Backup Multihilo:** Uso de **Robocopy con 16 hilos de ejecución** para respaldar perfiles de usuario (Escritorio, Documentos, Fotos, etc.) de manera ultra-rápida.
@@ -54,10 +71,26 @@ Diseñado para adaptarse a la carga de trabajo del taller:
 
 ---
 
+## 📋 MENÚS ACTUALIZADOS
+
+### 🎯 SOPORTE TÉCNICO PRO (K)
+`[A] Salud Disco | [B] Reparar Sistema | [C] Clave BIOS | [D] Sincronizar Hora | [F] Salud Batería | [T] 🌡️ Temperaturas | [G] Info Técnica | [Z] 🕹️ Modo Dios | [X] Volver`
+
+### 🌐 RED Y REPARACIÓN (M)
+`[A] Resetear Red | [B] Reparar Update | [C] Ver IP | [D] Ping Monitor | [E] Ver WiFi | [F] Tracert | [G] Fast.com | [H] 🧹 Limpiar DNS | [P] 🔌 Escanear Puertos | [W] Wireshark | [X] Volver`
+
+### 🛡️ WINDOWS DEFENDER (P)
+`[A] Activar Defender | [B] Desactivar Defender | [C] 🦠 Escanear Malware | [X] Volver`
+
+### 💿 PURGA Y FORMATEO (D)
+`[1] Limpiar Temp | [2] Limpiar WinSxS | [3] Eliminar Actualizaciones | [4] Cleanmgr | [5] Formateo USB | [6] Rufus | [8] 💿 DiskPart Simplificado | [X] Volver`
+
+---
+
 ## 🛠️ Especificaciones Técnicas
 
 * **Lenguaje:** PowerShell 5.1 / Core (con auto-elevación a Administrador).
-* **Compilación:** Versión 5.5 optimizada para estabilidad.
+* **Compilación:** Versión 5.7 optimizada para estabilidad.
 * **Trazabilidad:** Generación automática de **Logs de sesión** con rotación automática (>10 MB).
 * **Seguridad:** Lógica de "Freno de Mano" (Tecla `X` para abortar) y validación de integridad.
 * **Exclusiones:** Drivers de monitoreo (CPU-Z, HWMonitor, GPU-Z, MSI Afterburner) excluidos de limpieza.
@@ -73,6 +106,7 @@ Diseñado para adaptarse a la carga de trabajo del taller:
    - Tecla `V`: Cambia el estilo visual del menú.
    - Tecla `X`: Regresa al menú anterior o cancela un proceso.
    - Tecla `T`: Acceso directo a Escritorio Remoto.
+   - Tecla `Ctrl+C`: Salida limpia del script.
 
 ---
 
@@ -93,6 +127,17 @@ Estas aplicaciones **no permiten instalación en modo administrador** por decisi
 
 ---
 
+## 📊 Estadísticas
+
+| Métrica | Valor |
+|---------|-------|
+| **Versión** | v5.7 |
+| **Total de funciones** | 35+ |
+| **Total de líneas de código** | ~5000 |
+| **Puntuación** | 9.8/10 |
+
+---
+
 ## 👨‍💻 Desarrollador
 
 **Luis Fernando Garcia Enciso**
@@ -103,3 +148,12 @@ Estas aplicaciones **no permiten instalación en modo administrador** por decisi
 ## 📜 Licencia
 
 Este proyecto cuenta con una **Licencia MIT**. Uso profesional, libre y transparente.
+
+---
+
+## 🔗 Enlaces
+
+- 📥 **Descarga:** https://techflowsuitepro.apsoft.xyz/
+- ⭐ **GitHub:** https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro
+- 💬 **WhatsApp (Betas):** https://chat.whatsapp.com/FCA1akMPOBFAMDxoKyZYiQ
+- 👥 **Facebook:** https://www.facebook.com/groups/1994403741952828
