@@ -1,88 +1,293 @@
-
 if ($Host.Name -ne "ConsoleHost") { Clear-Host } else { [System.Console]::Clear() }
 $ErrorActionPreference = "SilentlyContinue"
 
+# 🎨 Definición de Estilo Visual
+$LINEA = " ═══════════════════════════════════════════════════════════════════"
+
 # ============================================================
-# [SISTEMA] - AUTO-ELEVACIÓN A ADMINISTRADOR
+# 🛡️ AUTO-ELEVACIÓN SIMPLE Y EFECTIVA
 # ============================================================
 
-if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Start-Process powershell.exe "-NoProfile -nologo -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs -WindowStyle Hidden
+# Configurar UTF-8 para emojis
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+# Verificar si somos admin
+$currentUser = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+$isAdmin = $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $isAdmin) {
+    $scriptPath = $PSCommandPath
+    if (-not $scriptPath) { $scriptPath = $MyInvocation.MyCommand.Path }
+    
+    # Lanzar como administrador y cerrar esta ventana
+    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`"" -Verb RunAs
     exit
 }
 
-# ============================================================
-# MANEJADOR DE Ctrl+C (Salida limpia)
-# ============================================================
-[Console]::TreatControlCAsInput = $false
-$null = Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
-    Write-Host "`n`n[!] Saliendo de TechFlow Suite..." -ForegroundColor Yellow
-    Start-Sleep -Seconds 1
-    [Console]::ResetColor()
-} | Out-Null
+# Limpiar pantalla al iniciar como admin
+Clear-Host
+Write-Host "✅ EJECUTANDO CON PERMISOS DE ADMINISTRADOR" -ForegroundColor Green
+Start-Sleep -Seconds 1
+Clear-Host
 
-# Función para manejar Ctrl+C gracefulmente
-trap {
-    Write-Host "`n`n[!] Operación cancelada por el usuario" -ForegroundColor Yellow
-    Write-Host "[!] Presiona ENTER para volver al menú principal..." -ForegroundColor Gray
-    $null = Read-Host
-    continue
+# ============================================================
+# 🔍 DIAGNÓSTICO DE ELEVACIÓN
+# ============================================================
+function Test-AdminAndContinue {
+    $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    $isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    
+    if (-not $isAdmin) {
+        Write-Host "`n ⚠️ ERROR: No se pudo elevar a Administrador automáticamente." -ForegroundColor Red
+        Write-Host ""
+        Write-Host " 📌 SOLUCIÓN MANUAL:" -ForegroundColor Yellow
+        Write-Host "    1. Cierra esta ventana" -ForegroundColor Gray
+        Write-Host "    2. Haz clic DERECHO en el archivo" -ForegroundColor Gray
+        Write-Host "    3. Selecciona 'Ejecutar como administrador'" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host " Presiona ENTER para salir..."
+        Read-Host
+        exit
+    }
+    
+    Write-Host "`n ✅ EJECUTANDO CON PERMISOS DE ADMINISTRADOR" -ForegroundColor Green
+    Start-Sleep -Seconds 1
 }
 
+# Llamar a la función después de la auto-elevación
+Test-AdminAndContinue
 
 # ============================================================
-# CONFIGURACIÓN INICIAL
+# 🛠️ [AUTO-REPARADOR] - WINGET & CHOCOLATEY
+# ============================================================
+
+function Repair-Winget {
+    $wingetOk = $false
+    try {
+        $test = winget --version 2>&1
+        if ($LASTEXITCODE -eq 0 -and $test -match "\d+\.\d+") {
+            $wingetOk = $true
+        } else {
+            throw "Winget no responde"
+        }
+    } catch {
+        Write-Host "   🔧 Reparando motor WINGET 🧊..." -ForegroundColor Yellow
+        $wingetUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
+        $wingetBundle = "$env:TEMP\winget_latest.msixbundle"
+        try {
+            Invoke-WebRequest -Uri $wingetUrl -OutFile $wingetBundle -UseBasicParsing -ErrorAction Stop
+            Add-AppxPackage -Path $wingetBundle -ErrorAction Stop
+            Remove-Item $wingetBundle -Force -ErrorAction SilentlyContinue
+            $wingetOk = $true
+        } catch {
+            Write-Host "   ❌ ERROR: No se pudo reparar Winget automáticamente" -ForegroundColor Red
+        }
+    }
+    return $wingetOk
+}
+
+function Repair-Chocolatey {
+    $chocoOk = $false
+    try {
+        $test = choco --version 2>&1
+        if ($LASTEXITCODE -eq 0 -and $test -match "\d+\.\d+\.\d+") {
+            $chocoOk = $true
+        } else {
+            throw "Choco no responde"
+        }
+    } catch {
+        Write-Host "   🔧 Instalando CHOCOLATEY 🍫..." -ForegroundColor Yellow
+        try {
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+            $installScript = (New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')
+            Invoke-Expression $installScript
+            refreshenv 2>&1 | Out-Null
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+            $chocoOk = $true
+        } catch {
+            Write-Host "   ❌ ERROR: No se pudo instalar Chocolatey automáticamente" -ForegroundColor Red
+        }
+    }
+    return $chocoOk
+}
+
+# ============================================================
+# 🔍 [EJECUCIÓN] - VALIDACIÓN DE REPOSITORIOS
+# ============================================================
+
+Write-Host ""
+Write-Host " 📦 ESTADO DE REPOSITORIOS DE SOFTWARE" -ForegroundColor Cyan
+Write-Host $LINEA -ForegroundColor Gray
+
+# Winget
+$wingetWorking = Repair-Winget
+if ($wingetWorking) {
+    Write-Host "   ✅ WINGET      : DISPONIBLE 🧊" -ForegroundColor Green
+} else {
+    Write-Host "   ⚠️ WINGET      : NO DISPONIBLE (Uso de URLs manuales)" -ForegroundColor Yellow
+}
+
+# Chocolatey
+$chocoWorking = Repair-Chocolatey
+if ($chocoWorking) {
+    Write-Host "   ✅ CHOCOLATEY  : DISPONIBLE 🍫" -ForegroundColor Green
+} else {
+    Write-Host "   ⚠️ CHOCOLATEY  : NO DISPONIBLE" -ForegroundColor Yellow
+}
+
+Write-Host $LINEA -ForegroundColor Gray
+Write-Host "   💡 RECOMENDACIÓN: Los repositorios permiten instalaciones silenciosas." -ForegroundColor Gray
+
+# Pequeña pausa para que el usuario lea
+Start-Sleep -Seconds 1
+
+# ============================================================
+# 🔄 VERIFICACIÓN DE ACTUALIZACIONES
+# ============================================================
+
+Write-Host "`n 🔍 [1/3] VERIFICANDO ACTUALIZACIONES..." -ForegroundColor Gray
+
+$scriptPath = if ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { $PSCommandPath }
+if (-not $scriptPath) { $scriptPath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName }
+
+$carpetaDelScript = Split-Path $scriptPath -Parent
+$nombreDelExe = [System.IO.Path]::GetFileName($scriptPath)
+$exeActual = "$carpetaDelScript\$nombreDelExe"
+
+try {
+    $apiUrl = "https://api.github.com/repos/LUISFGARCIAE/TechFlow_Suite_Pro/releases/latest"
+    $latestRelease = Invoke-RestMethod -Uri $apiUrl -ErrorAction SilentlyContinue
+    $latestVersion = $latestRelease.tag_name -replace 'v', ''
+    
+    if ($latestVersion -and ($latestVersion -ne "5.8")) {
+        Write-Host " $LINEA" -ForegroundColor Yellow
+        Write-Host "   🚀 ¡NUEVA VERSIÓN DISPONIBLE!" -ForegroundColor Yellow
+        Write-Host "   📦 Actual: v5.8  ➜  Nueva: v$latestVersion" -ForegroundColor Cyan
+        Write-Host " $LINEA" -ForegroundColor Yellow
+        
+        $update = Read-Host "`n   ❓ ¿Deseas actualizar ahora? (S/N)"
+        
+        if ($update -eq "S" -or $update -eq "s") {
+            $asset = $latestRelease.assets | Where-Object { $_.name -like "*.exe" } | Select-Object -First 1
+            
+            if (-not $asset) {
+                Write-Host "   ❌ ERROR: No se encontró archivo ejecutable en el servidor." -ForegroundColor Red
+                Read-Host "   Presiona ENTER para continuar..."
+            } else {
+                Write-Host "   ⏳ Descargando nueva versión..." -ForegroundColor Yellow
+                $nuevaVersion = "$carpetaDelScript\TechFlow_NUEVO.exe"
+                Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $nuevaVersion -UseBasicParsing
+                
+                if (Test-Path $nuevaVersion) {
+                    Write-Host "   ✅ Descarga completada con éxito." -ForegroundColor Green
+                    
+                    $batFile = "$carpetaDelScript\actualizar.bat"
+                    $batContent = @"
+@echo off
+cd /d "$carpetaDelScript"
+timeout /t 2 /nobreak > nul
+taskkill /f /im "$nombreDelExe" > nul 2>&1
+timeout /t 2 /nobreak > nul
+del /f /q "$nombreDelExe" > nul 2>&1
+timeout /t 1 /nobreak > nul
+copy /y "TechFlow_NUEVO.exe" "$nombreDelExe" > nul
+timeout /t 1 /nobreak > nul
+start "" "$nombreDelExe"
+del /f /q "TechFlow_NUEVO.exe" > nul 2>&1
+del /f /q "%~f0" > nul 2>&1
+exit
+"@
+                    $batContent | Out-File -FilePath $batFile -Encoding ascii -Force
+                    Write-Host "   🔄 Aplicando parche de actualización..." -ForegroundColor Yellow
+                    Start-Process -FilePath $batFile -WindowStyle Hidden
+                    Start-Sleep -Seconds 3
+                    exit
+                } else {
+                    Write-Host "   ❌ ERROR: Falló la descarga del archivo." -ForegroundColor Red
+                    Read-Host "   Presiona ENTER para continuar..."
+                }
+            }
+        }
+    } else {
+        Write-Host "   ✅ Versión al día (v5.8)." -ForegroundColor Green
+    }
+} catch {
+    Write-Host "   ⚠️ No se pudo conectar con el servidor de actualizaciones." -ForegroundColor Yellow
+}
+
+# ============================================================
+# 🛡️ [AUTO-EXCLUSIÓN] - SEGURIDAD DEFENDER
+# ============================================================
+Write-Host " 🔍 [2/3] OPTIMIZANDO PROTECCIÓN DEFENDER..." -ForegroundColor Gray
+$exePath = $MyInvocation.MyCommand.Path
+$exeName = [System.IO.Path]::GetFileName($exePath)
+$exeFolder = Split-Path $exePath -Parent
+
+$currentExclusions = Get-MpPreference -ErrorAction SilentlyContinue
+$isPathExcluded = $currentExclusions.ExclusionPath -contains $exeFolder
+$isProcessExcluded = $currentExclusions.ExclusionProcess -contains $exeName
+
+if (-not ($isPathExcluded -and $isProcessExcluded)) {
+    try {
+        Add-MpPreference -ExclusionPath $exeFolder -ErrorAction SilentlyContinue
+        Add-MpPreference -ExclusionProcess $exeName -ErrorAction SilentlyContinue
+        Write-Host "   ✅ TechFlow añadido a exclusiones de seguridad." -ForegroundColor Green
+    } catch {
+        Write-Host "   ⚠️ Ejecuta como Admin para habilitar auto-exclusión." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "   🛡️ El script ya cuenta con protección total." -ForegroundColor Green
+}
+
+# ============================================================
+# 🧹 LIMPIEZA DE RESIDUOS
+# ============================================================
+Write-Host " 🔍 [3/3] LIMPIANDO TEMPORALES DE INICIO..." -ForegroundColor Gray
+$basura1 = "$carpetaDelScript\TechFlow_NUEVO.exe"
+$basura2 = "$carpetaDelScript\actualizar.bat"
+if (Test-Path $basura1) { Remove-Item $basura1 -Force -ErrorAction SilentlyContinue }
+if (Test-Path $basura2) { Remove-Item $basura2 -Force -ErrorAction SilentlyContinue }
+Get-ChildItem -Path $carpetaDelScript -Include "TechFlow_Backup*.exe","TechFlow_Nueva*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+
+Write-Host "   ✨ Entorno de ejecución limpio." -ForegroundColor Green
+Start-Sleep -Seconds 0
+
+
+# ============================================================
+# ⚙️ CONFIGURACIÓN INICIAL Y LOGS
 # ============================================================
 $LOG_FILE = Join-Path $PSScriptRoot ("techflowlog_" + (Get-Date).ToString("yyyyMMdd") + ".log")
 $PREFS_FILE = Join-Path $PSScriptRoot "suite_prefs.json"
 $CONFIG_FILE = "$PSScriptRoot\suite_config.dat"
-$COLOR_PRIMARY = "Green"; $COLOR_ALERT = "Yellow"; $COLOR_DANGER = "Red"; $COLOR_MENU = "Cyan"
+$COLOR_PRIMARY = "Green"; $COLOR_ALERT = "Yellow"; $COLOR_DANGER = "Red"; $COLOR_MENU = "Cyan"; $COLOR_PROCESO = "Cyan"; $COLOR_WARNING = "Yellow"
 $Global:MenuHorizontal = $true
 
-# ============================================================
-# ROTACIÓN DE LOGS
-# ============================================================
 function Rotate-Log {
     param([string]$LogPath = $LOG_FILE)
-    
-    # DEPURACIÓN: Verificar si $LOG_FILE está vacío
-    if (-not $LogPath) {
-        Write-Host "[LOG] ADVERTENCIA: La ruta del log está vacía. No se puede rotar." -ForegroundColor DarkGray
-        return
-    }
-    
+    if (-not $LogPath) { return }
     try {
         if (Test-Path $LogPath) {
             $fileInfo = Get-Item $LogPath -ErrorAction SilentlyContinue
             if ($fileInfo.Length -gt 10MB) {
                 $oldLog = $LogPath -replace '\.log$', '_old.log'
-                if (Test-Path $oldLog) {
-                    Remove-Item $oldLog -Force -ErrorAction SilentlyContinue
-                    Write-Host "[LOG] BACKOP anterior eliminado" -ForegroundColor DarkGray
-                }
+                if (Test-Path $oldLog) { Remove-Item $oldLog -Force -ErrorAction SilentlyContinue }
                 Move-Item $LogPath $oldLog -Force -ErrorAction Stop
-                Write-Host "[LOG] Rotación completada: $oldLog" -ForegroundColor Green
-                Write-Log "INFO" "Log rotated (size >10MB). Old log: $oldLog"
+                Write-Log "INFO" "Log rotado por tamaño excesivo (>10MB)."
             }
         }
-    } catch {
-        Write-Host "[LOG] Error en rotación: $($_.Exception.Message)" -ForegroundColor DarkGray
-    }
+    } catch {}
 }
 
-# Ejecutar rotación al inicio del script
 Rotate-Log
 
 # ============================================================
-# DEFINICIÓN DE ESTRUCTURA DE USUARIO Y BACKOP
+# 📂 DEFINICIÓN DE ESTRUCTURA
 # ============================================================
 $USER_FOLDER_NAMES = @("Desktop", "Documents", "Pictures", "Videos", "Music", "Downloads", "Favorites", "Contacts")
 $USER_FOLDERS = $USER_FOLDER_NAMES
 $DEFAULT_BACKOP_BASE = "$env:SystemDrive\BACKOPs"
 
-# ============================================================
-# MOTOR DE LOGGING Y REGISTRO DE EVENTOS
-# ============================================================
 function Write-Log {
     param(
         [Parameter(Mandatory = $true)][string]$Level,
@@ -91,72 +296,62 @@ function Write-Log {
     )
     $ts = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     $logEntry = "$ts [$Level] $Message"
-    
     Add-Content -Path $LOG_FILE -Value $logEntry -Encoding utf8 -ErrorAction SilentlyContinue
     
     if (-not $NoConsole) {
-        switch ($Level) {
-            "ERROR"   { Write-Host $logEntry -ForegroundColor Red }
-            "WARN"    { Write-Host $logEntry -ForegroundColor Yellow }
-            "SUCCESS" { Write-Host $logEntry -ForegroundColor Green }
-            "INFO"    { Write-Host $logEntry -ForegroundColor Gray }
-            default   { Write-Host $logEntry }
-        }
+        $color = switch ($Level) { "ERROR" { "Red" } "WARN" { "Yellow" } "SUCCESS" { "Green" } default { "Gray" } }
+        $ico = switch ($Level) { "ERROR" { "❌" } "WARN" { "⚠️" } "SUCCESS" { "✅" } default { "ℹ️" } }
+        Write-Host "   $ico $logEntry" -ForegroundColor $color
     }
 }
 
-# ============================================================
-# ESTADÍSTICAS DE LOG
-# ============================================================
 function Get-LogStats {
     if (Test-Path $LOG_FILE) {
         $lines = Get-Content $LOG_FILE -ErrorAction SilentlyContinue
         $errorCount = ($lines | Select-String "\[ERROR\]").Count
         $warnCount = ($lines | Select-String "\[WARN\]").Count
         $size = (Get-Item $LOG_FILE).Length
-        Write-Host "`n📊 ESTADÍSTICAS DE LOG:" -ForegroundColor Cyan
-        Write-Host "  Archivo: $LOG_FILE"
-        Write-Host "  Tamaño: $([math]::Round($size/1KB,2)) KB"
-        Write-Host "  Líneas totales: $($lines.Count)"
-        Write-Host "  Errores: $errorCount"
-        Write-Host "  Advertencias: $warnCount"
+        Write-Host "`n 📊 ESTADÍSTICAS DEL SISTEMA (LOGS):" -ForegroundColor Cyan
+        Write-Host "   📄 Archivo: $LOG_FILE"
+        Write-Host "   📦 Tamaño: $([math]::Round($size/1KB,2)) KB"
+        Write-Host "   📝 Líneas totales: $($lines.Count)"
+        Write-Host "   🔴 Errores: $errorCount"
+        Write-Host "   🟡 Advertencias: $warnCount"
     }
 }
 
-# ============================================================
-# LIMPIEZA DE ARCHIVOS PENDIENTES
-# ============================================================
 function Clear-PendingDeletes {
     $pendingDir = "$env:TEMP\_pending_delete_"
     if (Test-Path $pendingDir) {
-        Write-Host "[LIMPIADOR] Eliminando archivos pendientes del reinicio anterior..." -ForegroundColor DarkGray
+        Write-Host " 🧹 ELIMINANDO ARCHIVOS PENDIENTES..." -ForegroundColor Gray
         Start-Process -NoNewWindow -Wait cmd -ArgumentList "/c rmdir /s /q `"$pendingDir`"" -WindowStyle Hidden
     }
 }
 Clear-PendingDeletes
 
 # ============================================================
-# MOSTRAR TÍTULO
+# 🖥️ BANNER PRINCIPAL
 # ============================================================
-Write-Host @"
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                                                                               ║
-║    ████████╗███████╗ ██████╗██╗  ██╗    ███████╗██╗      ██████╗ ██╗    ██╗   ║
-║    ╚══██╔══╝██╔════╝██╔════╝██║  ██║    ██╔════╝██║     ██╔═══██╗██║    ██║   ║
-║       ██║   █████╗  ██║     ███████║    █████╗  ██║     ██║   ██║██║ █╗ ██║   ║
-║       ██║   ██╔══╝  ██║     ██╔══██║    ██╔══╝  ██║     ██║   ██║██║███╗██║   ║
-║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝   ║
-║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝    ║
-║                                                                               ║
-║                                PRO EDITION v5.7                               ║
-║                                                                               ║
-║                    SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                ║
-║                                                                               ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-"@ -ForegroundColor Cyan
+$Banner = @"
+ ╔═══════════════════════════════════════════════════════════════════════════════╗
+ ║                                                                               ║
+ ║    ████████╗███████╗ ██████╗██╗  ██╗    ███████╗██╗      ██████╗ ██╗    ██╗   ║
+ ║    ╚══██╔══╝██╔════╝██╔════╝██║  ██║    ██╔════╝██║     ██╔═══██╗██║    ██║   ║
+ ║       ██║   █████╗  ██║     ███████║    █████╗  ██║     ██║   ██║██║ █╗ ██║   ║
+ ║       ██║   ██╔══╝  ██║     ██╔══██║    ██╔══╝  ██║     ██║   ██║██║███╗██║   ║
+ ║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝   ║
+ ║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝    ║
+ ║                                                                               ║
+ ║                                PRO EDITION v5.8                               ║
+ ║                                                                               ║
+ ║                    SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                ║
+ ║                                                                               ║
+ ╚═══════════════════════════════════════════════════════════════════════════════╝
+"@
+Write-Host $Banner -ForegroundColor Cyan
 
 # ============================================================
-# LIMPIEZA AUTOMÁTICA DE BASURA DE ACTUALIZACIONES
+# 🧹 LIMPIEZA AUTOMÁTICA DE BASURA DE ACTUALIZACIONES
 # ============================================================
 function Start-CleanupScheduler {
     # Programar limpieza de archivos temporales viejos al cerrar el script
@@ -184,13 +379,13 @@ function Start-CleanupScheduler {
 Start-CleanupScheduler
 
 # ============================================================
-# AUTO-ACTUALIZACIÓN - SIMPLE Y DIRECTA
+# 🔄 AUTO-ACTUALIZACIÓN - SIMPLE Y DIRECTA
 # ============================================================
-$currentVersion = "5.7"
+$currentVersion = "5.8"
 $repoOwner = "LUISFGARCIAE"
 $repoName = "TechFlow_Suite_Pro"
 
-Write-Host "`n[+] Verificando actualizaciones..." -ForegroundColor DarkGray
+Write-Host "`n 🔍 [🔄] Verificando actualizaciones..." -ForegroundColor DarkGray
 
 # Obtener la carpeta DONDE ESTÁ EL SCRIPT
 $scriptPath = $MyInvocation.MyCommand.Path
@@ -205,8 +400,8 @@ $carpetaDelScript = Split-Path $scriptPath -Parent
 $nombreDelExe = [System.IO.Path]::GetFileName($scriptPath)
 $exeActual = "$carpetaDelScript\$nombreDelExe"
 
-Write-Host "[DEBUG] Carpeta: $carpetaDelScript" -ForegroundColor DarkGray
-Write-Host "[DEBUG] EXE actual: $exeActual" -ForegroundColor DarkGray
+Write-Host "   📂 [DEBUG] Carpeta: $carpetaDelScript" -ForegroundColor DarkGray
+Write-Host "   🎯 [DEBUG] EXE actual: $exeActual" -ForegroundColor DarkGray
 
 try {
     $apiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases/latest"
@@ -214,21 +409,21 @@ try {
     $latestVersion = $latestRelease.tag_name -replace 'v', ''
     
     if ($latestVersion -and ($latestVersion -ne $currentVersion)) {
-        Write-Host "`n============================================================" -ForegroundColor Yellow
-        Write-Host "  [!] NUEVA VERSIÓN DISPONIBLE!" -ForegroundColor Yellow
-        Write-Host "      Actual: v$currentVersion -> Nueva: v$latestVersion" -ForegroundColor Cyan
-        Write-Host "============================================================" -ForegroundColor Yellow
+        Write-Host " ════════════════════════════════════════════════════════════" -ForegroundColor Yellow
+        Write-Host "   🚀 [!] ¡NUEVA VERSIÓN DISPONIBLE!" -ForegroundColor Yellow
+        Write-Host "   📦 Actual: v$currentVersion -> Nueva: v$latestVersion" -ForegroundColor Cyan
+        Write-Host " ════════════════════════════════════════════════════════════" -ForegroundColor Yellow
         
-        $update = Read-Host "`n ¿Deseas actualizar ahora? (S/N)"
+        $update = Read-Host "`n   ❓ ¿Deseas actualizar ahora? (S/N)"
         
         if ($update -eq "S") {
             $asset = $latestRelease.assets | Where-Object { $_.name -like "*.exe" } | Select-Object -First 1
             
             if (-not $asset) {
-                Write-Host "[ERROR] No se encontró archivo .exe" -ForegroundColor Red
-                Read-Host "Presiona ENTER"
+                Write-Host "   ❌ [ERROR] No se encontró archivo .exe" -ForegroundColor Red
+                Read-Host "   Presiona ENTER"
             } else {
-                Write-Host "[+] Descargando nueva versión..." -ForegroundColor Yellow
+                Write-Host "   ⏳ [+] Descargando nueva versión..." -ForegroundColor Yellow
                 
                 # La nueva versión se guarda en la MISMA CARPETA
                 $nuevaVersion = "$carpetaDelScript\TechFlow_NUEVO.exe"
@@ -237,7 +432,7 @@ try {
                 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $nuevaVersion -UseBasicParsing
                 
                 if (Test-Path $nuevaVersion) {
-                    Write-Host "[✔] Descarga completada en: $carpetaDelScript" -ForegroundColor Green
+                    Write-Host "   ✅ [✔] Descarga completada en: $carpetaDelScript" -ForegroundColor Green
                     
                     # Crear un script BAT simple en la misma carpeta
                     $batFile = "$carpetaDelScript\actualizar.bat"
@@ -261,8 +456,8 @@ exit
                     # Guardar el BAT
                     $batContent | Out-File -FilePath $batFile -Encoding ascii -Force
                     
-                    Write-Host "`n[+] Aplicando actualización..." -ForegroundColor Yellow
-                    Write-Host "    La ventana se cerrará sola en 3 segundos..." -ForegroundColor Gray
+                    Write-Host "`n   🔄 [+] Aplicando actualización..." -ForegroundColor Yellow
+                    Write-Host "   💡 La ventana se cerrará sola en 3 segundos..." -ForegroundColor Gray
                     
                     # Ejecutar el BAT
                     Start-Process -FilePath $batFile -WindowStyle Hidden
@@ -272,50 +467,46 @@ exit
                     exit
                     
                 } else {
-                    Write-Host "[ERROR] No se pudo descargar la nueva versión" -ForegroundColor Red
-                    Read-Host "Presiona ENTER"
+                    Write-Host "   ❌ [ERROR] No se pudo descargar la nueva versión" -ForegroundColor Red
+                    Read-Host "   Presiona ENTER"
                 }
             }
         }
     } else {
-        Write-Host "[✔] Versión actualizada (v$currentVersion)" -ForegroundColor DarkGray
+        Write-Host "   ✅ [✔] Versión actualizada (v$currentVersion)" -ForegroundColor DarkGray
     }
 } catch {
-    Write-Host "[!] No se pudo verificar actualizaciones" -ForegroundColor DarkGray
+    Write-Host "   ⚠️ [!] No se pudo verificar actualizaciones" -ForegroundColor DarkGray
 }
 
 # ============================================================
-# VERIFICACIÓN DE DEFENDER (EVITAR BORRADOS SILENCIOSOS)
+# 🛡️ [AUTO-EXCLUSIÓN] - Silenciosa para Defender
 # ============================================================
 $exePath = $MyInvocation.MyCommand.Path
-$defenderExclusions = Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
+$exeName = [System.IO.Path]::GetFileName($exePath)
+$exeFolder = Split-Path $exePath -Parent
 
-if ($defenderExclusions -notcontains $PSScriptRoot) {
-    Write-Host "`n[!] ADVERTENCIA DE SEGURIDAD" -ForegroundColor Yellow
-    Write-Host "    Windows Defender podría detectar esta herramienta como 'no deseada'" -ForegroundColor Yellow
-    Write-Host "    por sus capacidades de mantenimiento y activación." -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "    Para evitar que sea eliminada automáticamente:" -ForegroundColor Cyan
-    Write-Host "    1. Abre Windows Security" -ForegroundColor Gray
-    Write-Host "    2. Ve a 'Protección contra virus y amenazas'" -ForegroundColor Gray
-    Write-Host "    3. Haz clic en 'Administrar configuración'" -ForegroundColor Gray
-    Write-Host "    4. Agrega esta carpeta como exclusión: $PSScriptRoot" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "    ¿Deseas agregar automáticamente la exclusión? (requiere Admin)" -ForegroundColor Yellow
-    $addExclusion = Read-Host " [S/N]"
-    if ($addExclusion -eq "S") {
-        try {
-            Add-MpPreference -ExclusionPath $PSScriptRoot -ErrorAction SilentlyContinue
-            Add-MpPreference -ExclusionProcess (Split-Path $exePath -Leaf) -ErrorAction SilentlyContinue
-            Write-Host "    ✅ Exclusión agregada correctamente" -ForegroundColor Green
-        } catch {
-            Write-Host "    ❌ No se pudo agregar. Hazlo manualmente." -ForegroundColor Red
-        }
+# Verificar si ya está excluido
+$currentExclusions = Get-MpPreference -ErrorAction SilentlyContinue
+$isPathExcluded = $currentExclusions.ExclusionPath -contains $exeFolder
+$isProcessExcluded = $currentExclusions.ExclusionProcess -contains $exeName
+
+# Solo intentar si falta alguna exclusión
+if (-not ($isPathExcluded -and $isProcessExcluded)) {
+    Write-Host "`n   🔧 [🔧] Configurando exclusión en Defender..." -ForegroundColor DarkGray
+    try {
+        Add-MpPreference -ExclusionPath $exeFolder -ErrorAction SilentlyContinue
+        Add-MpPreference -ExclusionProcess $exeName -ErrorAction SilentlyContinue
+        Write-Host "   ✅ [✅] TechFlow protegido - Defender no lo molestará" -ForegroundColor DarkGray
+    } catch {
+        Write-Host "   ⚠️ [⚠️] No se pudo auto-excluir (ejecuta como Admin para protección total)" -ForegroundColor DarkGray
     }
 }
 
+Write-Host "`n   🚀 [+] Cargando menú principal..." -ForegroundColor Green
+
 # ============================================================
-# LIMPIEZA - Borrar cualquier archivo temporal que haya quedado
+# 🧹 LIMPIEZA - Borrar cualquier archivo temporal que haya quedado
 # ============================================================
 $basura1 = "$carpetaDelScript\TechFlow_NUEVO.exe"
 $basura2 = "$carpetaDelScript\actualizar.bat"
@@ -326,13 +517,10 @@ if (Test-Path $basura1) { Remove-Item $basura1 -Force -ErrorAction SilentlyConti
 if (Test-Path $basura2) { Remove-Item $basura2 -Force -ErrorAction SilentlyContinue }
 Get-ChildItem -Path $carpetaDelScript -Include "TechFlow_Backup*.exe","TechFlow_Nueva*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
-Write-Host "`n[+] Cargando menú principal..." -ForegroundColor Green
-# ============================================================
-# CONTINÚA CON EL RESTO DE TU SCRIPT
-# ============================================================
+Write-Host "`n   🚀 [+] Cargando menú principal..." -ForegroundColor Green
 
 # ============================================================
-# LECTURA DE CONFIGURACION PERSISTENTE
+# ⚙️ LECTURA DE CONFIGURACION PERSISTENTE
 # ============================================================
 function Get-Prefs {
     if(Test-Path $PREFS_FILE){
@@ -352,7 +540,7 @@ function Get-Prefs {
 }
 
 # ============================================================
-# GUARDADO DE CONFIGURACION PERSISTENTE
+# 💾 GUARDADO DE CONFIGURACION PERSISTENTE
 # ============================================================
 function Save-Prefs($prefs){
     try {
@@ -364,15 +552,15 @@ function Save-Prefs($prefs){
 }
 
 # ============================================================
-# PAUSA ESTANDAR CON MENSAJE
+# ⏸️ PAUSA ESTANDAR CON MENSAJE
 # ============================================================
 function Pause-Enter {
-    param([string]$Message = " PRESIONE ENTER PARA VOLVER")
+    param([string]$Message = "   ⌨️ PRESIONE ENTER PARA VOLVER")
     Read-Host $Message | Out-Null
 }
 
 # ============================================================
-# LECTOR DE OPCIONES DE MENU ROBUSTO
+# ⌨️ LECTOR DE OPCIONES DE MENU ROBUSTO
 # ============================================================
 function Read-MenuOption {
     param(
@@ -385,7 +573,7 @@ function Read-MenuOption {
         if ($Host.UI.RawUI.KeyAvailable) {
             $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
             if ($key.ControlKeyChar -eq 3) {
-                Write-Host "`n`n[!] Ctrl+C detectado. Saliendo..." -ForegroundColor Yellow
+                Write-Host "`n`n   🛑 [!] Ctrl+C detectado. Saliendo..." -ForegroundColor Yellow
                 Start-Sleep -Seconds 1
                 exit
             }
@@ -394,18 +582,18 @@ function Read-MenuOption {
         $raw = Read-Host $Prompt
         if (-not $raw -or -not $raw.Trim()) {
             if ($AllowEmpty) { return "" }
-            Write-Host " Entrada requerida" -ForegroundColor Yellow
+            Write-Host "   ⚠️ Entrada requerida" -ForegroundColor Yellow
             continue
         }
         $opt = $raw.Trim().ToUpper()
         if ($Valid.Count -eq 0 -or $Valid -contains $opt) { return $opt }
-        Write-Host "`n [!] OPCIÓN NO VÁLIDA: $opt" -ForegroundColor $COLOR_DANGER
+        Write-Host "`n   ❌ [!] OPCIÓN NO VÁLIDA: $opt" -ForegroundColor $COLOR_DANGER
         Start-Sleep -Seconds 1
     }
 }
 
 # ============================================================
-# DETECTOR DE PERMISOS ADMINISTRADOR (VERIFICA TOKEN DE SEGURIDAD)
+# 🛡️ DETECTOR DE PERMISOS ADMINISTRADOR (VERIFICA TOKEN DE SEGURIDAD)
 # ============================================================
 function Test-IsAdmin {
     try {
@@ -418,7 +606,7 @@ function Test-IsAdmin {
 }
 
 # ============================================================
-# IDENTIFICADOR DE USUARIO ADMIN LOCALIZADO (DETECTA ESPAÑOL/INGLES)
+# 👤 IDENTIFICADOR DE USUARIO ADMIN LOCALIZADO (DETECTA ESPAÑOL/INGLES)
 # ============================================================
 function Get-AdminUsername {
     $locale = (Get-WinSystemLocale).Name
@@ -430,25 +618,24 @@ function Get-AdminUsername {
 }
 
 # ============================================================
-# VALIDADOR Y SOLICITADOR DE ADMIN (VERIFICA Y ADVIERTE SI NO ES ADMIN)
+# 🔑 VALIDADOR Y SOLICITADOR DE ADMIN (VERIFICA Y ADVIERTE SI NO ES ADMIN)
 # ============================================================
 function Require-Admin {
     param([string]$ActionName = "esta operación")
     if (-not (Test-IsAdmin)) {
-        Write-Host "`n [!] Requiere permisos de ADMIN para $ActionName." -ForegroundColor $COLOR_DANGER
-        Write-Host "     Cierra y ejecuta PowerShell como Administrador." -ForegroundColor $COLOR_ALERT
+        Write-Host "`n   🛑 [!] Requiere permisos de ADMIN para $ActionName." -ForegroundColor $COLOR_DANGER
+        Write-Host "      Cierra y ejecuta PowerShell como Administrador." -ForegroundColor $COLOR_ALERT
         Write-Log "WARN" "Admin required for: $ActionName"
-        Pause-Enter " ENTER"
+        Pause-Enter "   ⌨️ ENTER"
         return $false
     }
     return $true
 }
 
 # ============================================================
-# DETECTOR DE CONEXION A INTERNET (PING A 1.1.1.1)
+# 🌐 DETECTOR DE CONEXION A INTERNET (PING A 1.1.1.1)
 # ============================================================
 function Test-HasInternet {
-
     try {
         return Test-Connection -ComputerName "1.1.1.1" -Count 1 -Quiet -ErrorAction SilentlyContinue
     } catch {
@@ -457,28 +644,27 @@ function Test-HasInternet {
 }
 
 # ============================================================
-# CONFIRMACION DE OPERACIONES CRITICAS (PIN + KEYWORD)
+# ⚠️ CONFIRMACION DE OPERACIONES CRITICAS (PIN + KEYWORD)
 # ============================================================
 function Confirm-Critical {
-
     param(
         [Parameter(Mandatory = $true)][string]$Title,
         [Parameter(Mandatory = $true)][string]$Keyword
     )
     Show-MainTitle
-    Write-Host "`n OPERACIÓN CRÍTICA: $Title" -ForegroundColor $COLOR_DANGER
+    Write-Host "`n   🔥 OPERACIÓN CRÍTICA: $Title" -ForegroundColor $COLOR_DANGER
     $pin = Get-Random -Min 1000 -Max 9999
-    Write-Host "`n PIN DE SEGURIDAD $pin" -BackgroundColor Red -ForegroundColor White
-    $p = Read-Host " INGRESE PIN PARA CONFIRMAR"
+    Write-Host "`n   🔐 PIN DE SEGURIDAD $pin" -BackgroundColor Red -ForegroundColor White
+    $p = Read-Host "   ⌨️ INGRESE PIN PARA CONFIRMAR"
     if ($p -ne $pin.ToString()) {
-        Write-Host "`n [!] PIN INCORRECTO." -ForegroundColor $COLOR_DANGER
+        Write-Host "`n   ❌ [!] PIN INCORRECTO." -ForegroundColor $COLOR_DANGER
         Write-Log "WARN" "Critical confirm failed (PIN): $Title"
         Start-Sleep -Seconds 1
         return $false
     }
-    $k = (Read-Host " ESCRIBA '$Keyword' PARA CONTINUAR").Trim().ToUpper()
+    $k = (Read-Host "   ⌨️ ESCRIBA '$Keyword' PARA CONTINUAR").Trim().ToUpper()
     if ($k -ne $Keyword.Trim().ToUpper()) {
-        Write-Host "`n [!] PALABRA DE CONFIRMACIÓN INCORRECTA." -ForegroundColor $COLOR_DANGER
+        Write-Host "`n   ❌ [!] PALABRA DE CONFIRMACIÓN INCORRECTA." -ForegroundColor $COLOR_DANGER
         Write-Log "WARN" "Critical confirm failed (keyword): $Title"
         Start-Sleep -Seconds 1
         return $false
@@ -488,24 +674,23 @@ function Confirm-Critical {
 }
 
 # ============================================================
-# CONFIRMACION DE SCRIPTS REMOTOS (URL + INTERNET)
+# ☁️ CONFIRMACION DE SCRIPTS REMOTOS (URL + INTERNET)
 # ============================================================
 function Confirm-RemoteScript {
-
     param([Parameter(Mandatory = $true)][string]$Url)
     Show-MainTitle
-    Write-Host "`n [!] SE EJECUTARÁ UN SCRIPT REMOTO:" -ForegroundColor $COLOR_ALERT
-    Write-Host "     $Url" -ForegroundColor $COLOR_MENU
-    Write-Host "     Esto puede modificar el sistema." -ForegroundColor $COLOR_ALERT
-    $ok = Read-MenuOption " CONTINUAR? (S/N)" -Valid @("S","N")
+    Write-Host "`n   📡 [!] SE EJECUTARÁ UN SCRIPT REMOTO:" -ForegroundColor $COLOR_ALERT
+    Write-Host "      $Url" -ForegroundColor $COLOR_MENU
+    Write-Host "      Esto puede modificar el sistema." -ForegroundColor $COLOR_ALERT
+    $ok = Read-MenuOption "   ❓ CONTINUAR? (S/N)" -Valid @("S","N")
     if ($ok -ne "S") {
         Write-Log "INFO" "Remote script canceled: $Url"
         return $false
     }
     if (-not (Test-HasInternet)) {
-        Write-Host "`n [!] Sin conexión a Internet." -ForegroundColor $COLOR_DANGER
+        Write-Host "`n   🚫 [!] Sin conexión a Internet." -ForegroundColor $COLOR_DANGER
         Write-Log "WARN" "Remote script blocked (no internet): $Url"
-        Pause-Enter " ENTER"
+        Pause-Enter "   ⌨️ ENTER"
         return $false
     }
     Write-Log "INFO" "Remote script confirmed: $Url"
@@ -513,10 +698,9 @@ function Confirm-RemoteScript {
 }
 
 # ============================================================
-# FORMATEO DE BYTES A UNIDADES LEGIBLES (B/KB/MB/GB/TB)
+# 📏 FORMATEO DE BYTES A UNIDADES LEGIBLES (B/KB/MB/GB/TB)
 # ============================================================
 function Format-Bytes([Int64]$Bytes) {
-
     if ($Bytes -lt 1KB) { return "$Bytes B" }
     if ($Bytes -lt 1MB) { return "{0:N2} KB" -f ($Bytes / 1KB) }
     if ($Bytes -lt 1GB) { return "{0:N2} MB" -f ($Bytes / 1MB) }
@@ -525,10 +709,184 @@ function Format-Bytes([Int64]$Bytes) {
 }
 
 # ============================================================
-# CALCULO DE TAMAÑO TOTAL DE CARPETA (RECURSIVO)
+# 📁 ESCANER DE UNIDADES INTELIGENTE (BACKOP/RESTORE)
+# ============================================================
+
+function Scan-DriveUnits {
+    $units = @()
+    $disks = Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -in 2,3 } | Sort-Object DeviceID
+    
+    $i = 1
+    foreach ($disk in $disks) {
+        $driveType = switch ($disk.DriveType) {
+            2 { "USB/Extraíble" }
+            3 { "Disco Fijo" }
+            default { "Desconocido" }
+        }
+        
+        $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+        $totalGB = [math]::Round($disk.Size / 1GB, 2)
+        $usedGB = [math]::Round(($disk.Size - $disk.FreeSpace) / 1GB, 2)
+        $percentFree = [math]::Round(($disk.FreeSpace / $disk.Size) * 100, 1)
+        $label = if ($disk.VolumeName) { $disk.VolumeName } else { "Sin etiqueta" }
+        
+        $units += [PSCustomObject]@{
+            Index = $i
+            DeviceID = $disk.DeviceID
+            Label = $label
+            Type = $driveType
+            TotalGB = $totalGB
+            UsedGB = $usedGB
+            FreeGB = $freeGB
+            PercentFree = $percentFree
+            Path = $disk.DeviceID + "\"
+        }
+        $i++
+    }
+    return $units
+}
+
+function Show-DriveSelector {
+    param(
+        [string]$Title = "SELECCIÓN DE UNIDAD",
+        [string]$Action = "seleccionar"
+    )
+    
+    $units = Scan-DriveUnits
+    if ($units.Count -eq 0) {
+        Write-Host "`n ❌ No se detectaron unidades disponibles." -ForegroundColor $COLOR_DANGER
+        return $null
+    }
+    
+    Clear-Host
+    Show-MainTitle
+    
+    Write-Host "`n 📂 $Title" -ForegroundColor $COLOR_MENU
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    Write-Host "   #   UNIDAD   ETIQUETA         TIPO        TOTAL    LIBRE    USADO"
+    Write-Host " ───────────────────────────────────────────────────────────────────" -ForegroundColor Gray
+    
+    foreach ($unit in $units) {
+        $freeColor = if ($unit.PercentFree -lt 10) { $COLOR_DANGER } 
+                     elseif ($unit.PercentFree -lt 25) { $COLOR_ALERT } 
+                     else { $COLOR_PRIMARY }
+        
+        $labelDisplay = $unit.Label.PadRight(15)
+        if ($labelDisplay.Length -gt 15) { $labelDisplay = $labelDisplay.Substring(0,12) + "..." }
+        
+        Write-Host ("   [{0}]  {1}    {2}  {3,-12}  {4,8}GB  {5,8}GB  {6,7}GB" -f 
+            $unit.Index.ToString().PadRight(2),
+            $unit.DeviceID.PadRight(2),
+            $labelDisplay,
+            $unit.Type,
+            $unit.TotalGB,
+            $unit.FreeGB,
+            $unit.UsedGB
+        ) -ForegroundColor $COLOR_MENU
+        
+        $barLength = 30
+        $filled = [math]::Round($barLength * ($unit.FreeGB / $unit.TotalGB))
+        $bar = "█" * $filled + "░" * ($barLength - $filled)
+        Write-Host ("      Libre: [{0}] {1}%" -f $bar, $unit.PercentFree) -ForegroundColor $freeColor
+        Write-Host ""
+    }
+    
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    Write-Host " [X] CANCELAR" -ForegroundColor $COLOR_DANGER
+    
+    $sel = Read-Host "`n > SELECCIONE UNA UNIDAD (NÚMERO)"
+    if ($sel -eq "X" -or $sel -eq "x") { return $null }
+    
+    if ($sel -match "^\d+$" -and [int]$sel -ge 1 -and [int]$sel -le $units.Count) {
+        return $units[[int]$sel - 1]
+    } else {
+        Write-Host "`n ❌ Selección inválida." -ForegroundColor $COLOR_DANGER
+        Start-Sleep -Seconds 1.5
+        return Show-DriveSelector -Title $Title
+    }
+}
+
+function Find-BACKOPsInUnit {
+    param(
+        [Parameter(Mandatory=$true)][string]$UnitPath
+    )
+    
+    $BACKOPs = @()
+    Write-Host "   🔍 Escaneando $UnitPath (búsqueda recursiva)..." -ForegroundColor DarkGray
+    
+    # Asegurar que la ruta termina con \
+    $searchPath = if ($UnitPath.EndsWith("\")) { $UnitPath } else { $UnitPath + "\" }
+    
+    try {
+        $found = Get-ChildItem -Path $searchPath -Directory -Recurse -ErrorAction Stop | 
+                 Where-Object { $_.Name -match "BACKOP" }
+        
+        if ($found) {
+            foreach ($item in $found) {
+                $sizeGB = [math]::Round((Get-FolderSizeBytes $item.FullName) / 1GB, 2)
+                $BACKOPs += [PSCustomObject]@{
+                    FullName = $item.FullName
+                    Name = $item.Name
+                    CreationTime = $item.CreationTime
+                    SizeGB = $sizeGB
+                }
+            }
+			
+            $BACKOPs = $BACKOPs | Sort-Object CreationTime -Descending
+          
+        }
+    } catch {
+        # Si hay error de permisos, mostrar advertencia
+        Write-Host "      ⚠️ Error de permisos en $searchPath" -ForegroundColor Yellow
+    }
+    
+    return $BACKOPs
+}
+
+function Show-BACKOPSelector {
+    param(
+        [string]$UnitPath
+    )
+    
+    $BACKOPs = Find-BACKOPsInUnit -UnitPath $UnitPath
+    
+    if ($BACKOPs.Count -eq 0) {
+        Write-Host "`n ❌ No se encontraron BACKOPs en esta unidad." -ForegroundColor $COLOR_DANGER
+        return $null
+    }
+    
+    Clear-Host
+    Show-MainTitle
+    
+    Write-Host "`n 📋 BACKOPS ENCONTRADOS:" -ForegroundColor $COLOR_PRIMARY
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    
+    for ($i = 0; $i -lt $BACKOPs.Count; $i++) {
+        Write-Host "   [$($i+1)] $($BACKOPs[$i].Name)" -ForegroundColor $COLOR_MENU
+        Write-Host "          📅 Creado: $($BACKOPs[$i].CreationTime)" -ForegroundColor DarkGray
+        Write-Host "          💾 Tamaño: $($BACKOPs[$i].SizeGB) GB" -ForegroundColor DarkGray
+        Write-Host ""
+    }
+    
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    Write-Host " [X] CANCELAR" -ForegroundColor $COLOR_DANGER
+    
+    $sel = Read-Host "`n > SELECCIONE BACKOP (NÚMERO)"
+    if ($sel -eq "X" -or $sel -eq "x") { return $null }
+    
+    if ($sel -match "^\d+$" -and [int]$sel -le $BACKOPs.Count) {
+        return $BACKOPs[[int]$sel-1].FullName
+    } else {
+        Write-Host "`n ❌ Selección inválida." -ForegroundColor $COLOR_DANGER
+        Start-Sleep -Seconds 1.5
+        return Show-BACKOPSelector -UnitPath $UnitPath
+    }
+}
+
+# ============================================================
+# 📁 CALCULO DE TAMAÑO TOTAL DE CARPETA (RECURSIVO)
 # ============================================================
 function Get-FolderSizeBytes {
-
     param([Parameter(Mandatory = $true)][string]$Path)
     try {
         $sum = 0L
@@ -541,7 +899,7 @@ function Get-FolderSizeBytes {
 }
 
 # ============================================================
-# OBTENER ESPACIO LIBRE DISPONIBLE EN UNA UNIDAD
+# 💾 OBTENER ESPACIO LIBRE DISPONIBLE EN UNA UNIDAD
 # ============================================================
 function Get-DriveFreeBytes {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -555,7 +913,28 @@ function Get-DriveFreeBytes {
 }
 
 # ============================================================
-# VALIDACIÓN DE RUTA DE RESPALDO (EVITAR CARPETAS DE SISTEMA)
+# 🚀 OBTENER NÚMERO ÓPTIMO DE HILOS PARA ROBOCOPY SEGÚN TIPO DE UNIDAD
+# ============================================================
+function Get-OptimalRobocopyThreads {
+    param([string]$Path)
+    try {
+        $root = [System.IO.Path]::GetPathRoot($Path)
+        $name = $root.TrimEnd('\')
+        $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$name'" -ErrorAction SilentlyContinue
+        if ($disk) {
+            # SSD: usar más hilos (16-32), HDD: menos hilos (4-8) para evitar latencia
+            if ($disk.MediaType -like "*SSD*" -or $disk.VolumeName -like "*SSD*") {
+                return 16
+            } else {
+                return 8
+            }
+        }
+    } catch {}
+    return 8  # Valor por defecto seguro
+}
+
+# ============================================================
+# 🔍 VALIDACIÓN DE RUTA DE RESPALDO (EVITAR CARPETAS DE SISTEMA)
 # ============================================================
 function Is-SuspiciousBACKOPBase {
     param([Parameter(Mandatory = $true)][string]$Base)
@@ -564,7 +943,7 @@ function Is-SuspiciousBACKOPBase {
 }
 
 # ============================================================
-# DETECCIÓN DE UNIDADES EXTRAÍBLES CONECTADAS (USB/DISCOS)
+# 🔌 DETECCIÓN DE UNIDADES EXTRAÍBLES CONECTADAS (USB/DISCOS)
 # ============================================================
 function Select-RemovableVolumes {
     try {
@@ -575,7 +954,7 @@ function Select-RemovableVolumes {
 }
 
 # ============================================================
-# DESCARGA DE SCRIPTS EXTERNOS A CARPETA TEMPORAL
+# 📡 DESCARGA DE SCRIPTS EXTERNOS A CARPETA TEMPORAL
 # ============================================================
 function Download-RemoteScript {
     param([Parameter(Mandatory = $true)][string]$Url)
@@ -585,7 +964,7 @@ function Download-RemoteScript {
 }
 
 # ============================================================
-# GENERACIÓN DE HASH SHA256 PARA VERIFICACIÓN DE ARCHIVOS
+# 🔐 GENERACIÓN DE HASH SHA256 PARA VERIFICACIÓN DE ARCHIVOS
 # ============================================================
 function Get-FileHashSafe {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -597,7 +976,7 @@ function Get-FileHashSafe {
 }
 
 # ============================================================
-# OBTENER RUTAS DE PERFILES DE USUARIO ACTIVOS EN EL DISCO
+# 👥 OBTENER RUTAS DE PERFILES DE USUARIO ACTIVOS EN EL DISCO
 # ============================================================
 function Get-UserProfilePaths {
     $profilesPath = "$env:SystemDrive\Users"
@@ -607,7 +986,7 @@ function Get-UserProfilePaths {
 }
 
 # ============================================================
-# GENERAR Y CREAR NUEVA CARPETA DE RESPALDO NUMERADA (BACKOP_01...)
+# 📁 GENERAR Y CREAR NUEVA CARPETA DE RESPALDO NUMERADA (BACKOP_01...)
 # ============================================================
 function Get-BACKOPRoot($basePath) {
     $existing = Get-ChildItem -Path $basePath -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "BACKOP_*" } | ForEach-Object { $_.Name -replace "BACKOP_", "" } | Where-Object { $_ -match "^\d+$" } | Sort-Object {[int]$_} -Descending
@@ -618,21 +997,18 @@ function Get-BACKOPRoot($basePath) {
 }
 
 # ============================================================
-# EJECUCIÓN DE COPIA DE SEGURIDAD DE PERFIL (ROBOCOPY)
-# ============================================================
-# ============================================================
-# EJECUCIÓN DE COPIA DE SEGURIDAD DE PERFIL (CON TABLA DE PROGRESO)
+# 💾 EJECUCIÓN DE COPIA DE SEGURIDAD DE PERFIL (CON TABLA DE PROGRESO)
 # ============================================================
 function BACKOP-ProfileData($profilePath, $BACKOPRoot) {
     $userName = Split-Path $profilePath -Leaf
     $destRoot = Join-Path $BACKOPRoot $userName
     
-    # Crear directorio destino si no existe
+    # 📁 Crear directorio destino si no existe
     if (-not (Test-Path $destRoot)) {
         New-Item -Path $destRoot -ItemType Directory -Force | Out-Null
     }
     
-    # Recopilar carpetas válidas
+    # 🔍 Recopilar carpetas válidas
     $validFolders = @()
     foreach ($folder in $USER_FOLDER_NAMES) {
         $source = Join-Path $profilePath $folder
@@ -646,13 +1022,13 @@ function BACKOP-ProfileData($profilePath, $BACKOPRoot) {
     $totalSize = 0
     $copiedSize = 0
     
-    # Calcular tamaño total aproximado
+    # 📏 Calcular tamaño total aproximado
     Write-Host "`n 📁 ANALIZANDO CARPETAS DE $userName ..." -ForegroundColor $COLOR_ALERT
     foreach ($folder in $validFolders) {
         $source = Join-Path $profilePath $folder
         $size = Get-FolderSizeBytes $source
         $totalSize += $size
-        Write-Host "    • $folder : $(Format-Bytes $size)" -ForegroundColor Gray
+        Write-Host "    • 📂 $folder : $(Format-Bytes $size)" -ForegroundColor Gray
     }
     
     Write-Host "`n 📊 TOTAL A RESPALDAR: $(Format-Bytes $totalSize)" -ForegroundColor Cyan
@@ -668,22 +1044,26 @@ function BACKOP-ProfileData($profilePath, $BACKOPRoot) {
         
         Write-Host ""
         Write-Host " ┌─────────────────────────────────────────────────────────" -ForegroundColor Cyan
-        Write-Host " │ 📂 RESPALDANDO: $userName\$folder" -ForegroundColor Yellow
+        Write-Host " │ 📤 RESPALDANDO: $userName\$folder" -ForegroundColor Yellow
         Write-Host " │ 📏 TAMAÑO: $(Format-Bytes $folderSize)" -ForegroundColor Gray
         Write-Host " │ 📍 ORIGEN: $source" -ForegroundColor DarkGray
-        Write-Host " │ 📍 DESTINO: $target" -ForegroundColor DarkGray
+        Write-Host " │ 🎯 DESTINO: $target" -ForegroundColor DarkGray
         Write-Host " │" -ForegroundColor Cyan
         
-        # Ejecutar robocopy y capturar salida
-        $robocopyOutput = robocopy $source $target /E /MT:16 /R:1 /W:1 /XJ /NDL /NJH /NJS /NC /NS /NP 2>&1
+        # 🧮 Obtener número óptimo de hilos según tipo de unidad
+        $optimalThreads = Get-OptimalRobocopyThreads $target
+        Write-Host " │ ⚙️ HILOS ROBOCOPY: $optimalThreads" -ForegroundColor DarkGray
         
-        # Actualizar contadores
+        # 🚀 Ejecutar robocopy con parámetros optimizados
+        $robocopyOutput = robocopy $source $target /E /MT:$optimalThreads /R:3 /W:5 /XJ /NP /NFL /NDL /NJH /NJS /NC /NS /XF "pagefile.sys" "hiberfil.sys" "swapfile.sys" 2>&1
+        
+        # 📈 Actualizar contadores
         $completed++
         $copiedSize += $folderSize
         
         $percentTotal = if ($totalSize -gt 0) { [math]::Round(($copiedSize / $totalSize) * 100) } else { 0 }
         
-        # Mostrar barra de progreso GENERAL
+        # 🟢 Mostrar barra de progreso GENERAL
         $barLength = 40
         $filled = [math]::Round($barLength * $percentTotal / 100)
         $bar = "█" * $filled + "░" * ($barLength - $filled)
@@ -697,40 +1077,34 @@ function BACKOP-ProfileData($profilePath, $BACKOPRoot) {
     
     Write-Host "`n ═════════════════════════════════════════════════════════════════" -ForegroundColor Green
     Write-Host " ✅ RESPALDO COMPLETADO: $userName" -ForegroundColor Green
-    Write-Host "    📁 UBICACIÓN: $destRoot" -ForegroundColor Gray
+    Write-Host "    📂 UBICACIÓN: $destRoot" -ForegroundColor Gray
     Write-Host "    📊 TOTAL: $(Format-Bytes $totalSize) en $total carpetas" -ForegroundColor Gray
     Write-Host " ═════════════════════════════════════════════════════════════════" -ForegroundColor Green
 }
 
-# ============================================================
-# EJECUCIÓN DE RESTAURACIÓN DE DATOS HACIA PERFIL DE USUARIO
-# ============================================================
-# ============================================================
-# EJECUCIÓN DE RESTAURACIÓN DE DATOS (CON TABLA DE PROGRESO)
-# ============================================================
 function Restore-ProfileData($BACKOPProfilePath, $TargetUsersRoot = $null) {
     $profileName = Split-Path $BACKOPProfilePath -Leaf
     if(-not $TargetUsersRoot){ $TargetUsersRoot = "$env:SystemDrive\Users" }
     $targetRoot = Join-Path $TargetUsersRoot $profileName
     
-    # Crear directorio destino si no existe
+    # 📁 Crear directorio destino si no existe
     if (!(Test-Path $targetRoot)) { 
         New-Item -Path $targetRoot -ItemType Directory -Force | Out-Null 
     }
     
-    # Recopilar carpetas a restaurar
+    # 🔍 Recopilar carpetas a restaurar
     $foldersToRestore = Get-ChildItem -Path $BACKOPProfilePath -Directory -ErrorAction SilentlyContinue
     $total = $foldersToRestore.Count
     $completed = 0
     $totalSize = 0
     $restoredSize = 0
     
-    # Calcular tamaño total a restaurar
+    # 📏 Calcular tamaño total a restaurar
     Write-Host "`n 📁 ANALIZANDO CARPETAS DE $profileName ..." -ForegroundColor $COLOR_ALERT
     foreach ($folder in $foldersToRestore) {
         $size = Get-FolderSizeBytes $folder.FullName
         $totalSize += $size
-        Write-Host "    • $($folder.Name) : $(Format-Bytes $size)" -ForegroundColor Gray
+        Write-Host "    • 📂 $($folder.Name) : $(Format-Bytes $size)" -ForegroundColor Gray
     }
     
     Write-Host "`n 📊 TOTAL A RESTAURAR: $(Format-Bytes $totalSize)" -ForegroundColor Cyan
@@ -745,22 +1119,22 @@ function Restore-ProfileData($BACKOPProfilePath, $TargetUsersRoot = $null) {
         
         Write-Host ""
         Write-Host " ┌─────────────────────────────────────────────────────────" -ForegroundColor Cyan
-        Write-Host " │ 📂 RESTAURANDO: $profileName\$($folder.Name)" -ForegroundColor Yellow
+        Write-Host " │ 📥 RESTAURANDO: $profileName\$($folder.Name)" -ForegroundColor Yellow
         Write-Host " │ 📏 TAMAÑO: $(Format-Bytes $folderSize)" -ForegroundColor Gray
         Write-Host " │ 📍 ORIGEN: $source" -ForegroundColor DarkGray
-        Write-Host " │ 📍 DESTINO: $dest" -ForegroundColor DarkGray
+        Write-Host " │ 🎯 DESTINO: $dest" -ForegroundColor DarkGray
         Write-Host " │" -ForegroundColor Cyan
         
-        # Ejecutar robocopy
-        robocopy $source $dest /E /MT:16 /R:1 /W:1 /XJ /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
+        # 🚀 Ejecutar robocopy (parámetros optimizados)
+        robocopy $source $dest /E /MT:8 /R:0 /W:0 /XJ /NP /NFL /NDL /NJH /NJS /NC /NS /XF "pagefile.sys" "hiberfil.sys" "swapfile.sys" | Out-Null
         
-        # Actualizar contadores
+        # 📈 Actualizar contadores
         $completed++
         $restoredSize += $folderSize
         
         $percentTotal = if ($totalSize -gt 0) { [math]::Round(($restoredSize / $totalSize) * 100) } else { 0 }
         
-        # Mostrar barra de progreso GENERAL
+        # 🔵 Mostrar barra de progreso GENERAL
         $barLength = 40
         $filled = [math]::Round($barLength * $percentTotal / 100)
         $bar = "█" * $filled + "░" * ($barLength - $filled)
@@ -780,11 +1154,18 @@ function Restore-ProfileData($BACKOPProfilePath, $TargetUsersRoot = $null) {
 }
 
 # ============================================================
-# INTERFAZ: DIBUJAR TÍTULO Y LOGO PRINCIPAL DE LA SUITE
+# 🖥️ INTERFAZ: DIBUJAR TÍTULO Y LOGO PRINCIPAL DE LA SUITE
 # ============================================================
 function Show-MainTitle {
-    # Esto es como usar un borrador de pizarra real, no solo bajar la página
-    [System.Console]::Clear() 
+    # 🧹 Limpiar pantalla de forma FORZADA
+    if ($Host.Name -eq "ConsoleHost") {
+        Clear-Host
+    } else {
+        [System.Console]::Clear()
+    }
+    
+    # 🔄 También forzar refresco de buffer
+    $Host.UI.RawUI.CursorPosition = New-Object System.Management.Automation.Host.Coordinates 0,0
     
     Write-Host @"
 	
@@ -797,221 +1178,153 @@ function Show-MainTitle {
  ║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝      ║
  ║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝       ║
  ║                                                                                  ║
- ║                                PRO EDITION v5.7                                  ║
+ ║                                 PRO EDITION v5.8                                 ║
  ║                                                                                  ║
  ║                    SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                   ║
  ║                                                                                  ║
  ╚══════════════════════════════════════════════════════════════════════════════════╝
 "@ -ForegroundColor Cyan
+    
+    # ⚡ Forzar que se muestre inmediatamente
+    [System.Console]::Out.Flush()
 }
 
 function Pause-Enter {
     param($Msg = "")
-    Write-Host "`n Presione ENTER para continuar $Msg..." -ForegroundColor $COLOR_ALERT
+    Write-Host "`n ⌨️ Presione ENTER para continuar $Msg..." -ForegroundColor $COLOR_ALERT
     $null = Read-Host
 }
-
 # ============================================================
-# MOTOR DE INSTALACION HIBRIDA INTELIGENTE (CON MAPEO CHOCOLATEY)
+# 🚀 MOTOR DE INSTALACIÓN HÍBRIDA INTELIGENTE (WINGET + CHOCO)
 # ============================================================
 function Invoke-SmartInstall ($AppID, $AppName) {
     Write-Host "`n [!] INSTALANDO: $AppName..." -ForegroundColor $COLOR_MENU
     
-    # ============================================================
-    # MAPEO MANUAL: ID de Winget -> Nombre corto en Chocolatey
-    # ============================================================
+    # 🗺️ MAPEO MANUAL: ID de Winget -> Nombre corto en Chocolatey
     $chocoMapping = @{
-        "Google.Chrome" = "googlechrome"
-        "Mozilla.Firefox" = "firefox"
-        "Opera.Opera" = "opera"
-        "Discord.Discord" = "discord"
-        "Telegram.TelegramDesktop" = "telegram"
-        "Zoom.Zoom" = "zoom"
-        "Microsoft.Teams" = "teams"
-        "SlackTechnologies.Slack" = "slack"
-        "WhatsApp.WhatsApp" = "whatsapp"
-        "7zip.7zip" = "7zip"
-        "RARLab.WinRAR" = "winrar"
-        "Microsoft.PowerToys" = "powertoys"
-        "voidtools.Everything" = "everything"
-        "BleachBit.BleachBit" = "bleachbit"
-        "RevoUninstaller.RevoUninstaller" = "revo"
-        "Bitwarden.Bitwarden" = "bitwarden"
-        "Malwarebytes.Malwarebytes" = "malwarebytes"
-        "CPUID.CPU-Z" = "cpuz"
-        "TechPowerUp.GPU-Z" = "gpuz"
-        "CPUID.HWMonitor" = "hwmonitor"
-        "REALiX.HWiNFO" = "hwinfo"
-        "MSI.Afterburner" = "msiafterburner"
-        "Guru3D.Afterburner" = "msiafterburner"
-        "PeaZip.PeaZip" = "peazip"
-        "Notepad++.Notepad++" = "notepadplusplus"
-        "Microsoft.VisualStudioCode" = "vscode"
-        "Git.Git" = "git"
-        "GitHub.GitHubDesktop" = "github-desktop"
-        "Docker.DockerDesktop" = "docker-desktop"
-        "Kitware.CMake" = "cmake"
-        "OpenJS.NodeJS" = "nodejs"
-        "Python.Python.3" = "python"
-        "PuTTY.PuTTY" = "putty"
-        "WinSCP.WinSCP" = "winscp"
-        "FileZilla.Client" = "filezilla"
-        "GIMP.GIMP" = "gimp"
-        "Inkscape.Inkscape" = "inkscape"
-        "KritaFoundation.Krita" = "krita"
-        "BlenderFoundation.Blender" = "blender"
-        "dotPDN.PaintDotNet" = "paint.net"
-        "HandBrake.HandBrake" = "handbrake"
-        "VideoLAN.VLC" = "vlc"
-        "OBSProject.OBSStudio" = "obs-studio"
-        "Audacity.Audacity" = "audacity"
-        "Calibre.Calibre" = "calibre"
-        "CodecGuide.K-LiteCodecPack.Basic" = "klitecodec"
-        "Spotify.Spotify" = "spotify"
-        "TheDocumentFoundation.LibreOffice" = "libreoffice"
-        "Microsoft.OfficeDeploymentTool" = "office365"
-        "Notion.Notion" = "notion"
-        "Obsidian.Obsidian" = "obsidian"
-        "Zotero.Zotero" = "zotero"
-        "Adobe.Acrobat.Reader.64-bit" = "adobereader"
-        "Foxit.FoxitReader" = "foxitreader"
-        "SumatraPDF.SumatraPDF" = "sumatrapdf"
-        "PDF24.PDF24" = "pdf24"
-        "Typora.Typora" = "typora"
-        "WiresharkFoundation.Wireshark" = "wireshark"
-        "Nmap.Nmap" = "nmap"
-        "Famatech.AdvancedIPScanner" = "advanced-ip-scanner"
-        "Mobatek.MobaXterm" = "mobaxterm"
-        "Alacritty.Alacritty" = "alacritty"
-        "Microsoft.WindowsTerminal" = "windows-terminal"
-        "AnyDesk.AnyDesk" = "anydesk"
-        "RustDesk.RustDesk" = "rustdesk"
-        "TeamViewer.TeamViewer" = "teamviewer"
-        "Valve.Steam" = "steam"
-        "EpicGames.EpicGamesLauncher" = "epicgameslauncher"
-        "ElectronicArts.EADesktop" = "ea-app"
-        "Ubisoft.Connect" = "ubisoft-connect"
-        "GOG.Galaxy" = "gog-galaxy"
-        "Parsec.Parsec" = "parsec"
-        "Oracle.VirtualBox" = "virtualbox"
-        "VMware.WorkstationPlayer" = "vmware-player"
-        "RaspberryPiFoundation.RaspberryPiImager" = "raspberry-pi-imager"
-        "Microsoft.WSL" = "wsl"
-        "Microsoft.PowerShell" = "powershell"
-        "Duplicati.Duplicati" = "duplicati"
-        "Nextcloud.NextcloudDesktop" = "nextcloud"
-        "Google.Drive" = "googledrive"
-        "Dropbox.Dropbox" = "dropbox"
-        "SyncThing.SyncThing" = "syncthing"
-        "Resilio.ResilioSync" = "resiliosync"
-        "Rclone.Rclone" = "rclone"
-        "ProtonTechnologies.ProtonDrive" = "protondrive"
-        "ProtonTechnologies.ProtonVPN" = "protonvpn"
-        "Windscribe.Windscribe" = "windscribe"
-        "OpenVPNTechnologies.OpenVPN" = "openvpn"
-        "OpenHardwareMonitor.OpenHardwareMonitor" = "openhardwaremonitor"
-        "CoreTemp.CoreTemp" = "coretemp"
-        "CrystalDiskInfo.CrystalDiskInfo" = "crystaldiskinfo"
-        "CrystalDiskMark.CrystalDiskMark" = "crystaldiskmark"
-        "Simplenote.Simplenote" = "simplenote"
-        "Joplin.Joplin" = "joplin"
-        "BulkRenameUtility.BulkRenameUtility" = "bulkrenameutility"
-        "AutoHotkey.AutoHotkey" = "autohotkey"
-        "Espanso.Espanso" = "espanso"
-        "Gsudo.Gsudo" = "gsudo"
-        "Nushell.Nushell" = "nushell"
-        "Fastfetch.Fastfetch" = "fastfetch"
-        "Monitorian.Monitorian" = "monitorian"
-        "qBittorrent.qBittorrent" = "qbittorrent"
-        "Motrix.Motrix" = "motrix"
-        "LocalSend.LocalSend" = "localsend"
-        "KDE.KDEConnect" = "kdeconnect"
-        "Schollz.croc" = "croc"
-        "TreeSize.TreeSize" = "treesize"
-        "WizTree.WizTree" = "wiztree"
-        "DiskGenius.DiskGenius" = "diskgenius"
-        "Rainmeter.Rainmeter" = "rainmeter"
-        "f.lux.f.lux" = "flux"
-        "Ditto.Ditto" = "ditto"
-        "CopyQ.CopyQ" = "copyq"
-        "Microsoft.PowerAutomateDesktop" = "power-automate-desktop"
+        "Google.Chrome" = "googlechrome"; "Mozilla.Firefox" = "firefox"; "Opera.Opera" = "opera"
+        "Discord.Discord" = "discord"; "Telegram.TelegramDesktop" = "telegram"; "Zoom.Zoom" = "zoom"
+        "Microsoft.Teams" = "teams"; "SlackTechnologies.Slack" = "slack"; "WhatsApp.WhatsApp" = "whatsapp"
+        "7zip.7zip" = "7zip"; "RARLab.WinRAR" = "winrar"; "Microsoft.PowerToys" = "powertoys"
+        "voidtools.Everything" = "everything"; "BleachBit.BleachBit" = "bleachbit"; "RevoUninstaller.RevoUninstaller" = "revo"
+        "Bitwarden.Bitwarden" = "bitwarden"; "Malwarebytes.Malwarebytes" = "malwarebytes"; "CPUID.CPU-Z" = "cpuz"
+        "TechPowerUp.GPU-Z" = "gpuz"; "CPUID.HWMonitor" = "hwmonitor"; "REALiX.HWiNFO" = "hwinfo"
+        "MSI.Afterburner" = "msiafterburner"; "Guru3D.Afterburner" = "msiafterburner"; "PeaZip.PeaZip" = "peazip"
+        "Notepad++.Notepad++" = "notepadplusplus"; "Microsoft.VisualStudioCode" = "vscode"; "Git.Git" = "git"
+        "GitHub.GitHubDesktop" = "github-desktop"; "Docker.DockerDesktop" = "docker-desktop"; "Kitware.CMake" = "cmake"
+        "OpenJS.NodeJS" = "nodejs"; "Python.Python.3" = "python"; "PuTTY.PuTTY" = "putty"
+        "WinSCP.WinSCP" = "winscp"; "FileZilla.Client" = "filezilla"; "GIMP.GIMP" = "gimp"
+        "Inkscape.Inkscape" = "inkscape"; "KritaFoundation.Krita" = "krita"; "BlenderFoundation.Blender" = "blender"
+        "dotPDN.PaintDotNet" = "paint.net"; "HandBrake.HandBrake" = "handbrake"; "VideoLAN.VLC" = "vlc"
+        "OBSProject.OBSStudio" = "obs-studio"; "Audacity.Audacity" = "audacity"; "Calibre.Calibre" = "calibre"
+        "CodecGuide.K-LiteCodecPack.Basic" = "klitecodec"; "Spotify.Spotify" = "spotify"; "TheDocumentFoundation.LibreOffice" = "libreoffice"
+        "Microsoft.OfficeDeploymentTool" = "office365"; "Notion.Notion" = "notion"; "Obsidian.Obsidian" = "obsidian"
+        "Zotero.Zotero" = "zotero"; "Adobe.Acrobat.Reader.64-bit" = "adobereader"; "Foxit.FoxitReader" = "foxitreader"
+        "SumatraPDF.SumatraPDF" = "sumatrapdf"; "PDF24.PDF24" = "pdf24"; "Typora.Typora" = "typora"
+        "WiresharkFoundation.Wireshark" = "wireshark"; "Nmap.Nmap" = "nmap"; "Famatech.AdvancedIPScanner" = "advanced-ip-scanner"
+        "Mobatek.MobaXterm" = "mobaxterm"; "Alacritty.Alacritty" = "alacritty"; "Microsoft.WindowsTerminal" = "windows-terminal"
+        "AnyDesk.AnyDesk" = "anydesk"; "RustDesk.RustDesk" = "rustdesk"; "TeamViewer.TeamViewer" = "teamviewer"
+        "Valve.Steam" = "steam"; "EpicGames.EpicGamesLauncher" = "epicgameslauncher"; "ElectronicArts.EADesktop" = "ea-app"
+        "Ubisoft.Connect" = "ubisoft-connect"; "GOG.Galaxy" = "gog-galaxy"; "Parsec.Parsec" = "parsec"
+        "Oracle.VirtualBox" = "virtualbox"; "VMware.WorkstationPlayer" = "vmware-player"; "RaspberryPiFoundation.RaspberryPiImager" = "raspberry-pi-imager"
+        "Microsoft.WSL" = "wsl"; "Microsoft.PowerShell" = "powershell"; "Duplicati.Duplicati" = "duplicati"
+        "Nextcloud.NextcloudDesktop" = "nextcloud"; "Google.Drive" = "googledrive"; "Dropbox.Dropbox" = "dropbox"
+        "SyncThing.SyncThing" = "syncthing"; "Resilio.ResilioSync" = "resiliosync"; "Rclone.Rclone" = "rclone"
+        "ProtonTechnologies.ProtonDrive" = "protondrive"; "ProtonTechnologies.ProtonVPN" = "protonvpn"; "Windscribe.Windscribe" = "windscribe"
+        "OpenVPNTechnologies.OpenVPN" = "openvpn"; "OpenHardwareMonitor.OpenHardwareMonitor" = "openhardwaremonitor"; "CoreTemp.CoreTemp" = "coretemp"
+        "CrystalDiskInfo.CrystalDiskInfo" = "crystaldiskinfo"; "CrystalDiskMark.CrystalDiskMark" = "crystaldiskmark"; "Simplenote.Simplenote" = "simplenote"
+        "Joplin.Joplin" = "joplin"; "BulkRenameUtility.BulkRenameUtility" = "bulkrenameutility"; "AutoHotkey.AutoHotkey" = "autohotkey"
+        "Espanso.Espanso" = "espanso"; "Gsudo.Gsudo" = "gsudo"; "Nushell.Nushell" = "nushell"
+        "Fastfetch.Fastfetch" = "fastfetch"; "Monitorian.Monitorian" = "monitorian"; "qBittorrent.qBittorrent" = "qbittorrent"
+        "Motrix.Motrix" = "motrix"; "LocalSend.LocalSend" = "localsend"; "KDE.KDEConnect" = "kdeconnect"
+        "Schollz.croc" = "croc"; "TreeSize.TreeSize" = "treesize"; "WizTree.WizTree" = "wiztree"
+        "DiskGenius.DiskGenius" = "diskgenius"; "Rainmeter.Rainmeter" = "rainmeter"; "f.lux.f.lux" = "flux"
+        "Ditto.Ditto" = "ditto"; "CopyQ.CopyQ" = "copyq"; "Microsoft.PowerAutomateDesktop" = "power-automate-desktop"
     }
     
-    # Verificar si winget está disponible
+    # 🔍 Verificar disponibilidad de Winget
     $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
 
-# Función auxiliar para instalar con winget (SIN admin, ventana OCULTA)
-function Install-WithWinget {
-    if (-not $wingetAvailable) { return $false }
-    
-    Write-Host "     → Ejecutando winget en segundo plano..." -ForegroundColor DarkGray
-    
-    $tempScript = "$env:TEMP\winget_install_$([System.Guid]::NewGuid().ToString().Substring(0,8)).ps1"
-    $scriptContent = @"
+    # 🛠️ VERIFICACIÓN Y REPARACIÓN DE WINGET
+    if (-not $wingetAvailable) {
+        Write-Host "    ⚠️ Winget no disponible. Intentando reparar..." -ForegroundColor Yellow
+        Repair-Winget | Out-Null
+        $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
+    }
+
+    if ($wingetAvailable) {
+        $wingetVersion = (winget --version 2>&1) -replace 'v', ''
+        Write-Host "    🟢 Winget detectado: v$wingetVersion" -ForegroundColor Green
+        
+        # 🔄 Verificar si requiere actualización (mínimo v1.6.3133)
+        $versionParts = $wingetVersion -split '\.'
+        $major = [int]$versionParts[0]; $minor = [int]$versionParts[1]; $build = [int]$versionParts[2]
+        
+        if ($major -lt 1 -or ($major -eq 1 -and $minor -lt 6) -or ($major -eq 1 -and $minor -eq 6 -and $build -lt 3133)) {
+            Write-Host "    ⚠️ Winget desactualizado. Actualizando core..." -ForegroundColor Yellow
+            Repair-Winget | Out-Null
+            $wingetVersionNew = (winget --version 2>&1) -replace 'v', ''
+            Write-Host "    🟢 Winget actualizado a: v$wingetVersionNew" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "    🔴 Winget NO disponible. Se usarán métodos alternativos." -ForegroundColor Red
+    }
+
+    # 📦 Función interna para instalación silenciosa (WindowStyle Hidden)
+    function Install-WithWinget {
+        if (-not $wingetAvailable) { return $false }
+        Write-Host "      → Ejecutando winget en segundo plano..." -ForegroundColor DarkGray
+        
+        $tempScript = "$env:TEMP\winget_install_$([System.Guid]::NewGuid().ToString().Substring(0,8)).ps1"
+        $scriptContent = @"
 `$output = winget install --id `"$AppID`" --exact --accept-package-agreements --accept-source-agreements --silent 2>&1
 `$outputString = `$output -join " "
-
-if (`$outputString -like "*No available upgrade found*" -or `$outputString -like "*already installed*") {
-    exit 0
-}
-
-if (`$LASTEXITCODE -eq 0) {
-    exit 0
-} else {
-    exit 1
-}
+if (`$outputString -like "*No available upgrade found*" -or `$outputString -like "*already installed*") { exit 0 }
+if (`$LASTEXITCODE -eq 0) { exit 0 } else { exit 1 }
 "@
-    $scriptContent | Out-File -FilePath $tempScript -Encoding utf8
-    
-    # Ventana OCULTA
-    $process = Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$tempScript`"" -Verb RunAs -Wait -PassThru
-    
-    Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
-    
-    return ($process.ExitCode -eq 0)
-}
- 
-    # Intentar con winget (primer intento - modo usuario)
-    Write-Host " [+] Intentando con winget (modo usuario)..." -ForegroundColor $COLOR_PRIMARY
-    if (Install-WithWinget) { return "OK" }
-    
-    # Si falla, verificar si tenemos mapeo para Chocolatey
-    $chocoName = $null
-    if ($chocoMapping.ContainsKey($AppID)) {
-        $chocoName = $chocoMapping[$AppID]
-        Write-Host " [+] Usando mapeo manual para Chocolatey: $chocoName" -ForegroundColor $COLOR_ALERT
-    } else {
-        $chocoName = $AppID.Split('.')[-1].ToLower()
-        Write-Host " [+] Generando nombre corto automático: $chocoName" -ForegroundColor $COLOR_ALERT
+        $scriptContent | Out-File -FilePath $tempScript -Encoding utf8
+        $process = Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$tempScript`"" -Verb RunAs -Wait -PassThru
+        Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
+        return ($process.ExitCode -eq 0)
+    }
+
+    # 1️⃣ Intento con Winget (Modo Usuario/Silent)
+    Write-Host " [+] Intentando con winget..." -ForegroundColor $COLOR_PRIMARY
+    if (Install-WithWinget) { 
+        Write-Host " [✔] Instalado correctamente con Winget" -ForegroundColor Green
+        return "OK" 
     }
     
-    # Intentar con Chocolatey
-    Write-Host " [+] Instalando vía Chocolatey..." -ForegroundColor $COLOR_PRIMARY
+    # 2️⃣ Intento con Chocolatey (Mapeo o Automático)
+    $chocoName = if ($chocoMapping.ContainsKey($AppID)) { $chocoMapping[$AppID] } else { $AppID.Split('.')[-1].ToLower() }
+    Write-Host " [+] Usando Chocolatey: $chocoName" -ForegroundColor $COLOR_ALERT
+    
     choco install $chocoName -y --no-progress 2>&1 | Out-Null
     if ($LASTEXITCODE -eq 0) { 
         Write-Host " [✔] Instalado correctamente con Chocolatey" -ForegroundColor Green
         return "OK" 
     }
     
-    # Segundo intento con winget (reintento normal)
-    Write-Host " [+] Reintentando con winget (segundo intento)..." -ForegroundColor $COLOR_ALERT
+    # 3️⃣ Reintento final con Winget (Visible)
+    Write-Host " [+] Reintentando winget (último recurso)..." -ForegroundColor $COLOR_ALERT
     Start-Sleep -Seconds 2
     winget install --id $AppID --exact --accept-package-agreements --accept-source-agreements --silent 2>&1 | Out-Null
     if ($LASTEXITCODE -eq 0) { return "OK" }
     
-    # Si todo falla, reportar error CON URL si existe
+    # ❌ Fallo y reporte
     $manualUrl = $manualUrls[$AppName]
     if ($manualUrl) {
         Write-Host " [✘] FALLO DEFINITIVO." -ForegroundColor Red
-        Write-Host "     → Descárgala manualmente desde: $manualUrl" -ForegroundColor Yellow
-        Write-Log "INSTALL" "Failed to install $AppName ($AppID) - manual URL: $manualUrl"
+        Write-Host "     → Descarga manual: $manualUrl" -ForegroundColor Yellow
+        Write-Log "INSTALL" "Failed: $AppName ($AppID) - Link: $manualUrl"
         return "MANUAL|$manualUrl"
     } else {
-        Write-Host " [✘] FALLO DEFINITIVO. Instalación manual requerida." -ForegroundColor Red
-        Write-Log "INSTALL" "Failed to install $AppName ($AppID) via winget and Chocolatey"
+        Write-Host " [✘] FALLO DEFINITIVO. No se encontró instalador." -ForegroundColor Red
+        Write-Log "INSTALL" "Failed: $AppName ($AppID) via all methods"
         return "ERROR"
     }
 }
+
 # ============================================================
 # KIT POST FORMAT V5 (125 APPS CONFIABLES)
 # ============================================================
@@ -1195,6 +1508,10 @@ function Invoke-KitPostFormat {
     # ========== 116-117: EXTRAS ==========
     "116" = @{Name="Power Automate Desktop"; ID="Microsoft.PowerAutomateDesktop"}
     "117" = @{Name="Windows Terminal"; ID="Microsoft.WindowsTerminal"}
+	
+	# ========== UTILIDADES Y DESINSTALADORES ==========
+	"118" = @{Name="Geek Uninstaller"; ID="GeekUninstaller.GeekUninstaller"}
+	"119" = @{Name="TeraBox (Baidu)"; ID="Baidu.TeraBox"}
 }
 
     # Resto del código de la función (el bucle while, el menú, etc.)
@@ -1204,17 +1521,17 @@ function Invoke-KitPostFormat {
 
     while($true){
         Clear-Host
-        Show-MainTitle
-        Write-Host "`n KIT POST FORMAT - INSTALACION INTELIGENTE (125 APPS)" -ForegroundColor $COLOR_PRIMARY
-        Write-Host ' [0] LIMPIEZA DE BLOATWARE (CandyCrush, Netflix, etc.)'
-        Write-Host ' [1] PERFIL BASICO (Chrome, 7Zip, VLC, AnyDesk, Teams)'
-        Write-Host ' [2] PERFIL GAMING (Steam, Discord, OBS, DirectX)'
-        Write-Host ' [3] SELECCION MANUAL (Listado Completo 125 apps)'
-        Write-Host " [4] ACTUALIZAR TODO EL SOFTWARE"
-        Write-Host ' [5] DESINSTALAR PROGRAMAS (Revo, BCUninstaller, Panel de Control)' -ForegroundColor $COLOR_MENU	
-        Write-Host "`n CONTROL" -ForegroundColor Gray
+		Show-MainTitle
+        Write-Host "`n 📦 KIT POST FORMAT - INSTALACION INTELIGENTE (125 APPS)" -ForegroundColor $COLOR_PRIMARY
+        Write-Host ' 🧹 [0] LIMPIEZA DE BLOATWARE (CandyCrush, Netflix, etc.)'
+        Write-Host ' 🎮 [1] PERFIL GAMING (Steam, Discord, OBS, DirectX)'
+        Write-Host ' 🛠️ [2] PERFIL BASICO (Chrome, 7Zip, VLC, AnyDesk, Teams)'
+        Write-Host ' 📋 [3] SELECCION MANUAL (Listado Completo 125 apps)'
+        Write-Host ' 🔄 [4] ACTUALIZAR TODO EL SOFTWARE'
+        Write-Host ' 🗑️ [5] DESINSTALAR PROGRAMAS (Revo, BCUninstaller, Panel de Control)' -ForegroundColor $COLOR_MENU	
+        Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray
         Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
-        Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+        Write-Host " ❌ [X] VOLVER" -ForegroundColor $COLOR_DANGER
         
         $opt = Read-MenuOption "`n ``> SELECCIONE" -Valid @("0","1","2","3","4","5","X")
         if($opt -eq "X"){break}
@@ -1235,9 +1552,9 @@ function Invoke-KitPostFormat {
             "1" { $selection = "1","13","45","67","10" }  # Chrome, 7-Zip, VLC, AnyDesk, Teams
             "2" { $selection = "70","6","45" }            # Steam, Discord, VLC
             "3" {
-                Clear-Host
+Clear-Host
                 Show-MainTitle
-                Write-Host "`n LISTADO MAESTRO (125 APPS) - PAGINADO + BUSCADOR" -ForegroundColor $COLOR_MENU
+                Write-Host "`n 📋 LISTADO MAESTRO (125 APPS) - PAGINADO + BUSCADOR" -ForegroundColor $COLOR_MENU
                 $sortedKeysAll = $apps.Keys | Sort-Object {[int]$_}
                 $filteredKeys = $sortedKeysAll
                 $searchText = ""
@@ -1246,7 +1563,7 @@ function Invoke-KitPostFormat {
                 $currentPage = 1
                 $cols = 4
 
-                while ($true) {
+               while ($true) {
                     Clear-Host
                     Show-MainTitle
                     $totalFiltered = $filteredKeys.Count
@@ -1254,9 +1571,9 @@ function Invoke-KitPostFormat {
                     if ($currentPage -gt $totalPages) { $currentPage = $totalPages }
                     if ($currentPage -lt 1) { $currentPage = 1 }
                     
-                    Write-Host "`n LISTADO MAESTRO - PÁGINA $currentPage DE $totalPages" -ForegroundColor $COLOR_MENU
-                    if ($searchText) { Write-Host " BUSCANDO: '$searchText' (Total: $totalFiltered apps)" -ForegroundColor $COLOR_ALERT }
-                    Write-Host "`n APPS DISPONIBLES:" -ForegroundColor $COLOR_PRIMARY
+                    Write-Host "`n 📄 LISTADO MAESTRO - PÁGINA $currentPage DE $totalPages" -ForegroundColor $COLOR_MENU
+                    if ($searchText) { Write-Host " 🔍 BUSCANDO: '$searchText' (Total: $totalFiltered apps)" -ForegroundColor $COLOR_ALERT }
+                    Write-Host "`n 📦 APPS DISPONIBLES:" -ForegroundColor $COLOR_PRIMARY
                     
                     $startIdx = ($currentPage - 1) * $appsPerPage
                     $endIdx = [math]::Min($startIdx + $appsPerPage, $totalFiltered) - 1
@@ -1279,10 +1596,9 @@ function Invoke-KitPostFormat {
                         Write-Host " $row"
                     }
                     
-                    Write-Host "`n CONTROLES:" -ForegroundColor $COLOR_ALERT
-                    Write-Host " [N] Siguiente página   [P] Página anterior   [G] Ir a página   [B] Buscar por nombre"
-                    Write-Host " [R] Reiniciar búsqueda   [X] Cancelar   [ENTER] Continuar con selección" -ForegroundColor $COLOR_MENU
-                    
+					Write-Host "`n 🎮 CONTROLES:" -ForegroundColor $COLOR_ALERT
+                    Write-Host " 📄 [N] Siguiente página   ⬅️ [P] Página anterior   🎯 [G] Ir a página   🔍 [B] Buscar por nombre"
+                    Write-Host " 🔄 [R] Reiniciar búsqueda   ❌ [X] Cancelar   ✅ [ENTER] Continuar con selección" -ForegroundColor $COLOR_MENU                    
                     $optPage = Read-Host "`n ``>"
                     switch ($optPage.ToUpper()) {
                         "N" { if ($currentPage -lt $totalPages) { $currentPage++ } else { Write-Host " Ya es la última página." -ForegroundColor $COLOR_DANGER; Start-Sleep -Seconds 1 } }
@@ -1352,17 +1668,17 @@ function Invoke-KitPostFormat {
                 continue
             }
             "5" {
-           while ($true) {
+			while ($true) {
                Clear-Host
                Show-MainTitle
-               Write-Host "`n DESINSTALACIÓN DE PROGRAMAS" -ForegroundColor $COLOR_MENU
-               Write-Host " [1] PANEL DE CONTROL (appwiz.cpl) - Gráfico nativo" -ForegroundColor $COLOR_MENU
-               Write-Host " [2] WINGET UNINSTALL - Código nativo (rápido)" -ForegroundColor $COLOR_MENU
-               Write-Host " [3] REVO UNINSTALLER - App gráfica avanzada" -ForegroundColor $COLOR_MENU
-               Write-Host " [4] BCUNINSTALLER - Bulk Crap Uninstaller" -ForegroundColor $COLOR_MENU
-               Write-Host "`n [X] VOLVER AL KIT" -ForegroundColor $COLOR_DANGER
+				Write-Host "`n 🗑️ DESINSTALACIÓN DE PROGRAMAS" -ForegroundColor $COLOR_MENU
+               Write-Host " 🖥️ [1] PANEL DE CONTROL (appwiz.cpl) - Gráfico nativo" -ForegroundColor $COLOR_MENU
+               Write-Host " ⚡ [2] WINGET UNINSTALL - Código nativo (rápido)" -ForegroundColor $COLOR_MENU
+               Write-Host " 🔧 [3] REVO UNINSTALLER - App gráfica avanzada" -ForegroundColor $COLOR_MENU
+               Write-Host " 🧹 [4] BCUNINSTALLER - Bulk Crap Uninstaller" -ForegroundColor $COLOR_MENU
+               Write-Host "`n ❌ [X] VOLVER AL KIT" -ForegroundColor $COLOR_DANGER
                
-               $subOpt = Read-Host "`n > SELECCIONE"
+               $subOpt = Read-Host "`n 🔽 > SELECCIONE"
                
                switch ($subOpt.ToUpper()) {
                    "1" {
@@ -1422,8 +1738,11 @@ function Invoke-KitPostFormat {
        }		
                }
        
-               if($selection.Count -gt 0){
+if($selection.Count -gt 0){
             $results = @()
+            $successCount = 0
+            $errorCount = 0
+            
             foreach($item in $selection){
                 if($apps.ContainsKey($item)){
                     $res = Invoke-SmartInstall -AppID $apps[$item].ID -AppName $apps[$item].Name
@@ -1436,10 +1755,13 @@ function Invoke-KitPostFormat {
                     if ($res -like "MANUAL|*") {
                         $url = ($res -split "\|")[1]
                         $results += "[ ERROR ] $($apps[$item].Name)`n   → Descárgala manualmente desde: $url"
+                        $errorCount++
                     } elseif ($res -eq "OK") {
                         $results += "[ OK ] $($apps[$item].Name)"
+                        $successCount++
                     } else {
                         $results += "[ ERROR ] $($apps[$item].Name)"
+                        $errorCount++
                     }
                     
                     Write-Log "KIT" "Install app=$($apps[$item].Name) result=$res"
@@ -1447,13 +1769,41 @@ function Invoke-KitPostFormat {
                     Write-Host " [!] Número inválido: $item" -ForegroundColor $COLOR_DANGER
                 }
             }
+            
+            # ============================================================
+            # RESUMEN FINAL CON ESTADO DE WINGET
+            # ============================================================
             Show-MainTitle
-            Write-Host "`n RESUMEN DE INSTALACION:" -ForegroundColor $COLOR_ALERT
+            Write-Host "`n══════════════════════════��════════════════════════════════════" -ForegroundColor Cyan
+            Write-Host " 📊 RESUMEN DE INSTALACIÓN" -ForegroundColor Cyan
+            Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
             $results | ForEach-Object { Write-Host " $_" }
+            
+            Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+            Write-Host " ESTADÍSTICAS:" -ForegroundColor Yellow
+            Write-Host "   ✅ Instaladas exitosamente: $successCount" -ForegroundColor Green
+            Write-Host "   ❌ Errores/Fallidas: $errorCount" -ForegroundColor Red
+            Write-Host "   📦 Total procesadas: $($selection.Count)" -ForegroundColor Gray
+            
+            # Verificar estado final de winget
+            $wingetFinal = Get-Command winget -ErrorAction SilentlyContinue
+            if ($wingetFinal) {
+                $versionFinal = (winget --version 2>&1) -replace 'v', ''
+                Write-Host "`n   🟢 Estado de winget: FUNCIONAL (v$versionFinal)" -ForegroundColor Green
+            } else {
+                Write-Host "`n   🔴 Estado de winget: NO DISPONIBLE" -ForegroundColor Red
+            }
+            
+            Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+            
+            # Añadir log de resumen
+            Write-Log "KIT" "InstallSummary Success=$successCount Errors=$errorCount Total=$($selection.Count)"
+            
             Pause-Enter "`n PRESIONE ENTER PARA LIMPIAR Y CONTINUAR"
         }
     }
 }
+
 # ============================================================
 # MOTOR DE RESPALDO Y RESTAURACION
 # ============================================================
@@ -1461,552 +1811,313 @@ function Invoke-Engine ($Mode, $Msg) {
     Show-MainTitle
     $DriveLetter = if ($PSScriptRoot -and $PSScriptRoot.Length -ge 2) { $PSScriptRoot.Substring(0,2) } else { "C:" }
 
-    if ($Mode -eq "BACKOP") {
-         Write-Host "`n BACKOP TOTAL - SELECCIONA EL TIPO DE RESPALDO" -ForegroundColor $COLOR_ALERT
-         Write-Host " [A] PERFIL ACTUAL - Respaldar tu usuario (Escritorio, Documentos, etc.)" -ForegroundColor $COLOR_PRIMARY
-         Write-Host " [B] TODOS LOS PERFILES LOCALES - Respaldar todos los usuarios del equipo" -ForegroundColor $COLOR_PRIMARY
-         Write-Host " [C] EXPORTAR INVENTARIO - Lista de programas instalados y drivers" -ForegroundColor $COLOR_PRIMARY
-         Write-Host " [D] DUPLICATI - BACKOP avanzado a la nube (encriptado, programado)" -ForegroundColor $COLOR_PRIMARY
-         Write-Host "`n CONTROL" -ForegroundColor Gray
-         Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
-         Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+if ($Mode -eq "BACKOP") {
+    Write-Host "`n 💾 BACKUP TOTAL - SELECCIONA EL TIPO DE RESPALDO" -ForegroundColor $COLOR_ALERT
+    Write-Host " 👤 [A] PERFIL ACTUAL - Respaldar tu usuario (Escritorio, Documentos, etc.)" -ForegroundColor $COLOR_PRIMARY
+    Write-Host " 👥 [B] TODOS LOS PERFILES LOCALES - Respaldar todos los usuarios del equipo" -ForegroundColor $COLOR_PRIMARY
+    Write-Host " 📊 [C] EXPORTAR INVENTARIO - Lista de programas instalados y drivers" -ForegroundColor $COLOR_PRIMARY
+    Write-Host " ☁️ [D] DUPLICATI - BACKUP avanzado a la nube (encriptado, programado)" -ForegroundColor $COLOR_PRIMARY
+    Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray
+    Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
+    Write-Host " ❌ [X] VOLVER" -ForegroundColor $COLOR_DANGER
+    
     $o = Read-MenuOption "`n > SELECCIONE" -Valid @("A","B","C","D","X")
-        if($o -eq "X"){ return }
+    if($o -eq "X"){ return }
 
-        # --- CAMBIO AQUÍ: Solo pide ruta si NO es la opción D ---
-        if ($o -ne "D") {
-            $Base = Read-Host (' RUTA DESTINO PARA BACKOP (ENTER para ' + $DEFAULT_BACKOP_BASE + ')')
-            if (-not $Base) { $Base = $DEFAULT_BACKOP_BASE }
-
-            if (Is-SuspiciousBACKOPBase $Base) {
-                Write-Host "`n [!] ADVERTENCIA: la ruta destino parece sensible: $Base" -ForegroundColor $COLOR_ALERT
-                if (-not (Confirm-Critical "DESTINO DE BACKOP SENSIBLE ($Base)" "APLICAR")) { return }
-            }
+    # --- Para opciones A, B y C usamos el selector de unidades ---
+    if ($o -ne "D") {
+        $selectedUnit = Show-DriveSelector -Title "SELECCIONAR DESTINO DE BACKUP"
+        if (-not $selectedUnit) { return }
+        $Base = Join-Path $selectedUnit.Path "BACKOPs"
+        
+        # Crear carpeta si no existe
+        if (-not (Test-Path $Base)) {
+            New-Item -Path $Base -ItemType Directory -Force | Out-Null
         }
+    }
 
-        # Resumen + tamaño aproximado (solo para BACKOPs de perfil)
-        if ($o -eq "A" -or $o -eq "B") {
-            Show-MainTitle
-            Write-Host "`n RESUMEN DE BACKOP" -ForegroundColor $COLOR_MENU
-            Write-Host " DESTINO BASE: $Base" -ForegroundColor $COLOR_PRIMARY
-            Write-Host " CARPETAS INCLUIDAS:" -ForegroundColor $COLOR_PRIMARY
-            $USER_FOLDER_NAMES | ForEach-Object { Write-Host "  - $_" -ForegroundColor $COLOR_MENU }
-
-            $estBytes = 0L
-            if ($o -eq "A") {
+    # Resumen + tamaño aproximado (solo para BACKOPs de perfil)
+    if ($o -eq "A" -or $o -eq "B") {
+        Show-MainTitle
+        Write-Host "`n 📋 RESUMEN DE BACKUP" -ForegroundColor $COLOR_MENU
+        Write-Host " 📂 DESTINO BASE: $Base" -ForegroundColor $COLOR_PRIMARY
+        Write-Host " 💾 UNIDAD SELECCIONADA: $($selectedUnit.DeviceID) ($($selectedUnit.Label))" -ForegroundColor $COLOR_MENU
+        Write-Host " 📊 ESPACIO LIBRE: $($selectedUnit.FreeGB) GB de $($selectedUnit.TotalGB) GB" -ForegroundColor Gray
+        Write-Host " 📁 CARPETAS INCLUIDAS:" -ForegroundColor $COLOR_PRIMARY
+        $USER_FOLDER_NAMES | ForEach-Object { Write-Host "  - 📄 $_" -ForegroundColor $COLOR_MENU }
+        
+        $estBytes = 0L
+        if ($o -eq "A") {
+            foreach ($rel in $USER_FOLDER_NAMES) {
+                $p = Join-Path $env:USERPROFILE $rel
+                if (Test-Path $p) { $estBytes += Get-FolderSizeBytes $p }
+            }
+        } else {
+            $profiles = Get-UserProfilePaths
+            foreach ($profile in $profiles) {
                 foreach ($rel in $USER_FOLDER_NAMES) {
-                    $p = Join-Path $env:USERPROFILE $rel
+                    $p = Join-Path $profile $rel
                     if (Test-Path $p) { $estBytes += Get-FolderSizeBytes $p }
                 }
-            } else {
-                $profiles = Get-UserProfilePaths
-                foreach ($profile in $profiles) {
-                    foreach ($rel in $USER_FOLDER_NAMES) {
-                        $p = Join-Path $profile $rel
-                        if (Test-Path $p) { $estBytes += Get-FolderSizeBytes $p }
-                    }
-                }
-            }
-            $freeBytes = Get-DriveFreeBytes $Base
-            Write-Host "`n TAMAÑO APROX (SUMA DE CARPETAS): $(Format-Bytes $estBytes)" -ForegroundColor $COLOR_ALERT
-            Write-Host " ESPACIO LIBRE DESTINO:            $(Format-Bytes $freeBytes)" -ForegroundColor $COLOR_ALERT
-            Write-Log "BACKOP" "EstimateBytes=$estBytes FreeBytes=$freeBytes Base=$Base Choice=$o"
-            if ($freeBytes -gt 0 -and $estBytes -gt 0 -and $freeBytes -lt ($estBytes * 1.2)) {
-                Write-Host "`n [!] POSIBLE FALTA DE ESPACIO (recomendado >= 20% extra)." -ForegroundColor $COLOR_DANGER
-                if (-not (Confirm-Critical "CONTINUAR CON POSIBLE POCO ESPACIO" "APLICAR")) { return }
-            } else {
-                Pause-Enter " ENTER PARA CONTINUAR"
             }
         }
-
-        $BACKOPRoot = Get-BACKOPRoot $Base
-        Write-Log "BACKOP" "BACKOPRoot=$BACKOPRoot Base=$Base Choice=$o"
-
-        if ($o -eq "A") {
-            Write-Log "BACKOP" "Choice=A ProfileRoot=$env:USERPROFILE"
-            BACKOP-ProfileData $env:USERPROFILE $BACKOPRoot
-            $verify = Read-MenuOption "`n VERIFICAR BACKOP (conteo rápido)? (S/N)" -Valid @("S","N")
-            if($verify -eq "S"){
-                $count = (Get-ChildItem -Path $BACKOPRoot -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
-                Write-Host " [+] ARCHIVOS EN BACKOP: $count" -ForegroundColor $COLOR_PRIMARY
-                Write-Log "BACKOP" "VerifyFiles=$count BACKOPRoot=$BACKOPRoot"
-            }
-            Pause-Enter "`n BACKOP DE PERFIL ACTUAL COMPLETADO EN: $BACKOPRoot. ENTER"
-            return
+        
+        $freeBytes = Get-DriveFreeBytes $Base
+        Write-Host "`n 📊 TAMAÑO APROX (SUMA DE CARPETAS): $(Format-Bytes $estBytes)" -ForegroundColor $COLOR_ALERT
+        Write-Host " 💾 ESPACIO LIBRE DESTINO:            $(Format-Bytes $freeBytes)" -ForegroundColor $COLOR_ALERT
+        Write-Log "BACKOP" "EstimateBytes=$estBytes FreeBytes=$freeBytes Base=$Base Choice=$o"
+        
+        if ($freeBytes -gt 0 -and $estBytes -gt 0 -and $freeBytes -lt ($estBytes * 1.2)) {
+            Write-Host "`n [!] POSIBLE FALTA DE ESPACIO (recomendado >= 20% extra)." -ForegroundColor $COLOR_DANGER
+            if (-not (Confirm-Critical "CONTINUAR CON POSIBLE POCO ESPACIO" "APLICAR")) { return }
+        } else {
+            Pause-Enter " ENTER PARA CONTINUAR"
         }
+    }
 
-        if ($o -eq "B") {
-            $profiles = Get-UserProfilePaths
-            Write-Log "BACKOP" "Choice=B ProfilesCount=$(@($profiles).Count) BACKOPRoot=$BACKOPRoot"
-            foreach ($profile in $profiles) {
-                BACKOP-ProfileData $profile $BACKOPRoot
-            }
-            $verify = Read-MenuOption "`n VERIFICAR BACKOP (conteo rápido)? (S/N)" -Valid @("S","N")
-            if($verify -eq "S"){
-                $count = (Get-ChildItem -Path $BACKOPRoot -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
-                Write-Host " [+] ARCHIVOS EN BACKOP: $count" -ForegroundColor $COLOR_PRIMARY
-                Write-Log "BACKOP" "VerifyFiles=$count BACKOPRoot=$BACKOPRoot"
-            }
-            Pause-Enter "`n BACKOP DE TODOS LOS PERFILES COMPLETADO EN: $BACKOPRoot. ENTER"
-            return
+    $BACKOPRoot = Get-BACKOPRoot $Base
+    Write-Log "BACKOP" "BACKOPRoot=$BACKOPRoot Base=$Base Choice=$o"
+
+    if ($o -eq "A") {
+        Write-Log "BACKOP" "Choice=A ProfileRoot=$env:USERPROFILE"
+        BACKOP-ProfileData $env:USERPROFILE $BACKOPRoot
+        $verify = Read-MenuOption "`n VERIFICAR BACKOP (conteo rápido)? (S/N)" -Valid @("S","N")
+        if($verify -eq "S"){
+            $count = (Get-ChildItem -Path $BACKOPRoot -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+            Write-Host " [+] ARCHIVOS EN BACKOP: $count" -ForegroundColor $COLOR_PRIMARY
+            Write-Log "BACKOP" "VerifyFiles=$count BACKOPRoot=$BACKOPRoot"
         }
-
-				if ($o -eq "C") {
-			if (!(Test-Path $BACKOPRoot)) { New-Item -Path $BACKOPRoot -ItemType Directory -Force | Out-Null }
-			$appsFile = Join-Path $BACKOPRoot "InstalledApps_$((Get-Date).ToString('yyyyMMdd_HHmmss')).txt"
-			$driversPath = Join-Path $BACKOPRoot "Drivers"
-			$zipFile = Join-Path $BACKOPRoot "Drivers_$env:COMPUTERNAME.zip"
-			
-			Write-Log "BACKOP" "Choice=C Export Apps+Drivers to $BACKOPRoot"
-			Write-Host "`n [+] EXPORTANDO LISTA DE PROGRAMAS INSTALADOS..." -ForegroundColor $COLOR_PRIMARY
-			Get-Package | Sort-Object Name | Format-Table -AutoSize | Out-String | Out-File $appsFile -Encoding utf8
-			
-			Write-Host "[+] EXPORTANDO DRIVERS INSTALADOS..." -ForegroundColor $COLOR_PRIMARY
-			if (!(Test-Path $driversPath)) { New-Item -Path $driversPath -ItemType Directory -Force | Out-Null }
-			Export-WindowsDriver -Online -Destination $driversPath | Out-Null
-			
-			# Preguntar si quiere comprimir
-			$comprimir = Read-MenuOption "`n ¿COMPRIMIR DRIVERS EN ZIP? (S/N)" -Valid @("S","N")
-			if ($comprimir -eq "S") {
-				Write-Host "[+] COMPRIMIENDO DRIVERS..." -ForegroundColor $COLOR_ALERT
-				
-				# Método 1: Usar Compress-Archive (PowerShell 5+)
-				try {
-					Compress-Archive -Path "$driversPath\*" -DestinationPath $zipFile -Force -ErrorAction Stop
-					Write-Host " [✔] ZIP CREADO: $zipFile" -ForegroundColor Green
-					
-					# Opcional: preguntar si eliminar carpeta original
-					$eliminar = Read-MenuOption " ¿ELIMINAR CARPETA ORIGINAL DE DRIVERS? (S/N)" -Valid @("S","N")
-					if ($eliminar -eq "S") {
-						Remove-Item -Path $driversPath -Recurse -Force -ErrorAction SilentlyContinue
-						Write-Host " [✔] CARPETA ORIGINAL ELIMINADA" -ForegroundColor Green
-					}
-				} catch {
-					Write-Host " [✘] ERROR AL COMPRIMIR: $($_.Exception.Message)" -ForegroundColor $COLOR_DANGER
-				}
-			}
-			
-			# Mostrar tamaño del ZIP si existe
-			if (Test-Path $zipFile) {
-				$zipSize = (Get-Item $zipFile).Length
-				Write-Host "`n 📦 TAMAÑO DEL ZIP: $(Format-Bytes $zipSize)" -ForegroundColor Cyan
-			}
-			
-			Pause-Enter "`n INVENTARIO CREADO EN: $BACKOPRoot. ENTER"
-			return
-		}
-    
-        if ($o -eq "D") {
-            # Submenú de Duplicati
-            while ($true) {
-                Clear-Host
-                Show-MainTitle
-                Write-Host "`n DUPLICATI - BACKUP EN LA NUBE (Encriptado + Programado)" -ForegroundColor $COLOR_MENU
-                Write-Host " -----------------------------------------------------------------------------"
-                
-                # Verificar si Duplicati está instalado
-                $duplicatiExe = Get-ChildItem -Path @(
-                    "$env:ProgramFiles\Duplicati*",
-                    "${env:ProgramFiles(x86)}\Duplicati*",
-                    "$env:LOCALAPPDATA\Programs\Duplicati*"
-                ) -Filter "Duplicati.Server.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-                
-                $duplicatiService = Get-Service -Name "Duplicati" -ErrorAction SilentlyContinue
-                $isInstalled = ($duplicatiExe -ne $null) -or ($duplicatiService -ne $null)
-                
-                if ($isInstalled) {
-                    Write-Host "                             [OK] Duplicati ya está instalado" -ForegroundColor Green
-                } else {
-                    Write-Host "                             [!] Duplicati NO está instalado" -ForegroundColor Red
-                }
-                
-                Write-Host "`n OPCIONES:" -ForegroundColor $COLOR_PRIMARY
-                Write-Host " -----------------------------------------------------------------------------"
-                Write-Host " [1] ABRIR PANEL DE CONTROL (WEB) - http://localhost:8200"
-                Write-Host " [2] REINICIAR SERVICIO / RESTAURAR ICONO DE BANDEJA"
-                Write-Host " [3] INSTALAR / REPARAR DUPLICATI"
-                Write-Host " [4] DESINSTALAR DUPLICATI"
-                Write-Host "`n CONTROL" -ForegroundColor Gray
-                Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
-                Write-Host " [X] VOLVER AL MENÚ DE BACKUP" -ForegroundColor $COLOR_DANGER
-                
-                $dupOpt = Read-MenuOption "`n > SELECCIONE" -Valid @("1","2","3","4","X")
-                
-                # Si el usuario presiona X dentro de Duplicati, rompemos el bucle 'while'
-                if ($dupOpt -eq "X") { break }
-
-                switch ($dupOpt) {
-                    "1" {
-                        Write-Host "`n [+] Abriendo panel de Duplicati en el navegador..." -ForegroundColor $COLOR_PRIMARY
-                        $serviceRunning = Get-Service -Name "Duplicati" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }
-                        if (-not $serviceRunning -and $isInstalled) {
-                            Write-Host " [!] El servicio de Duplicati no está corriendo. Iniciando..." -ForegroundColor Yellow
-                            Start-Service -Name "Duplicati" -ErrorAction SilentlyContinue
-                            Start-Sleep -Seconds 3
-                        }
-                        try { Start-Process "http://localhost:8200" } catch { Write-Host " [✘] Error al abrir navegador." -ForegroundColor $COLOR_DANGER }
-                        Pause-Enter "`n ENTER para volver"
-                    }
-                    "2" {
-                        Write-Host "`n [+] Reiniciando servicio..." -ForegroundColor $COLOR_PRIMARY
-                        if (-not $isInstalled) { Write-Host " [!] No instalado."; Pause-Enter " ENTER"; continue }
-                        Stop-Service -Name "Duplicati" -Force -ErrorAction SilentlyContinue
-                        Start-Sleep -Seconds 2
-                        Start-Service -Name "Duplicati" -ErrorAction SilentlyContinue
-                        Write-Host " [✔] Servicio reiniciado." -ForegroundColor Green
-                        Pause-Enter "`n ENTER para volver"
-                    }
-                    "3" {
-                        if ($isInstalled) { if ((Read-MenuOption " ¿Reinstalar? (S/N)" -Valid @("S","N")) -ne "S") { continue } }
-                        Write-Host "`n [+] Instalando..." -ForegroundColor Yellow
-                        winget install Duplicati.Duplicati --silent --accept-package-agreements
-                        Pause-Enter "`n ENTER para volver"
-                    }
-                    "4" {
-                        if (-not $isInstalled) { Pause-Enter " [!] No instalado."; continue }
-                        if (-not (Confirm-Critical "DESINSTALAR DUPLICATI" "BORRAR")) { continue }
-                        winget uninstall Duplicati.Duplicati --silent
-                        Write-Host " [✔] Desinstalado." -ForegroundColor Green
-                        Pause-Enter " ENTER para volver"
-                    }
-                }
-            }
-            # Al salir del bucle 'while' (cuando presionas X), volvemos al menú anterior
-            return
-        }
-    
-        Write-Host "`n OPCION NO VALIDA. VUELVE A INTENTARLO." -ForegroundColor $COLOR_DANGER
-        Start-Sleep -Seconds 1
+        Pause-Enter "`n BACKOP DE PERFIL ACTUAL COMPLETADO EN: $BACKOPRoot. ENTER"
         return
     }
 
-    if ($Mode -eq "RESTORE") {
-        Write-Host "`n RESTORE TOTAL" -ForegroundColor $COLOR_ALERT
-        Write-Host ' [A] RESTAURAR DESDE UBICACIÓN PREDETERMINADA (LISTAR BACKOPS DISPONIBLES)' -ForegroundColor $COLOR_PRIMARY
-        Write-Host " [B] ESPECIFICAR RUTA MANUAL" -ForegroundColor $COLOR_PRIMARY
-        Write-Host " [C] RESTAURAR EL ÚLTIMO BACKOP AUTOMÁTICAMENTE" -ForegroundColor $COLOR_PRIMARY
-        Write-Host "`n CONTROL" -ForegroundColor Gray
-        Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
-        Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-        $choice = Read-Host "``> SELECCIONE"
-        if ($choice.ToUpper() -eq "X") { return }
+    if ($o -eq "B") {
+        $profiles = Get-UserProfilePaths
+        Write-Log "BACKOP" "Choice=B ProfilesCount=$(@($profiles).Count) BACKOPRoot=$BACKOPRoot"
+        foreach ($profile in $profiles) {
+            BACKOP-ProfileData $profile $BACKOPRoot
+        }
+        $verify = Read-MenuOption "`n VERIFICAR BACKOP (conteo rápido)? (S/N)" -Valid @("S","N")
+        if($verify -eq "S"){
+            $count = (Get-ChildItem -Path $BACKOPRoot -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+            Write-Host " [+] ARCHIVOS EN BACKOP: $count" -ForegroundColor $COLOR_PRIMARY
+            Write-Log "BACKOP" "VerifyFiles=$count BACKOPRoot=$BACKOPRoot"
+        }
+        Pause-Enter "`n BACKOP DE TODOS LOS PERFILES COMPLETADO EN: $BACKOPRoot. ENTER"
+        return
+    }
 
-        if ($choice.ToUpper() -eq "A") {
-            $base = $DEFAULT_BACKOP_BASE
-            $BACKOPs = @()
-            if (Test-Path $base) {
-                $BACKOPs = Get-ChildItem -Path $base -Directory -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name -like "BACKOP_*" } |
-                    Sort-Object CreationTime -Descending
-            }
-            if (!$BACKOPs) {
-                # Si no está en la ubicación predeterminada, buscar en todas las unidades locales
-                Write-Host "`n [!] No se encontraron BACKOPs en la ubicación predeterminada." -ForegroundColor $COLOR_DANGER
-                Write-Host " [+] Buscando carpetas 'BACKOP_*' en unidades disponibles..." -ForegroundColor $COLOR_PRIMARY
-                $BACKOPs = @()
-                $seen = @{}
-                $disks = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -in 2,3 }
-                foreach($disk in $disks){
-                    $root = ($disk.DeviceID + "\")
-                    if(Test-Path $root){
-                        # Nivel 1: E:\BACKOP_01 (directo en la raiz)
-                        Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue |
-                            Where-Object { $_.Name -like "BACKOP_*" } |
-                            ForEach-Object {
-                                if(-not $seen.ContainsKey($_.FullName)){
-                                    $BACKOPs += [pscustomobject]@{
-                                        Name         = $_.Name
-                                        FullName     = $_.FullName
-                                        CreationTime = $_.CreationTime
-                                        Drive        = $disk.DeviceID
-                                    }
-                                    $seen[$_.FullName] = $true
-                                }
-                            }
-
-                        # Nivel 2: E:\Carpeta\BACKOP_01 (un nivel debajo)
-                        $parents = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue
-                        foreach($p in $parents){
-                            Get-ChildItem -Path $p.FullName -Directory -ErrorAction SilentlyContinue |
-                                Where-Object { $_.Name -like "BACKOP_*" } |
-                                ForEach-Object {
-                                    if(-not $seen.ContainsKey($_.FullName)){
-                                        $BACKOPs += [pscustomobject]@{
-                                            Name         = $_.Name
-                                            FullName     = $_.FullName
-                                            CreationTime = $_.CreationTime
-                                            Drive        = $disk.DeviceID
-                                        }
-                                        $seen[$_.FullName] = $true
-                                    }
-                                }
-                        }
-                    }
+    if ($o -eq "C") {
+        if (!(Test-Path $BACKOPRoot)) { New-Item -Path $BACKOPRoot -ItemType Directory -Force | Out-Null }
+        $appsFile = Join-Path $BACKOPRoot "InstalledApps_$((Get-Date).ToString('yyyyMMdd_HHmmss')).txt"
+        $driversPath = Join-Path $BACKOPRoot "Drivers"
+        $zipFile = Join-Path $BACKOPRoot "Drivers_$env:COMPUTERNAME.zip"
+        
+        Write-Log "BACKOP" "Choice=C Export Apps+Drivers to $BACKOPRoot"
+        Write-Host "`n [+] EXPORTANDO LISTA DE PROGRAMAS INSTALADOS..." -ForegroundColor $COLOR_PRIMARY
+        Get-Package | Sort-Object Name | Format-Table -AutoSize | Out-String | Out-File $appsFile -Encoding utf8
+        
+        Write-Host "[+] EXPORTANDO DRIVERS INSTALADOS..." -ForegroundColor $COLOR_PRIMARY
+        if (!(Test-Path $driversPath)) { New-Item -Path $driversPath -ItemType Directory -Force | Out-Null }
+        Export-WindowsDriver -Online -Destination $driversPath | Out-Null
+        
+        $comprimir = Read-MenuOption "`n ¿COMPRIMIR DRIVERS EN ZIP? (S/N)" -Valid @("S","N")
+        if ($comprimir -eq "S") {
+            Write-Host "[+] COMPRIMIENDO DRIVERS..." -ForegroundColor $COLOR_ALERT
+            try {
+                Compress-Archive -Path "$driversPath\*" -DestinationPath $zipFile -Force -ErrorAction Stop
+                Write-Host " [✔] ZIP CREADO: $zipFile" -ForegroundColor Green
+                $eliminar = Read-MenuOption " ¿ELIMINAR CARPETA ORIGINAL DE DRIVERS? (S/N)" -Valid @("S","N")
+                if ($eliminar -eq "S") {
+                    Remove-Item -Path $driversPath -Recurse -Force -ErrorAction SilentlyContinue
+                    Write-Host " [✔] CARPETA ORIGINAL ELIMINADA" -ForegroundColor Green
                 }
+            } catch {
+                Write-Host " [✘] ERROR AL COMPRIMIR: $($_.Exception.Message)" -ForegroundColor $COLOR_DANGER
+            }
+        }
+        
+        if (Test-Path $zipFile) {
+            $zipSize = (Get-Item $zipFile).Length
+            Write-Host "`n 📦 TAMAÑO DEL ZIP: $(Format-Bytes $zipSize)" -ForegroundColor Cyan
+        }
+        
+        Pause-Enter "`n INVENTARIO CREADO EN: $BACKOPRoot. ENTER"
+        return
+    }
 
-                if (!$BACKOPs -or $BACKOPs.Count -eq 0) {
-                    Write-Host "`n [!] NO SE ENCONTRARON BACKOPS EN NINGUNA UNIDAD." -ForegroundColor $COLOR_DANGER
-                    Start-Sleep -Seconds 2
-                    return
-                }
-                $BACKOPs = $BACKOPs | Sort-Object CreationTime -Descending
-            }
-            Write-Host "`n BACKOPS DISPONIBLES:" -ForegroundColor $COLOR_PRIMARY
-            for ($i = 0; $i -lt $BACKOPs.Count; $i++) {
-                Write-Host " [$($i+1)] $($BACKOPs[$i].Name) - $($BACKOPs[$i].CreationTime)"
-            }
-            Write-Host ' [L] ÚLTIMO (MÁS RECIENTE)' -ForegroundColor $COLOR_MENU
-            Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-            $sel = Read-Host "``> SELECCIONE BACKOP"
-            if ($sel.ToUpper() -eq "X") { return }
-            if ($sel.ToUpper() -eq "L") {
-                $BACKOPRoot = $BACKOPs[0].FullName
-            } elseif ($sel -match "^\d+$" -and [int]$sel -le $BACKOPs.Count) {
-                $BACKOPRoot = $BACKOPs[[int]$sel - 1].FullName
+    if ($o -eq "D") {
+        while ($true) {
+            Clear-Host
+            Show-MainTitle
+            Write-Host "`n ☁️ DUPLICATI - BACKUP EN LA NUBE (Encriptado + Programado)" -ForegroundColor $COLOR_MENU
+            Write-Host " -----------------------------------------------------------------------------"
+            
+            $duplicatiExe = Get-ChildItem -Path @(
+                "$env:ProgramFiles\Duplicati*",
+                "${env:ProgramFiles(x86)}\Duplicati*",
+                "$env:LOCALAPPDATA\Programs\Duplicati*"
+            ) -Filter "Duplicati.Server.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            
+            $duplicatiService = Get-Service -Name "Duplicati" -ErrorAction SilentlyContinue
+            $isInstalled = ($duplicatiExe -ne $null) -or ($duplicatiService -ne $null)
+            
+            if ($isInstalled) {
+                Write-Host "                               [OK] Duplicati ya está instalado" -ForegroundColor Green
             } else {
-                Write-Host "`n [!] SELECCIÓN INVÁLIDA." -ForegroundColor $COLOR_DANGER
-                Start-Sleep -Seconds 2
-                return
+                Write-Host "                               [!] Duplicati NO está instalado" -ForegroundColor Red
             }
-            Write-Log "RESTORE" "Choice=A BACKOPRoot=$BACKOPRoot"
-        } elseif ($choice.ToUpper() -eq "B") {
-            # Busca auto en USB conectadas (carpetas BACKOP_* directamente en la raiz, p.ej. E:\BACKOP_01)
-            $found = @()
-            $seenUsb = @{}
-            $usbDisks = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -eq 2 }
-            foreach($disk in $usbDisks){
-                $root = ($disk.DeviceID + "\")
-                if(Test-Path $root){
-                    # Nivel 1: E:\BACKOP_01
-                    Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue |
-                        Where-Object { $_.Name -like "BACKOP_*" } |
-                        ForEach-Object {
-                            if(-not $seenUsb.ContainsKey($_.FullName)){
-                                $found += [pscustomobject]@{
-                                    Name         = $_.Name
-                                    FullName     = $_.FullName
-                                    CreationTime = $_.CreationTime
-                                    Drive        = $disk.DeviceID
-                                }
-                                $seenUsb[$_.FullName] = $true
-                            }
-                        }
+            
+            Write-Host "`n ⚙️ OPCIONES:" -ForegroundColor $COLOR_PRIMARY
+            Write-Host " -----------------------------------------------------------------------------"
+            Write-Host " 🌐 [1] ABRIR PANEL DE CONTROL (WEB) - http://localhost:8200"
+            Write-Host " 🔄 [2] REINICIAR SERVICIO / RESTAURAR ICONO DE BANDEJA"
+            Write-Host " 📦 [3] INSTALAR / REPARAR DUPLICATI"
+            Write-Host " 🗑️ [4] DESINSTALAR DUPLICATI"
+            Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray
+            Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
+            Write-Host " ❌ [X] VOLVER AL MENÚ DE BACKUP" -ForegroundColor $COLOR_DANGER
+            
+            $dupOpt = Read-MenuOption "`n > SELECCIONE" -Valid @("1","2","3","4","X")
+            if ($dupOpt -eq "X") { break }
 
-                    # Nivel 2: E:\Carpeta\BACKOP_01
-                    $parents = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue
-                    foreach($p in $parents){
-                        Get-ChildItem -Path $p.FullName -Directory -ErrorAction SilentlyContinue |
-                            Where-Object { $_.Name -like "BACKOP_*" } |
-                            ForEach-Object {
-                                if(-not $seenUsb.ContainsKey($_.FullName)){
-                                    $found += [pscustomobject]@{
-                                        Name         = $_.Name
-                                        FullName     = $_.FullName
-                                        CreationTime = $_.CreationTime
-                                        Drive        = $disk.DeviceID
-                                    }
-                                    $seenUsb[$_.FullName] = $true
-                                }
-                            }
+            switch ($dupOpt) {
+                "1" {
+                    Write-Host "`n [+] Abriendo panel de Duplicati en el navegador..." -ForegroundColor $COLOR_PRIMARY
+                    $serviceRunning = Get-Service -Name "Duplicati" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }
+                    if (-not $serviceRunning -and $isInstalled) {
+                        Write-Host " [!] El servicio de Duplicati no está corriendo. Iniciando..." -ForegroundColor Yellow
+                        Start-Service -Name "Duplicati" -ErrorAction SilentlyContinue
+                        Start-Sleep -Seconds 3
                     }
+                    try { Start-Process "http://localhost:8200" } catch { Write-Host " [✘] Error al abrir navegador." -ForegroundColor $COLOR_DANGER }
+                    Pause-Enter "`n ENTER para volver"
                 }
-            }
-
-            if($found.Count -gt 0){
-                $found = $found | Sort-Object CreationTime -Descending
-                Write-Host "`n BACKOPS ENCONTRADOS EN USB:" -ForegroundColor $COLOR_PRIMARY
-                for ($i = 0; $i -lt $found.Count; $i++) {
-                    Write-Host " [$($i+1)] $($found[$i].Drive)\$($found[$i].Name) - $($found[$i].CreationTime) - $($found[$i].FullName)" -ForegroundColor $COLOR_MENU
-                }
-                Write-Host " [M] MANUAL - INGRESAR RUTA COMPLETA" -ForegroundColor $COLOR_MENU
-                Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-                $sel = (Read-Host "``> SELECCIONE BACKOP (NUMERO)") 
-                if($sel.ToUpper() -eq "X"){ return }
-                if($sel.ToUpper() -eq "M"){
-                    $BACKOPRoot = Read-Host ' > INGRESE LA RUTA COMPLETA AL BACKOP'
-                } elseif ($sel -match "^\d+$" -and [int]$sel -ge 1 -and [int]$sel -le $found.Count) {
-                    $BACKOPRoot = $found[[int]$sel - 1].FullName
-                } else {
-                    Write-Host "`n [!] SELECCIÓN INVÁLIDA." -ForegroundColor $COLOR_DANGER
+                "2" {
+                    Write-Host "`n [+] Reiniciando servicio..." -ForegroundColor $COLOR_PRIMARY
+                    if (-not $isInstalled) { Write-Host " [!] No instalado."; Pause-Enter " ENTER"; continue }
+                    Stop-Service -Name "Duplicati" -Force -ErrorAction SilentlyContinue
                     Start-Sleep -Seconds 2
-                    return
+                    Start-Service -Name "Duplicati" -ErrorAction SilentlyContinue
+                    Write-Host " [✔] Servicio reiniciado." -ForegroundColor Green
+                    Pause-Enter "`n ENTER para volver"
                 }
-            } else {
-                $BACKOPRoot = Read-Host ' > NO SE ENCONTRARON BACKOPS EN USB. INGRESE LA RUTA COMPLETA AL BACKOP'
-            }
-
-            Write-Log "RESTORE" "Choice=B BACKOPRoot=$BACKOPRoot"
-            if (-not $BACKOPRoot -or -not (Test-Path $BACKOPRoot)) {
-                Write-Host "`n [!] RUTA NO VÁLIDA O NO EXISTE." -ForegroundColor $COLOR_DANGER
-                Start-Sleep -Seconds 2
-                return
-            }
-        } elseif ($choice.ToUpper() -eq "C") {
-            $base = $DEFAULT_BACKOP_BASE
-            # Listar TODOS los BACKOPs en todas las unidades y permitir elegir (Enter = más reciente)
-            Write-Host "`n [+] Buscando BACKOPs en todas las unidades..." -ForegroundColor $COLOR_PRIMARY
-            $BACKOPs = @()
-            $seen = @{}
-
-            if (Test-Path $base) {
-                Get-ChildItem -Path $base -Directory -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name -like "BACKOP_*" } |
-                    ForEach-Object {
-                        if(-not $seen.ContainsKey($_.FullName)){
-                            $BACKOPs += [pscustomobject]@{
-                                Name         = $_.Name
-                                FullName     = $_.FullName
-                                CreationTime = $_.CreationTime
-                                Drive        = $_.FullName.Substring(0,2)
-                            }
-                            $seen[$_.FullName] = $true
-                        }
-                    }
-            }
-
-            $disks = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DriveType -in 2,3 }
-            foreach($disk in $disks){
-                $root = ($disk.DeviceID + "\")
-                if(Test-Path $root){
-                    # Nivel 1
-                    Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue |
-                        Where-Object { $_.Name -like "BACKOP_*" } |
-                        ForEach-Object {
-                            if(-not $seen.ContainsKey($_.FullName)){
-                                $BACKOPs += [pscustomobject]@{
-                                    Name         = $_.Name
-                                    FullName     = $_.FullName
-                                    CreationTime = $_.CreationTime
-                                    Drive        = $disk.DeviceID
-                                }
-                                $seen[$_.FullName] = $true
-                            }
-                        }
-
-                    # Nivel 2
-                    $parents = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue
-                    foreach($p in $parents){
-                        Get-ChildItem -Path $p.FullName -Directory -ErrorAction SilentlyContinue |
-                            Where-Object { $_.Name -like "BACKOP_*" } |
-                            ForEach-Object {
-                                if(-not $seen.ContainsKey($_.FullName)){
-                                    $BACKOPs += [pscustomobject]@{
-                                        Name         = $_.Name
-                                        FullName     = $_.FullName
-                                        CreationTime = $_.CreationTime
-                                        Drive        = $disk.DeviceID
-                                    }
-                                    $seen[$_.FullName] = $true
-                                }
-                            }
-                    }
+                "3" {
+                    if ($isInstalled) { if ((Read-MenuOption " ¿Reinstalar? (S/N)" -Valid @("S","N")) -ne "S") { continue } }
+                    Write-Host "`n [+] Instalando..." -ForegroundColor Yellow
+                    winget install Duplicati.Duplicati --silent --accept-package-agreements
+                    Pause-Enter "`n ENTER para volver"
+                }
+                "4" {
+                    if (-not $isInstalled) { Pause-Enter " [!] No instalado."; continue }
+                    if (-not (Confirm-Critical "DESINSTALAR DUPLICATI" "BORRAR")) { continue }
+                    winget uninstall Duplicati.Duplicati --silent
+                    Write-Host " [✔] Desinstalado." -ForegroundColor Green
+                    Pause-Enter " ENTER para volver"
                 }
             }
+        }
+        return
+    }
+    return
+}
 
-            if(!$BACKOPs -or $BACKOPs.Count -eq 0){
-                Write-Host "`n [!] NO SE ENCONTRARON BACKOPS EN NINGUNA UNIDAD." -ForegroundColor $COLOR_DANGER
-                Start-Sleep -Seconds 2
-                return
+if ($Mode -eq "RESTORE") {
+    Write-Host "`n 📀 RESTORE TOTAL" -ForegroundColor $COLOR_ALERT
+    Write-Host " 🔍 [B] BUSCAR BACKOP EN TODAS LAS UNIDADES (C:, D:, USB, etc.)" -ForegroundColor $COLOR_PRIMARY
+    Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray
+    Write-Host " -----------------------------------------------------------------------------" -ForegroundColor $COLOR_DANGER
+    Write-Host " ❌ [X] VOLVER" -ForegroundColor $COLOR_DANGER
+    
+    $choice = Read-MenuOption "🔽 > SELECCIONE" -Valid @("B","X")
+    if ($choice -eq "X") { return }
+    
+    if ($choice -eq "B") {
+        Write-Host "`n [+] Buscando en todas las unidades locales y USB..." -ForegroundColor $COLOR_PRIMARY
+        $units = Scan-DriveUnits
+        $allBACKOPs = @()
+        
+        foreach ($unit in $units) {
+            $found = Find-BACKOPsInUnit -UnitPath $unit.Path
+            if ($found.Count -gt 0) {
+                $allBACKOPs += $found
             }
-
-            $BACKOPs = $BACKOPs | Sort-Object CreationTime -Descending
-            Write-Host "`n BACKOPS ENCONTRADOS (TODAS LAS UNIDADES):" -ForegroundColor $COLOR_PRIMARY
-            for ($i = 0; $i -lt $BACKOPs.Count; $i++) {
-                Write-Host " [$($i+1)] $($BACKOPs[$i].Drive)\$($BACKOPs[$i].Name) - $($BACKOPs[$i].CreationTime) - $($BACKOPs[$i].FullName)" -ForegroundColor $COLOR_MENU
-            }
-            Write-Host " [ENTER] Usar el más reciente" -ForegroundColor $COLOR_MENU
-            Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-
-            $sel = Read-Host "``> SELECCIONE BACKOP (NUMERO/ENTER)"
-            if($sel -and $sel.ToUpper() -eq "X"){ return }
-
-            $latest = $BACKOPs[0]
-            if($sel -match "^\d+$" -and [int]$sel -ge 1 -and [int]$sel -le $BACKOPs.Count){
-                $latest = $BACKOPs[[int]$sel - 1]
-            }
-
-            $BACKOPRoot = $latest.FullName
-            Write-Log "RESTORE" "Choice=C BACKOPRoot=$BACKOPRoot"
-            Write-Host "`n [+] USANDO BACKOP: $($latest.Name)" -ForegroundColor $COLOR_PRIMARY
+        }
+        
+        if ($allBACKOPs.Count -eq 0) {
+            Write-Host "`n ❌ No se encontraron BACKOPs en ninguna unidad." -ForegroundColor $COLOR_DANGER
+            Pause-Enter " ENTER"
+            return
+        }
+        
+        # Mostrar todos los BACKOPs encontrados
+        Clear-Host
+        Show-MainTitle
+        Write-Host "`n 📋 BACKOPS ENCONTRADOS EN TODAS LAS UNIDADES:" -ForegroundColor $COLOR_PRIMARY
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        
+        for ($i = 0; $i -lt $allBACKOPs.Count; $i++) {
+            Write-Host "   [$($i+1)] $($allBACKOPs[$i].Name)" -ForegroundColor $COLOR_MENU
+            Write-Host "          📍 Unidad: $([System.IO.Path]::GetPathRoot($allBACKOPs[$i].FullName))" -ForegroundColor DarkGray
+            Write-Host "          📅 Creado: $($allBACKOPs[$i].CreationTime)" -ForegroundColor DarkGray
+            Write-Host "          💾 Tamaño: $($allBACKOPs[$i].SizeGB) GB" -ForegroundColor DarkGray
+            Write-Host ""
+        }
+        
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        Write-Host " [X] CANCELAR" -ForegroundColor $COLOR_DANGER
+        
+        $sel = Read-Host "`n > SELECCIONE BACKOP (NÚMERO)"
+        if ($sel -eq "X" -or $sel -eq "x") { return }
+        
+        if ($sel -match "^\d+$" -and [int]$sel -le $allBACKOPs.Count) {
+            $BACKOPRoot = $allBACKOPs[[int]$sel-1].FullName
+            Write-Host "`n ✅ BACKOP seleccionado: $BACKOPRoot" -ForegroundColor Green
         } else {
-            Write-Host "`n OPCIÓN NO VÁLIDA." -ForegroundColor $COLOR_DANGER
-            Start-Sleep -Seconds 1
+            Write-Host "`n ❌ Selección inválida." -ForegroundColor $COLOR_DANGER
             return
         }
-
-        $BACKOPProfiles = Get-ChildItem -Path $BACKOPRoot -Directory -ErrorAction SilentlyContinue
-        if (!$BACKOPProfiles) {
-            Write-Host "`n [!] NO SE ENCONTRARON PERFILES DE BACKOP EN LA RUTA ESPECIFICADA." -ForegroundColor $COLOR_DANGER
-            Start-Sleep -Seconds 2
-            return
+    }
+    
+    # Verificar que el BACKOP existe
+    if (-not (Test-Path $BACKOPRoot)) {
+        Write-Host "`n ❌ El BACKOP seleccionado no existe o no es accesible." -ForegroundColor $COLOR_DANGER
+        Pause-Enter " ENTER"
+        return
+    }
+    
+    # Continuar con la restauración...
+    $BACKOPProfiles = Get-ChildItem -Path $BACKOPRoot -Directory -ErrorAction SilentlyContinue
+    if (!$BACKOPProfiles) { 
+        Write-Host "Backop vacío o no válido." -ForegroundColor $COLOR_DANGER
+        Pause-Enter " ENTER"
+        return 
+    }
+    
+    Write-Host "`n PERFILES EN EL BACKOP:" -ForegroundColor $COLOR_PRIMARY
+    $BACKOPProfiles | ForEach-Object { Write-Host " [ ] $($_.Name)" -ForegroundColor $COLOR_MENU }
+    $profileChoice = Read-Host ' NOMBRE DE PERFIL A RESTAURAR (ENTER PARA TODOS, X PARA VOLVER)'
+    if ($profileChoice.ToUpper() -eq "X") { return }
+    
+    $targetUsersRoot = "$env:SystemDrive\Users"
+    $alt = Read-MenuOption " RESTAURAR EN UBICACIÓN ALTERNATIVA? (S/N)" -Valid @("S","N")
+    if($alt -eq "S"){
+        $custom = Read-Host " RUTA BASE (ej: D:\Restores)"
+        if($custom){ $targetUsersRoot = $custom }
+    }
+    
+    if (-not $profileChoice) {
+        foreach ($profile in $BACKOPProfiles) {
+            Restore-ProfileData $profile.FullName $targetUsersRoot
         }
-        Write-Log "RESTORE" "BACKOPRoot=$BACKOPRoot BACKOPProfiles=$(@($BACKOPProfiles).Count)"
-
-        # Validación rápida del layout esperado (que los perfiles tengan al menos una carpeta típica)
-        $hasExpectedLayout = $false
-        foreach($profile in $BACKOPProfiles){
-            foreach($rel in $USER_FOLDER_NAMES){
-                $checkPath = Join-Path $profile.FullName $rel
-                if(Test-Path $checkPath){
-                    $hasExpectedLayout = $true
-                    break
-                }
-            }
-            if($hasExpectedLayout){ break }
-        }
-        if(-not $hasExpectedLayout){
-            Write-Host "`n [!] El BACKOP no parece tener el layout esperado (no se encuentran carpetas típicas dentro de los perfiles)." -ForegroundColor $COLOR_DANGER
-            Start-Sleep -Seconds 2
-            return
-        }
-
-        Write-Host "`n PERFILES EN EL BACKOP:" -ForegroundColor $COLOR_PRIMARY
-        $BACKOPProfiles | ForEach-Object { Write-Host " [ ] $($_.Name)" -ForegroundColor $COLOR_MENU }
-        Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-        $profileChoice = Read-Host ' NOMBRE DE PERFIL A RESTAURAR (ENTER PARA TODOS, X PARA VOLVER)'
-        if ($profileChoice -and $profileChoice.ToUpper() -eq "X") {
-            return
-        }
-
-        $targetUsersRoot = "$env:SystemDrive\Users"
-        $alt = Read-MenuOption " RESTAURAR EN UBICACIÓN ALTERNATIVA? (S/N)" -Valid @("S","N")
-        if($alt -eq "S"){
-            $custom = Read-Host " RUTA BASE (ej: D:\\Restores)"
-            if($custom){ $targetUsersRoot = $custom }
-        }
-        Write-Log "RESTORE" "TargetUsersRoot=$targetUsersRoot"
-
-        if (-not $profileChoice) {
-            Write-Log "RESTORE" "Restoring ALL profiles Count=$(@($BACKOPProfiles).Count)"
-            foreach ($profile in $BACKOPProfiles) {
-                Write-Log "RESTORE" "Restoring profile=$($profile.Name)"
-                $dest = Join-Path $targetUsersRoot $profile.Name
-                if(Test-Path $dest){
-                    if(-not (Confirm-Critical "SOBRESCRIBIR PERFIL EXISTENTE: $dest" "APLICAR")){ continue }
-                }
-                Restore-ProfileData $profile.FullName $targetUsersRoot
-            }
-            Read-Host "`n RESTAURACIÓN DE TODOS LOS PERFILES COMPLETADA. ENTER"
-            return
-        }
-
+    } else {
         $selected = $BACKOPProfiles | Where-Object { $_.Name -ieq $profileChoice }
         if ($selected) {
-            $selProfile = $selected | Select-Object -First 1
-            Write-Log "RESTORE" "Restoring profile choice=$profileChoice Actual=$($selProfile.Name)"
-            $dest = Join-Path $targetUsersRoot $selProfile.Name
-            if(Test-Path $dest){
-                if(-not (Confirm-Critical "SOBRESCRIBIR PERFIL EXISTENTE: $dest" "APLICAR")){ return }
-            }
-            Restore-ProfileData $selProfile.FullName $targetUsersRoot
-            Read-Host "`n RESTAURACIÓN DEL PERFIL $profileChoice COMPLETADA. ENTER"
-            return
+            Restore-ProfileData $selected[0].FullName $targetUsersRoot
         }
-
-        Write-Host "`n [!] PERFIL NO ENCONTRADO EN EL BACKOP." -ForegroundColor $COLOR_DANGER
-        Start-Sleep -Seconds 2
-        return
     }
+    Pause-Enter "`n PROCESO FINALIZADO. ENTER"
+	}
 }
 
 # ============================================================
@@ -2063,29 +2174,29 @@ function Invoke-TempOptimizer {
 
     while($true){
         Show-MainTitle
-        Write-Host "`n GESTIÓN DE ALMACENAMIENTO Y LIMPIEZA" -ForegroundColor $C_MENU
+		Write-Host "`n 🗂️ GESTIÓN DE ALMACENAMIENTO Y LIMPIEZA" -ForegroundColor $C_MENU
         
         Write-Host " ---------------------------------------------------------------------------" -ForegroundColor DarkGray
-        Write-Host " [1] TODO (Mantenimiento Integral) " -NoNewline -ForegroundColor $C_GRAY
+        Write-Host " 🔧 [1] TODO (Mantenimiento Integral) " -NoNewline -ForegroundColor $C_GRAY
         Write-Host "-> Limpieza total de basura y archivos residuales." -ForegroundColor $C_GRAY
         
-        Write-Host " [2] Papelera de Reciclaje         " -NoNewline -ForegroundColor $C_MENU
+        Write-Host " 🗑️ [2] Papelera de Reciclaje         " -NoNewline -ForegroundColor $C_MENU
         Write-Host "-> Vacía archivos eliminados de todos los discos." -ForegroundColor $C_GRAY
         
-        Write-Host " [3] Temporales de Usuario         " -NoNewline -ForegroundColor $C_MENU
+        Write-Host " 🧹 [3] Temporales de Usuario         " -NoNewline -ForegroundColor $C_MENU
         Write-Host "-> Caché de apps y navegación del perfil actual." -ForegroundColor $C_GRAY
         
-        Write-Host " [4] Temporales del Sistema        " -NoNewline -ForegroundColor $C_MENU
+        Write-Host " ⚙️ [4] Temporales del Sistema        " -NoNewline -ForegroundColor $C_MENU
         Write-Host "-> Archivos residuales de Windows y actualizaciones." -ForegroundColor $C_GRAY
 
-        Write-Host " [5] LIMPIEZA AVANZADA (BleachBit) - App gráfica" -NoNewline -ForegroundColor $C_MENU
+        Write-Host " 🧽 [5] LIMPIEZA AVANZADA (BleachBit) - App gráfica" -NoNewline -ForegroundColor $C_MENU
         Write-Host "-> Limpieza profunda de navegadores, cachés, y más." -ForegroundColor $C_GRAY
 
-        Write-Host "`n CONTROL" -ForegroundColor $C_GRAY 
+        Write-Host "`n ⌨️ CONTROL" -ForegroundColor $C_GRAY 
         Write-Host " -------------------" -ForegroundColor $C_ERR 
-        Write-Host " [X] VOLVER AL MENÚ PRINCIPAL" -ForegroundColor $C_ERR
+        Write-Host " ❌ [X] VOLVER AL MENÚ PRINCIPAL" -ForegroundColor $C_ERR
         
-        $o = (Read-Host "`n > SELECCIONE UNA OPCIÓN").ToUpper()
+        $o = (Read-Host "🔽 > SELECCIONE UNA OPCIÓN").ToUpper()
         if($o -eq "X"){break}
         
         $targets = @()
@@ -2212,222 +2323,173 @@ function Invoke-WingetMenu {
     Clear-Host
     while($true){
         Show-MainTitle
-        Write-Host ([Environment]::NewLine + ' GESTION DE PAQUETES (WINGET & CHOCOLATEY)') -ForegroundColor $COLOR_MENU
-        Write-Host " [A] WINGET: ACTUALIZAR TODO             [D] CHOCO: INSTALAR CHOCOLATEY"
-        Write-Host " [B] WINGET: LISTAR DISPONIBLES          [E] CHOCO: ACTUALIZAR TODO"
-        Write-Host " [C] WINGET: REPARAR CLIENTE             [F] CHOCO: BUSCAR PAQUETE"
-        Write-Host ' [G] INSTALAR POR NOMBRE (AUTO-SEARCH)'
-        Write-Host ' [H] INSTALAR WINGET (APP INSTALLER)'
-        Write-Host ' [I] SCOOP: Instalar/Setup Scoop + buckets (MODO USUARIO)'
-        Write-Host ' [J] SCOOP: Buscar/Instalar app'
-        Write-Host ' [K] SCOOP: Listar actualizaciones'
-        Write-Host ' [L] MULTI-SEARCH: Buscar en todas las fuentes'
-        Write-Host "`n CONTROL" -ForegroundColor Gray
+        Write-Host ([Environment]::NewLine + ' 📦 GESTION DE PAQUETES (WINGET & CHOCOLATEY)') -ForegroundColor $COLOR_MENU
+        
+        # Columna izquierda: WINGET | Columna derecha: CHOCOLATEY
+        Write-Host " 🔄 [A] WINGET: ACTUALIZAR TODO             🍫 [D] CHOCO: ACTUALIZAR TODO"        -ForegroundColor $COLOR_MENU
+        Write-Host " 📋 [B] WINGET: LISTAR DISPONIBLES          📋 [E] CHOCO: LISTAR DISPONIBLES"      -ForegroundColor $COLOR_MENU
+        Write-Host " 🔍 [S] WINGET: BUSCAR PAQUETE              🔍 [F] CHOCO: BUSCAR PAQUETE"          -ForegroundColor $COLOR_MENU
+        Write-Host " 📥 [G] WINGET: INSTALAR POR ID EXACTO      🍫 [H] CHOCO: INSTALAR CHOCOLATEY   "        -ForegroundColor $COLOR_MENU
+        Write-Host " 🔧 [C] WINGET: REPARAR CLIENTE                                                " -ForegroundColor $COLOR_MENU
+        
+        Write-Host "`n 💡 TIP: Usa primero [S] para buscar el ID exacto, luego [G] para instalarlo." -ForegroundColor $COLOR_ALERT
+        Write-Host ""
+        Write-Host " ⌨️ CONTROL" -ForegroundColor Gray
         Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
         Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
         
         $hasWinget = [bool](Get-Command winget -ErrorAction SilentlyContinue)
         $hasChoco  = [bool](Get-Command choco -ErrorAction SilentlyContinue)
-        $hasScoop  = [bool](Get-Command scoop -ErrorAction SilentlyContinue)
         
         Write-Host "`n ESTADO:" -ForegroundColor Gray
-        Write-Host ("  - winget: {0}" -f ($(if($hasWinget){"OK"}else{"NO"}))) -ForegroundColor $COLOR_MENU
-        Write-Host ("  - choco : {0}" -f ($(if($hasChoco){"OK"}else{"NO"}))) -ForegroundColor $COLOR_MENU
-        Write-Host ("  - scoop : {0}" -f ($(if($hasScoop){"OK"}else{"NO"}))) -ForegroundColor $COLOR_MENU
+        Write-Host ("  - winget: {0}" -f ($(if($hasWinget){"OK"}else{"NO"}))) -ForegroundColor $(if($hasWinget){"Green"}else{"Red"})
+        Write-Host ("  - choco : {0}" -f ($(if($hasChoco){"OK"}else{"NO"}))) -ForegroundColor $(if($hasChoco){"Green"}else{"Red"})
 
-        $o = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","E","F","G","H","I","J","K","L","X")
+        $o = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","S","D","E","F","G","H","X")
         if($o -eq "X"){break}
         
-        # ========== WINGET OPTIONS ==========
+        # ========== A - WINGET: ACTUALIZAR TODO ==========
         if($o -eq "A"){
             if(-not $hasWinget){ Write-Host "`n [!] winget no está disponible." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
             Write-Host "`n ACTUALIZANDO VIA WINGET..." -ForegroundColor $COLOR_PRIMARY
-            $out = winget upgrade --all --accept-package-agreements --accept-source-agreements 2>&1
+            winget upgrade --all --accept-package-agreements --accept-source-agreements 2>&1
             Write-Log "PKG" ("winget upgrade all exit={0}" -f $LASTEXITCODE)
             Pause-Enter "`n FIN. ENTER"
         }
         
-        # ========== SCOOP OPTION FIXED ==========
-if($o -eq "I"){
-    Show-MainTitle
-    Write-Host "`n [I] SCOOP MANAGER - INSTALACIÓN MODO USUARIO" -ForegroundColor $COLOR_PRIMARY
-    Write-Host " ---------------------------------------------------------------------------"
-    Write-Host " Scoop NO puede instalarse con permisos de administrador."
-    Write-Host " Vamos a crear una tarea que ejecute la instalación como usuario normal."
-    Write-Host " ---------------------------------------------------------------------------" -ForegroundColor $COLOR_ALERT
-    
-    if($hasScoop){
-        Write-Host "`n[+] Scoop ya está instalado. Actualizando..." -ForegroundColor $COLOR_PRIMARY
-        scoop update
-        scoop update *
-        Write-Host "`n ✅ Scoop actualizado." -ForegroundColor Green
-        Pause-Enter " ENTER"
-        continue
-    }
-    
-    Write-Host "`n[+] Preparando instalación de Scoop como usuario normal..." -ForegroundColor $COLOR_ALERT
-    
-    # Obtener el nombre de usuario actual (NO el administrador)
-    $currentUser = $env:USERNAME
-    $userSID = (Get-WmiObject Win32_UserAccount -Filter "Name='$currentUser' AND Domain='$env:COMPUTERNAME'").SID
-    
-    # Script que se ejecutará en contexto de usuario NORMAL
-    $scoopScript = @"
-# Script de instalación de Scoop - se ejecuta como `$env:USERNAME
-`$scoopInstallScript = {
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host " INSTALANDO SCOOP COMO USUARIO NORMAL" -ForegroundColor Green
-    Write-Host " Usuario: $env:USERNAME" -ForegroundColor Yellow
-    Write-Host "========================================" -ForegroundColor Cyan
-    
-    # Verificar que NO somos administradores (mostrar advertencia pero no bloquear)
-    `$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
-    if (`$isAdmin) {
-        Write-Host "⚠️ ADVERTENCIA: Ejecutándose como Admin, pero intentaremos igual..." -ForegroundColor Yellow
-    }
-    
-    # Instalar Scoop
-    Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
-    
-    try {
-        Write-Host "[*] Descargando e instalando Scoop..." -ForegroundColor Gray
-        Invoke-RestMethod -Uri 'https://get.scoop.sh' | Invoke-Expression
-        
-        # Esperar a que termine la instalación
-        Start-Sleep -Seconds 3
-        
-        # Agregar buckets
-        Write-Host "[*] Agregando buckets..." -ForegroundColor Gray
-        scoop bucket add main 2>&1 | Out-Null
-        scoop bucket add extras 2>&1 | Out-Null
-        
-        Write-Host "`n✅ Scoop instalado correctamente!" -ForegroundColor Green
-    }
-    catch {
-        Write-Host "`n❌ Error en la instalación: `$_.Exception.Message" -ForegroundColor Red
-    }
-    
-    Write-Host "`nPresiona ENTER para cerrar esta ventana..."
-    Read-Host
-}
-& `$scoopInstallScript
-"@
-    
-    # Guardar el script temporal
-    $tempScript = "$env:TEMP\scoop_install_user.ps1"
-    $scoopScript | Out-File -FilePath $tempScript -Encoding utf8 -Force
-    
-    # Método 1: Usar schtasks para ejecutar como usuario actual SIN privilegios
-    $taskName = "TechFlow_ScoopInstall_$(Get-Random)"
-    
-    Write-Host "[+] Creando tarea programada temporal..." -ForegroundColor Gray
-    
-    # Crear tarea que se ejecuta como el usuario actual (NO como SYSTEM)
-    $schtaskCmd = @(
-        "schtasks",
-        "/create",
-        "/tn", "`"$taskName`"",
-        "/tr", "`"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File `"$tempScript`"`"",
-        "/sc", "ONCE",
-        "/st", "00:00",
-        "/sd", (Get-Date -Format "MM/dd/yyyy"),
-        "/ru", "`"$env:COMPUTERNAME\$currentUser`"",  # Ejecutar como el usuario actual
-        "/f"
-    ) -join " "
-    
-    try {
-        # Ejecutar schtasks
-        Invoke-Expression $schtaskCmd 2>&1 | Out-Null
-        
-        # Ejecutar la tarea inmediatamente
-        Start-Process -NoNewWindow -Wait schtasks -ArgumentList "/run /tn `"$taskName`""
-        
-        # Esperar a que termine (dar tiempo)
-        Start-Sleep -Seconds 5
-        
-        # Eliminar la tarea
-        schtasks /delete /tn "`"$taskName`"" /f 2>&1 | Out-Null
-    }
-    catch {
-        Write-Host " [!] Método de tarea falló. Usando método alternativo..." -ForegroundColor $COLOR_WARN
-        
-        # Método 2: Ejecutar directamente PERO usando runas con credenciales del usuario
-        try {
-            $cred = [System.Net.NetworkCredential]::new($currentUser, $null)
-            $securePass = $cred.SecurePassword
-            
-            $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-            $processInfo.FileName = "powershell.exe"
-            $processInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File `"$tempScript`""
-            $processInfo.UserName = $currentUser
-            $processInfo.Password = $securePass
-            $processInfo.UseShellExecute = $false
-            $processInfo.LoadUserProfile = $true
-            
-            $process = [System.Diagnostics.Process]::Start($processInfo)
-            $process.WaitForExit()
-        }
-        catch {
-            Write-Host " [!] Error: $_" -ForegroundColor $COLOR_DANGER
-        }
-    }
-    
-    # Limpiar
-    Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
-    
-    # Verificar instalación
-    Start-Sleep -Seconds 2
-    $hasScoop = [bool](Get-Command scoop -ErrorAction SilentlyContinue)
-    if($hasScoop){
-        Write-Host "`n ✅ Scoop instalado correctamente!" -ForegroundColor $COLOR_PRIMARY
-        Write-Host "    Ubicación: C:\Users\$currentUser\scoop" -ForegroundColor Gray
-    } else {
-        Write-Host "`n [!] No se detectó Scoop. Intenta instalarlo manualmente:" -ForegroundColor $COLOR_WARN
-        Write-Host "    1. Abre PowerShell NORMAL (no como Admin)" -ForegroundColor Yellow
-        Write-Host "    2. Ejecuta: Set-ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
-        Write-Host "    3. Ejecuta: irm get.scoop.sh | iex" -ForegroundColor Yellow
-    }
-    Pause-Enter " ENTER"
-    continue
-}
-        
-        # ========== RESTO DE OPCIONES ==========
-        if($o -eq "J"){
-            if(-not $hasScoop){ Write-Host "`n [!] Scoop NO instalado. Usa opción I primero." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
-            $app = Read-Host "`n ``> NOMBRE APP SCOOP"
-            if($app){
-                scoop search $app
-                $confirm = Read-Host "Instalar? (S/N)"
-                if($confirm -eq "S"){
-                    scoop install $app
-                }
-            }
-            Pause-Enter "`n ENTER"
-        }
-        if($o -eq "K"){
-            if(-not $hasScoop){ Write-Host "`n [!] Scoop NO instalado. Usa opción I primero." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
-            scoop status
-            Pause-Enter "`n ENTER"
-        }
-        if($o -eq "L"){
-            $app = Read-Host "`n ``> APP A BUSCAR EN TODAS FUENTES"
-            if($app){
-                Write-Host "`n[+] Buscando en Winget..." -ForegroundColor $COLOR_MENU
-                winget search $app
-                Write-Host "`n[+] Buscando en Scoop..." -ForegroundColor $COLOR_MENU
-                if($hasScoop){ scoop search $app } else { Write-Host " Scoop no instalado" }
-                Write-Host "`n[+] Buscando en Choco..." -ForegroundColor $COLOR_MENU
-                if($hasChoco){ choco search $app } else { Write-Host " Chocolatey no instalado" }
-            }
-            Pause-Enter "`n ENTER"
-        }
+        # ========== B - WINGET: LISTAR DISPONIBLES ==========
         if($o -eq "B"){
             if(-not $hasWinget){ Write-Host "`n [!] winget no está disponible." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
             winget upgrade
             Pause-Enter "`n ENTER"
         }
-        if($o -eq "C"){
+        
+        # ========== S - WINGET: BUSCAR PAQUETE (DUAL) ==========
+        if($o -eq "S"){
+            if(-not $hasWinget -and -not $hasChoco){ 
+                Write-Host "`n [!] Ni winget ni chocolatey están disponibles." -ForegroundColor $COLOR_DANGER
+                Pause-Enter " ENTER"
+                continue 
+            }
+            
+            $searchTerm = (Read-Host "`n ``> INGRESE EL NOMBRE DEL PROGRAMA A BUSCAR (ej: whatsapp, chrome, vlc)").Trim()
+            
+            if ($searchTerm) {
+                # Búsqueda con Winget
+                if ($hasWinget) {
+                    Write-Host "`n ═══════════════════════════════════════════════════════" -ForegroundColor Cyan
+                    Write-Host " 🔍 RESULTADOS DE WINGET PARA: '$searchTerm'" -ForegroundColor $COLOR_PRIMARY
+                    Write-Host " ═══════════════════════════════════════════════════════" -ForegroundColor Cyan
+                    winget search "$searchTerm" 2>&1
+                    Write-Log "PKG" "winget search executed for: $searchTerm"
+                    
+                    # Sugerir alternativas si no hay resultados exactos
+                    if ($LASTEXITCODE -ne 0 -or $searchTerm -notmatch "^\.") {
+                        Write-Host "`n 💡 ¿No encontraste lo que buscabas? Prueba con estos IDs alternativos:" -ForegroundColor $COLOR_ALERT
+                        Write-Host "    - Si buscas navegadores: Google.Chrome, Mozilla.Firefox, Brave.Brave, Opera.Opera"
+                        Write-Host "    - Si buscas editores: Notepad++.Notepad++, Microsoft.VisualStudioCode, SublimeHQ.SublimeText"
+                        Write-Host "    - Si buscas compressores: 7zip.7zip, RARLab.WinRAR, PeaZip.PeaZip"
+                        Write-Host "    - Si buscas reproductores: VideoLAN.VLC, Spotify.Spotify, Apple.iTunes"
+                    }
+                }
+                
+                # Búsqueda con Chocolatey (si está disponible)
+                if ($hasChoco) {
+                    Write-Host "`n ═══════════════════════════════════════════════════════" -ForegroundColor Magenta
+                    Write-Host " 🔍 RESULTADOS DE CHOCOLATEY PARA: '$searchTerm'" -ForegroundColor $COLOR_ALERT
+                    Write-Host " ═══════════════════════════════════════════════════════" -ForegroundColor Magenta
+                    choco search "$searchTerm" --limit-output 2>&1 | Select-Object -First 20
+                    Write-Log "PKG" "choco search executed for: $searchTerm"
+                }
+                
+                # Preguntar si quiere instalar algo de lo encontrado
+                Write-Host ""
+                Write-Host " ═══════════════════════════════════════════════════════" -ForegroundColor Gray
+                $installNow = Read-MenuOption "`n ❓ ¿DESEAS INSTALAR ALGUNO DE LOS RESULTADOS? (S/N)" -Valid @("S","N")
+                if ($installNow -eq "S") {
+                    Write-Host "`n 💡 COPIA EL 'ID' EXACTO DEL PROGRAMA (ej: Google.Chrome, 9NKSQGP7F2NH)" -ForegroundColor $COLOR_ALERT
+                    $appToInstall = (Read-Host "`n ``> PEGA AQUÍ EL ID EXACTO DEL PROGRAMA").Trim()
+                    if ($appToInstall) {
+                        $res = Invoke-SmartInstall -AppID $appToInstall -AppName $appToInstall
+                        Write-Log "PKG" "SmartInstall from search app=$appToInstall result=$res"
+                        
+                        # Si falló, sugerir alternativa
+                        if ($res -ne "OK" -and $res -notlike "MANUAL|*") {
+                            Write-Host "`n ⚠️ LA INSTALACIÓN FALLÓ." -ForegroundColor $COLOR_DANGER
+                            Write-Host " 💡 CONSEJOS:" -ForegroundColor $COLOR_ALERT
+                            Write-Host "    • Revisa que el ID esté escrito correctamente"
+                            Write-Host "    • Prueba con chocolatey en la opción [F] o [H]"
+                            Write-Host "    • Busca alternativas similares con la opción [S]"
+                            Write-Host "    • Descarga manual desde la web oficial del programa"
+                        }
+                    }
+                }
+            }
+            Pause-Enter "`n ENTER PARA VOLVER"
+        }
+
+        # ========== G - WINGET: INSTALAR POR ID EXACTO ==========
+        if($o -eq "G"){
             if(-not $hasWinget){ Write-Host "`n [!] winget no está disponible." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
+            
+            Write-Host "`n 💡 EJEMPLOS DE ID: Google.Chrome | 7zip.7zip | VideoLAN.VLC | WhatsApp.WhatsApp" -ForegroundColor $COLOR_ALERT
+            Write-Host " 💡 Usa la opción [S] primero para buscar el ID correcto." -ForegroundColor $COLOR_ALERT
+            
+            $appID = (Read-Host "`n ``> INGRESE EL ID EXACTO DEL PROGRAMA A INSTALAR").Trim()
+            if ($appID) {
+                $appName = Read-Host " ``> NOMBRE DESCRIPTIVO (ej: Google Chrome) - ENTER para usar el ID"
+                if (-not $appName) { $appName = $appID }
+                
+                Write-Host "`n [+] INSTALANDO: $appName (ID: $appID)..." -ForegroundColor $COLOR_PRIMARY
+                $res = Invoke-SmartInstall -AppID $appID -AppName $appName
+                Write-Log "PKG" "SmartInstall app=$appName id=$appID result=$res"
+            }
+            Pause-Enter "`n PROCESO TERMINADO. ENTER"
+        }
+        
+        # ========== D - CHOCO: ACTUALIZAR TODO ==========
+        if($o -eq "D"){
+            if(-not $hasChoco){ Write-Host "`n [!] CHOCO NO INSTALADO - Usa la opción [H] para instalarlo." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
+            Write-Host "`n ACTUALIZANDO VIA CHOCOLATEY..." -ForegroundColor $COLOR_PRIMARY
+            choco upgrade all -y --no-progress 2>&1
+            Write-Log "PKG" ("choco upgrade all exit={0}" -f $LASTEXITCODE)
+            Pause-Enter " ENTER"
+        }
+        
+        # ========== E - CHOCO: LISTAR DISPONIBLES ==========
+        if($o -eq "E"){
+            if(-not $hasChoco){ Write-Host "`n [!] CHOCO NO INSTALADO - Usa la opción [H] para instalarlo." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
+            Write-Host "`n PAQUETES DESACTUALIZADOS EN CHOCOLATEY:" -ForegroundColor $COLOR_PRIMARY
+            choco outdated 2>&1
+            Pause-Enter "`n ENTER"
+        }
+        
+        # ========== F - CHOCO: BUSCAR PAQUETE ==========
+        if($o -eq "F"){
+            if(-not $hasChoco){ Write-Host "`n [!] CHOCO NO INSTALADO - Usa la opción [H] para instalarlo." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
+            $p = (Read-Host "`n NOMBRE DEL PROGRAMA A BUSCAR EN CHOCOLATEY").Trim()
+            if($p){ 
+                Write-Host "`n RESULTADOS PARA: '$p'" -ForegroundColor $COLOR_PRIMARY
+                choco search $p --limit-output 2>&1 | Select-Object -First 20
+            }
+            Pause-Enter "`n ENTER"
+        }
+        
+        # ========== H - CHOCO: INSTALAR CHOCOLATEY ==========
+        if($o -eq "H"){
+            if(-not (Test-HasInternet)){ Write-Host "`n [!] Sin Internet." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
+            if(-not (Require-Admin "instalar Chocolatey")){ continue }
+            Write-Host "`n INSTALANDO CHOCOLATEY..." -ForegroundColor $COLOR_ALERT
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+            iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+            Write-Log "PKG" ("choco install bootstrap exit={0}" -f $LASTEXITCODE)
+            Pause-Enter "`n INSTALACION FINALIZADA. ENTER"
+        }
+        
+        # ========== C - WINGET: REPARAR CLIENTE ==========
+        if($o -eq "C"){
+            if(-not (Test-HasInternet)){ Write-Host "`n [!] Sin Internet." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
             Write-Host "`n RE-INSTALANDO CLIENTE WINGET..." -ForegroundColor $COLOR_ALERT
             $url = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
             $dest = "$env:TEMP\winget.msixbundle"
@@ -2436,48 +2498,8 @@ if($o -eq "I"){
             Write-Log "PKG" "winget client reinstalled from $url"
             Pause-Enter "`n CLIENTE ACTUALIZADO. ENTER"
         }
-        if($o -eq "H"){
-            if(-not (Test-HasInternet)){ Write-Host "`n [!] Sin Internet." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
-            Write-Host "`n INSTALANDO/REPARANDO WINGET (APP INSTALLER)..." -ForegroundColor $COLOR_ALERT
-            $url = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
-            $dest = "$env:TEMP\\winget.msixbundle"
-            Invoke-WebRequest -Uri $url -OutFile $dest
-            Add-AppxPackage -Path $dest
-            Write-Log "PKG" "winget installed/repaired from $url"
-            Pause-Enter "`n LISTO. VUELVE A ENTRAR AL MENU PARA VER SI DICE OK."
-        }
-        if($o -eq "D"){
-            if(-not (Test-HasInternet)){ Write-Host "`n [!] Sin Internet." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
-            if(-not (Require-Admin "instalar Chocolatey")){ continue }
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-            iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-            Write-Log "PKG" ("choco install bootstrap exit={0}" -f $LASTEXITCODE)
-            Pause-Enter "`n INSTALACION FINALIZADA. ENTER"
-        }
-        if($o -eq "E"){
-            if(-not $hasChoco){ Write-Host "`n [!] CHOCO NO INSTALADO" -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
-            $out = choco upgrade all -y --no-progress 2>&1
-            Write-Log "PKG" ("choco upgrade all exit={0}" -f $LASTEXITCODE)
-            Pause-Enter " ENTER"
-        }
-        if($o -eq "F"){
-            if(-not $hasChoco){ Write-Host "`n [!] CHOCO NO INSTALADO" -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
-            $p = Read-Host " NOMBRE DEL PROGRAMA A BUSCAR EN CHOCO"
-            if($p){ choco search $p }
-            Pause-Enter "`n ENTER"
-        }
-        if($o -eq "G"){
-            $app = (Read-Host "`n ``> ESCRIBA EL NOMBRE DE LA APP A INSTALAR").Trim()
-            if($app){
-                $res = Invoke-SmartInstall -AppID $app -AppName $app
-                Write-Log "PKG" "SmartInstall app=$app result=$res"
-            }
-            Pause-Enter "`n PROCESO TERMINADO. ENTER"
-        }
     }
 }
-
 # ============================================================
 # MONITOR DE SISTEMA PRO
 # ============================================================
@@ -2620,160 +2642,314 @@ function Invoke-MassGraveIntegrated {
 # ============================================================
 # CONTROL DE DEFENDER
 # ============================================================
+# ============================================================
+# 🛡️ [REPAIR-DEFENDER] - REHABILITACIÓN COMPLETA
+# ============================================================
+function Repair-Defender {
+    Clear-Host
+    Show-MainTitle
+    Write-Host "`n 🔧 REPARACIÓN DE WINDOWS DEFENDER" -ForegroundColor $COLOR_MENU
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    
+    if (-not (Require-Admin "reparar Defender")) { return }
+    
+    # 1. Eliminar políticas conflictivas
+    Write-Host "`n [+] Eliminando políticas conflictivas (GPO)..." -ForegroundColor $COLOR_ALERT
+    
+    $policiesPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
+    $rtpPath = "$policiesPath\Real-Time Protection"
+    
+    $blockingPolicies = @(
+        "DisableAntiSpyware",
+        "DisableRealtimeMonitoring",
+        "DisableBehaviorMonitoring",
+        "DisableOnAccessProtection",
+        "DisableScanOnRealtimeEnable"
+    )
+    
+    if (Test-Path $policiesPath) {
+        foreach ($policy in $blockingPolicies) {
+            Remove-ItemProperty -Path $policiesPath -Name $policy -ErrorAction SilentlyContinue
+        }
+        Write-Host "   ✓ Políticas principales eliminadas" -ForegroundColor DarkGray
+    }
+    
+    if (Test-Path $rtpPath) {
+        foreach ($policy in $blockingPolicies) {
+            Remove-ItemProperty -Path $rtpPath -Name $policy -ErrorAction SilentlyContinue
+        }
+        Write-Host "   ✓ Políticas de protección en tiempo real eliminadas" -ForegroundColor DarkGray
+    }
+    
+    # 2. Restaurar servicios
+    Write-Host "`n [+] Restaurando servicios de seguridad..." -ForegroundColor $COLOR_ALERT
+    
+    $services = @(
+        @{Name="WinDefend"; Display="Antivirus Defender"},
+        @{Name="WdNisSvc"; Display="Inspección de red"},
+        @{Name="Sense"; Display="ATP (Advanced Threat Protection)"}
+    )
+    
+    foreach ($svc in $services) {
+        $service = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
+        if ($service) {
+            if ($service.StartType -ne "Automatic") {
+                Set-Service -Name $svc.Name -StartupType Automatic -ErrorAction SilentlyContinue
+                Write-Host "   ✓ $($svc.Display): configurado como Automático" -ForegroundColor DarkGray
+            }
+            if ($service.Status -ne "Running") {
+                Start-Service -Name $svc.Name -ErrorAction SilentlyContinue
+                Write-Host "   ✓ $($svc.Display): iniciado" -ForegroundColor DarkGray
+            }
+        }
+    }
+    
+    # 3. Forzar activación vía WMI (método silencioso)
+    Write-Host "`n [+] Forzando activación de protección..." -ForegroundColor $COLOR_ALERT
+    
+    try {
+        $mpPreferences = Get-CimInstance -Namespace "root/Microsoft/Windows/Defender" -ClassName "MSFT_MpPreference" -ErrorAction SilentlyContinue
+        if ($mpPreferences) {
+            Invoke-CimMethod -InputObject $mpPreferences -MethodName "Set" -Arguments @{
+                DisableRealtimeMonitoring = $false
+                DisableBehaviorMonitoring = $false
+                DisableBlockAtFirstSeen = $false
+                DisableIOAVProtection = $false
+            } -ErrorAction SilentlyContinue
+            Write-Host "   ✓ Protección en tiempo real activada" -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "   ⚠️ Método alternativo aplicado (usa reinicio si no funciona)" -ForegroundColor DarkGray
+    }
+    
+    # 4. Actualizar definiciones
+    Write-Host "`n [+] Actualizando definiciones de malware..." -ForegroundColor $COLOR_ALERT
+    Start-Process -FilePath "mpcmdrun.exe" -ArgumentList "-SignatureUpdate" -NoNewWindow -Wait -ErrorAction SilentlyContinue
+    Write-Host "   ✓ Definiciones actualizadas" -ForegroundColor DarkGray
+    
+    Write-Host "`n ═══════════════════════════════════════════════════════════════════" -ForegroundColor Green
+    Write-Host " ✅ REPARACIÓN COMPLETADA" -ForegroundColor Green
+    Write-Host "    Si Defender sigue sin funcionar, reinicia el equipo." -ForegroundColor $COLOR_ALERT
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Green
+    
+    Write-Log "DEFENDER" "Repair-Defender executed"
+    Pause-Enter " ENTER para volver"
+}
+
+# ============================================================
+# 🛡️ CONTROL TOTAL DE WINDOWS DEFENDER (VERSIÓN MEJORADA)
+# ============================================================
 function Invoke-DefenderControl {
-	
-	Clear-Host #nuevo
+    Clear-Host
     while($true){
         Show-MainTitle
-        Write-Host "`n CONTROL TOTAL DE WINDOWS DEFENDER" -ForegroundColor $COLOR_MENU
-        Write-Host " [A] ACTIVAR DEFENDER"
-        Write-Host " [B] DESACTIVAR DEFENDER"
-        Write-Host " [C] ESCANEO DE MALWARE (Windows Defender)" -ForegroundColor $COLOR_MENU
-        Write-Host "`n CONTROL" -ForegroundColor Gray
+        Write-Host "`n 🛡️ CONTROL TOTAL DE WINDOWS DEFENDER" -ForegroundColor $COLOR_MENU
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host " ✅ [1] ACTIVAR DEFENDER" -ForegroundColor Green
+        Write-Host " 🔧 [2] REPARAR DEFENDER (Elimina GPO y restaura servicios)" -ForegroundColor Cyan
+        Write-Host " 🦠 [3] ESCANEO DE MALWARE" -ForegroundColor Yellow
+        Write-Host "    ├─ [R] Escaneo Rápido" -ForegroundColor Gray
+        Write-Host "    ├─ [C] Escaneo Completo" -ForegroundColor Gray
+        Write-Host "    ├─ [U] Actualizar Definiciones" -ForegroundColor Gray
+        Write-Host "    └─ [V] Ver Amenazas Encontradas" -ForegroundColor Gray
+        Write-Host " ⚠️ [4] DESACTIVAR DEFENDER (NO RECOMENDADO)" -ForegroundColor Red
+        Write-Host ""
+        Write-Host " ⌨️ CONTROL" -ForegroundColor Gray
         Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
-        Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+        Write-Host " ❌ [X] VOLVER" -ForegroundColor $COLOR_DANGER
         
-        $o = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","X")
+        $o = Read-MenuOption "`n > SELECCIONE" -Valid @("1","2","3","4","R","C","U","V","X")
         if(-not $o){ continue }
         if($o -eq "X"){break}
         
-        if($o -eq "A"){
+        # ========== OPCIÓN 1: ACTIVAR DEFENDER ==========
+        if($o -eq "1"){
             if(-not (Require-Admin "activar Defender")){ continue }
             if(-not (Confirm-Critical "ACTIVAR WINDOWS DEFENDER" "APLICAR")){ continue }
-            reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v "DisableAntiSpyware" /t REG_DWORD /d 0 /f | Out-Null
-            Write-Log "DEFENDER" "Enabled (policy DisableAntiSpyware=0)"
-            Write-Host " REINICIE PARA APLICAR CAMBIOS" -ForegroundColor Green
+            
+            Write-Host "`n [+] Activando Windows Defender..." -ForegroundColor $COLOR_PRIMARY
+            
+            # Método silencioso usando script temporal
+            $tempScript = "$env:TEMP\defender_activate.ps1"
+            @"
+# Activación silenciosa de Defender
+`$mp = Get-MpComputerStatus -ErrorAction SilentlyContinue
+if (`$mp) {
+    try {
+        Set-MpPreference -DisableRealtimeMonitoring `$false -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableBehaviorMonitoring `$false -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableBlockAtFirstSeen `$false -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableIOAVProtection `$false -ErrorAction SilentlyContinue
+        Write-Host "Defender reactivado exitosamente"
+    } catch {
+        Write-Host "Error al reactivar Defender"
+    }
+}
+"@ | Out-File -FilePath $tempScript -Encoding ascii
+            
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $tempScript -WindowStyle Hidden
+            Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
+            
+            Write-Host " ✅ DEFENDER ACTIVADO" -ForegroundColor Green
+            Write-Log "DEFENDER" "Defender activated"
             Pause-Enter " ENTER"
         }
-        if($o -eq "B"){
-            if(-not (Require-Admin "desactivar Defender")){ continue }
-            if(-not (Confirm-Critical "DESACTIVAR WINDOWS DEFENDER" "APLICAR")){ continue }
-            $regReal = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
-            if (!(Test-Path $regReal)) { New-Item $regReal -Force | Out-Null }
-            reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender" /v "DisableAntiSpyware" /t REG_DWORD /d 1 /f | Out-Null
-            reg add $regReal /v "DisableRealtimeMonitoring" /t REG_DWORD /d 1 /f | Out-Null
-            Write-Log "DEFENDER" "Disabled (policy DisableAntiSpyware=1, DisableRealtimeMonitoring=1)"
-            Write-Host " DEFENDER DESACTIVADO" -ForegroundColor Green
-            Pause-Enter " ENTER"
+        
+        # ========== OPCIÓN 2: REPARAR DEFENDER ==========
+        if($o -eq "2"){
+            Repair-Defender
         }
-        if($o -eq "C"){
-            Clear-Host
-            Show-MainTitle
-            Write-Host "`n 🦠 ESCANEO DE MALWARE - WINDOWS DEFENDER" -ForegroundColor $COLOR_MENU
-            Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
-            Write-Host ""
-            
-            # Verificar si Defender está instalado
-            $mpcmdrun = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
-            
-            if (-not (Test-Path $mpcmdrun)) {
-                Write-Host " ❌ WINDOWS DEFENDER NO ESTÁ INSTALADO EN ESTE SISTEMA" -ForegroundColor Red
+        
+        # ========== OPCIÓN 3: SUBMENÚ DE ESCANEO ==========
+        if($o -eq "3"){
+            while($true){
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n 🦠 ESCANEO DE MALWARE - WINDOWS DEFENDER" -ForegroundColor $COLOR_MENU
+                Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
                 Write-Host ""
-                Write-Host "    Tu sistema parece ser una versión MODIFICADA o LITE" -ForegroundColor Yellow
-                Write-Host "    que ha eliminado Windows Defender para ahorrar recursos." -ForegroundColor Yellow
-                Write-Host ""
-                Write-Host " 💡 ALTERNATIVAS:" -ForegroundColor Cyan
-                Write-Host "    - Usa el menú I (KIT POST FORMAT) para instalar Malwarebytes"
-                Write-Host "    - Usa el menú H (GESTION PAQUETES) para instalar otro antivirus"
-                Write-Host "    - Escanea con herramientas externas como AdwCleaner"
-                Write-Host ""
-                Pause-Enter " ENTER para volver"
-                continue
-            }
-            
-            Write-Host " ✅ Windows Defender detectado correctamente" -ForegroundColor Green
-            Write-Host ""
-            Write-Host " [1] ESCANEO RÁPIDO (recomendado)"
-            Write-Host " [2] ESCANEO COMPLETO (puede tardar horas)"
-            Write-Host " [3] VER AMENAZAS ENCONTRADAS"
-            Write-Host " [4] ACTUALIZAR DEFINICIONES"
-            Write-Host "`n [X] VOLVER"
-            
-            $scanOpt = Read-MenuOption "`n > SELECCIONE" -Valid @("1","2","3","4","X")
-            if ($scanOpt -eq "X") { continue }
-            
-            switch ($scanOpt) {
-                "1" {
-                    Write-Host "`n[+] Escaneo rápido en progreso..." -ForegroundColor Yellow
-                    Write-Host "    (Se abrirá una ventana de PowerShell)" -ForegroundColor DarkGray
-                    
-                    $scriptBlock = {
-                        $mp = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
-                        Write-Host "Escaneando con Windows Defender..."
-                        Write-Host "─────────────────────────────────────────"
-                        & $mp -Scan -ScanType 1
-                        Write-Host "─────────────────────────────────────────"
-                        Write-Host "`nEscaneo completado. Presiona ENTER para cerrar..."
-                        Read-Host
-                    }
-                    $scriptPath = "$env:TEMP\defender_scan.ps1"
-                    $scriptBlock.ToString() | Out-File -FilePath $scriptPath -Encoding utf8
-                    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File `"$scriptPath`"" -Verb RunAs -Wait
-                    Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
-                    Write-Host "`n ✅ Escaneo completado" -ForegroundColor Green
+                Write-Host " 🔍 [R] ESCANEO RÁPIDO (recomendado, 5-10 min)"
+                Write-Host " 🔍 [C] ESCANEO COMPLETO (puede tardar horas)"
+                Write-Host " 🔄 [U] ACTUALIZAR DEFINICIONES"
+                Write-Host " 📋 [V] VER AMENAZAS ENCONTRADAS"
+                Write-Host "`n ❌ [X] VOLVER AL MENÚ ANTERIOR"
+                
+                $scanOpt = Read-MenuOption "`n > SELECCIONE" -Valid @("R","C","U","V","X")
+                if ($scanOpt -eq "X") { break }
+                
+                $mpcmdrun = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
+                
+                if (-not (Test-Path $mpcmdrun)) {
+                    Write-Host "`n ❌ WINDOWS DEFENDER NO ESTÁ INSTALADO" -ForegroundColor Red
+                    Write-Host "    Versión MODIFICADA o LITE de Windows" -ForegroundColor Yellow
+                    Write-Host "    Usa el menú I (KIT POST FORMAT) para instalar Malwarebytes" -ForegroundColor Cyan
                     Pause-Enter " ENTER"
+                    continue
                 }
-                "2" {
-                    Write-Host "`n[!] ADVERTENCIA: Escaneo completo puede tardar HORAS" -ForegroundColor Red
-                    $confirm = Read-MenuOption " ¿REALMENTE DESEAS CONTINUAR? (S/N)" -Valid @("S","N")
-                    if ($confirm -ne "S") { continue }
-                    
-                    Write-Host "[+] Escaneo completo en progreso..." -ForegroundColor Yellow
-                    Write-Host "    (Se abrirá una ventana de PowerShell)" -ForegroundColor DarkGray
-                    
-                    $scriptBlock = {
-                        $mp = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
-                        Write-Host "Escaneando con Windows Defender (COMPLETO)..."
-                        Write-Host "─────────────────────────────────────────"
-                        & $mp -Scan -ScanType 2
-                        Write-Host "─────────────────────────────────────────"
-                        Write-Host "`nEscaneo completado. Presiona ENTER para cerrar..."
-                        Read-Host
+                
+                switch ($scanOpt) {
+                    "R" {
+                        Write-Host "`n [+] Escaneo rápido en progreso..." -ForegroundColor Yellow
+                        Start-Process -FilePath $mpcmdrun -ArgumentList "-Scan -ScanType 1" -NoNewWindow -Wait
+                        Write-Host "`n ✅ Escaneo completado" -ForegroundColor Green
+                        Pause-Enter " ENTER"
                     }
-                    $scriptPath = "$env:TEMP\defender_scan_full.ps1"
-                    $scriptBlock.ToString() | Out-File -FilePath $scriptPath -Encoding utf8
-                    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File `"$scriptPath`"" -Verb RunAs -Wait
-                    Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
-                    Write-Host "`n ✅ Escaneo completado" -ForegroundColor Green
-                    Pause-Enter " ENTER"
-                }
-                "3" {
-                    Write-Host "`n[+] AMENAZAS ENCONTRADAS EN EL HISTORIAL:" -ForegroundColor Yellow
-                    Write-Host " ─────────────────────────────────────────────────────────" -ForegroundColor Gray
-                    
-                    $defenderStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
-                    if (-not $defenderStatus) {
-                        Write-Host "    ⚠️ No se pudo conectar con Windows Defender" -ForegroundColor $COLOR_DANGER
-                        Write-Host "    El servicio puede estar deshabilitado." -ForegroundColor $COLOR_ALERT
-                    } else {
+                    "C" {
+                        Write-Host "`n [!] ADVERTENCIA: Escaneo completo puede tardar HORAS" -ForegroundColor Red
+                        $confirm = Read-MenuOption " ¿REALMENTE DESEAS CONTINUAR? (S/N)" -Valid @("S","N")
+                        if ($confirm -ne "S") { continue }
+                        Write-Host "`n [+] Escaneo completo en progreso..." -ForegroundColor Yellow
+                        Start-Process -FilePath $mpcmdrun -ArgumentList "-Scan -ScanType 2" -NoNewWindow -Wait
+                        Write-Host "`n ✅ Escaneo completado" -ForegroundColor Green
+                        Pause-Enter " ENTER"
+                    }
+                    "U" {
+                        Write-Host "`n [+] Actualizando definiciones..." -ForegroundColor Yellow
+                        Start-Process -FilePath $mpcmdrun -ArgumentList "-SignatureUpdate" -NoNewWindow -Wait
+                        Write-Host "`n ✅ Definiciones actualizadas" -ForegroundColor Green
+                        Pause-Enter " ENTER"
+                    }
+                    "V" {
+                        Write-Host "`n [+] AMENAZAS ENCONTRADAS EN EL HISTORIAL:" -ForegroundColor Yellow
+                        Write-Host " ─────────────────────────────────────────────────────────" -ForegroundColor Gray
                         $threats = Get-MpThreat -ErrorAction SilentlyContinue
                         if ($threats -and $threats.Count -gt 0) {
-                            Write-Host " Se encontraron las siguientes amenazas:" -ForegroundColor Red
-                            Write-Host ""
                             $threats | Format-Table -AutoSize ThreatID, Name, Severity, Status
                         } else {
                             Write-Host "    ✅ No hay amenazas en el historial" -ForegroundColor Green
                         }
+                        Pause-Enter " ENTER"
                     }
+                }
+            }
+        }
+        
+        # ========== OPCIÓN 4: DESACTIVAR DEFENDER (PELIGROSO) ==========
+        if($o -eq "4"){
+            if(-not (Require-Admin "desactivar Defender")){ continue }
+            
+            Write-Host "`n ⚠️ ⚠️ ⚠️ ADVERTENCIA EXTREMA ⚠️ ⚠️ ⚠️" -ForegroundColor Red
+            Write-Host " DESACTIVAR WINDOWS DEFENDER DEJA TU EQUIPO VULNERABLE A:" -ForegroundColor Yellow
+            Write-Host "    • Ransomware (secuestro de archivos)" -ForegroundColor Red
+            Write-Host "    • Troyanos bancarios" -ForegroundColor Red
+            Write-Host "    • Keyloggers (robo de contraseñas)" -ForegroundColor Red
+            Write-Host "    • Spyware (espionaje)" -ForegroundColor Red
+            Write-Host ""
+            Write-Host " SOLO RECOMENDADO PARA PRUEBAS O POR OTRO ANTIVIRUS INSTALADO" -ForegroundColor Yellow
+            
+            $confirm = Read-MenuOption "`n ¿REALMENTE DESEAS CONTINUAR? (S/N)" -Valid @("S","N")
+            if ($confirm -ne "S") { continue }
+            
+            if(-not (Confirm-Critical "DESACTIVAR WINDOWS DEFENDER PERMANENTEMENTE" "DESACTIVAR")){ continue }
+            
+            Write-Host "`n [+] Desactivando Windows Defender..." -ForegroundColor Red
+            
+            # Método más extremo (solo para este caso)
+            $tempScript = "$env:TEMP\defender_disable.ps1"
+            @"
+# Desactivación de Defender (USO BAJO PROPIA RESPONSABILIDAD)
+try {
+    Set-MpPreference -DisableRealtimeMonitoring `$true -ErrorAction SilentlyContinue
+    Set-MpPreference -DisableBehaviorMonitoring `$true -ErrorAction SilentlyContinue
+    Set-MpPreference -DisableBlockAtFirstSeen `$true -ErrorAction SilentlyContinue
+    Set-MpPreference -DisableIOAVProtection `$true -ErrorAction SilentlyContinue
+    Set-MpPreference -DisablePrivacyMode `$true -ErrorAction SilentlyContinue
+    Write-Host "Defender desactivado"
+} catch {
+    Write-Host "Error al desactivar Defender"
+}
+"@ | Out-File -FilePath $tempScript -Encoding ascii
+            
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $tempScript -WindowStyle Hidden
+            Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
+            
+            # También políticas de registro para mayor seguridad (bloqueo total)
+            $policiesPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
+            if (-not (Test-Path $policiesPath)) { New-Item $policiesPath -Force | Out-Null }
+            Set-ItemProperty -Path $policiesPath -Name "DisableAntiSpyware" -Value 1 -Type DWord -Force
+            
+            Write-Host " ✅ DEFENDER DESACTIVADO" -ForegroundColor Red
+            Write-Host " ⚠️ REINICIA EL EQUIPO PARA APLICAR CAMBIOS" -ForegroundColor Yellow
+            Write-Log "DEFENDER" "Defender DISABLED (user confirmed critical operation)"
+            Pause-Enter " ENTER"
+        }
+        
+        # ========== OPCIONES DIRECTAS DEL SUBMENÚ (R,C,U,V) ==========
+        if($o -in @("R","C","U","V")){
+            $mpcmdrun = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
+            
+            if (-not (Test-Path $mpcmdrun)) {
+                Write-Host "`n ❌ WINDOWS DEFENDER NO ESTÁ INSTALADO" -ForegroundColor Red
+                Pause-Enter " ENTER"
+                continue
+            }
+            
+            switch ($o) {
+                "R" {
+                    Write-Host "`n [+] Escaneo rápido en progreso..." -ForegroundColor Yellow
+                    Start-Process -FilePath $mpcmdrun -ArgumentList "-Scan -ScanType 1" -NoNewWindow -Wait
+                    Write-Host "`n ✅ Escaneo completado" -ForegroundColor Green
                     Pause-Enter " ENTER"
                 }
-                "4" {
-                    Write-Host "`n[+] ACTUALIZANDO DEFINICIONES DE VIRUS..." -ForegroundColor Yellow
-                    
-                    $scriptBlock = {
-                        $mp = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
-                        Write-Host "Actualizando definiciones de Windows Defender..."
-                        Write-Host "─────────────────────────────────────────"
-                        & $mp -SignatureUpdate
-                        Write-Host "─────────────────────────────────────────"
-                        Write-Host "`nActualización completada. Presiona ENTER para cerrar..."
-                        Read-Host
-                    }
-                    $scriptPath = "$env:TEMP\defender_update.ps1"
-                    $scriptBlock.ToString() | Out-File -FilePath $scriptPath -Encoding utf8
-                    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File `"$scriptPath`"" -Verb RunAs -Wait
-                    Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
+                "C" {
+                    Write-Host "`n [!] ADVERTENCIA: Escaneo completo puede tardar HORAS" -ForegroundColor Red
+                    $confirm = Read-MenuOption " ¿REALMENTE DESEAS CONTINUAR? (S/N)" -Valid @("S","N")
+                    if ($confirm -ne "S") { continue }
+                    Write-Host "`n [+] Escaneo completo en progreso..." -ForegroundColor Yellow
+                    Start-Process -FilePath $mpcmdrun -ArgumentList "-Scan -ScanType 2" -NoNewWindow -Wait
+                    Write-Host "`n ✅ Escaneo completado" -ForegroundColor Green
+                    Pause-Enter " ENTER"
+                }
+                "U" {
+                    Write-Host "`n [+] Actualizando definiciones..." -ForegroundColor Yellow
+                    Start-Process -FilePath $mpcmdrun -ArgumentList "-SignatureUpdate" -NoNewWindow -Wait
                     Write-Host "`n ✅ Definiciones actualizadas" -ForegroundColor Green
+                    Pause-Enter " ENTER"
+                }
+                "V" {
+                    Write-Host "`n [+] AMENAZAS ENCONTRADAS:" -ForegroundColor Yellow
+                    Get-MpThreat | Format-Table -AutoSize
                     Pause-Enter " ENTER"
                 }
             }
@@ -2787,16 +2963,16 @@ function Invoke-DefenderControl {
 function Invoke-AutoFlow {
 	Clear-Host #nuevo
     Show-MainTitle
-    Write-Host ([Environment]::NewLine + ' [!] PERFIL: MANTENIMIENTO EXPRESS (AUTO-FLOW)') -ForegroundColor $COLOR_ALERT
+Write-Host ([Environment]::NewLine + ' 🚀 [!] PERFIL: MANTENIMIENTO EXPRESS (AUTO-FLOW)') -ForegroundColor $COLOR_ALERT
     Write-Host " ---------------------------------------------------" -ForegroundColor Gray
-    Write-Host " DESCRIPCION:" -ForegroundColor $COLOR_MENU
-    Write-Host ' 1. Elimina Apps basura (Netflix, Disney, etc.)'
-    Write-Host " 2. Limpia archivos temporales del sistema."
-    Write-Host " 3. Instala: Chrome, 7-Zip y VLC Player."
+    Write-Host " 📝 DESCRIPCION:" -ForegroundColor $COLOR_MENU
+    Write-Host ' 🧹 1. Elimina Apps basura (Netflix, Disney, etc.)'
+    Write-Host " 🗑️ 2. Limpia archivos temporales del sistema."
+Write-Host " 📦 3. Instala Apps (Chrome, 7-Zip, VLC, Sumatra, WinRAR, WhatsApp, VCRedist)"
     Write-Host " ---------------------------------------------------" -ForegroundColor Gray
     
-    Write-Host "`n [ENTER] COMENZAR INSTALACION" -ForegroundColor $COLOR_PRIMARY
-    Write-Host " [X]     VOLVER AL MENU PRINCIPAL" -ForegroundColor $COLOR_DANGER
+    Write-Host "`n ▶️ [ENTER] COMENZAR INSTALACION" -ForegroundColor $COLOR_PRIMARY
+    Write-Host " ❌ [X]     VOLVER AL MENU PRINCIPAL" -ForegroundColor $COLOR_DANGER
     Write-Host " ---------------------------------------------------" -ForegroundColor Gray
 
     # ============================================================
@@ -2818,11 +2994,13 @@ function Invoke-AutoFlow {
     # ============================================================
 # LOGICA DE SALIDA
 # ============================================================
-    if ($Decision -eq "SALIR") {
+if ($Decision -eq "SALIR") {
         Write-Host "`n [X] REGRESANDO AL MENU..." -ForegroundColor $COLOR_ALERT
         Start-Sleep -Seconds 1
+        Clear-Host
+        Show-MainTitle
         return
-    } 
+    }
 
     Write-Host "`n [>] INICIANDO OPERACIONES..." -ForegroundColor $COLOR_PRIMARY
     Start-Sleep -Seconds 1
@@ -2843,7 +3021,7 @@ function Invoke-AutoFlow {
     # ============================================================
 # PASO 1: BLOATWARE
 # ============================================================
-    Write-Host "`n [+] Paso 1/3: Eliminando Bloatware..." -ForegroundColor $COLOR_MENU
+Write-Host "`n [>] Eliminando Bloatware..." -ForegroundColor $COLOR_MENU
     $bloat = @("*CandyCrush*", "*Disney*", "*Netflix*", "*TikTok*", "*Instagram*")
     foreach($b in $bloat){ 
         if (& $CheckAbort) { return }
@@ -2854,7 +3032,8 @@ function Invoke-AutoFlow {
 # PASO 2: TEMPORALES
 # ============================================================
     if (& $CheckAbort) { return }
-    Write-Host " [+] Paso 2/3: Limpiando temporales..." -ForegroundColor $COLOR_MENU
+Write-Host "`n[>] Limpiando sistema..." -ForegroundColor $COLOR_PROCESO
+    Start-Sleep -Seconds 1
     $targets = @("$env:TEMP\*", "C:\Windows\Temp\*")
     $targets | ForEach-Object { 
         if (& $CheckAbort) { return }
@@ -2865,11 +3044,15 @@ function Invoke-AutoFlow {
 # PASO 3: INSTALACION
 # ============================================================
     if (& $CheckAbort) { return }
-    Write-Host " [+] Paso 3/3: Instalando apps esenciales..." -ForegroundColor $COLOR_MENU
-    $basico = @(
-        @{Name="Chrome"; ID="Google.Chrome"},
+Write-Host "[>] Instalando Apps..." -ForegroundColor $COLOR_MENU
+$basico = @(
+        @{Name="Google Chrome"; ID="Google.Chrome"},
+        @{Name="Sumatra PDF"; ID="SumatraPDF.SumatraPDF"},
+        @{Name="WinRAR"; ID="RARLab.WinRAR"},
         @{Name="7-Zip"; ID="7zip.7zip"},
-        @{Name="VLC Player"; ID="VideoLAN.VLC"}
+        @{Name="VLC Media Player"; ID="VideoLAN.VLC"},
+        @{Name="WhatsApp Desktop"; ID="WhatsApp.WhatsApp"},
+        @{Name="Microsoft VCRedist"; ID="Microsoft.VCRedist"}
     )
     foreach($app in $basico){
         if (& $CheckAbort) { return }
@@ -2886,13 +3069,13 @@ function Invoke-AutoFlow {
 function Invoke-DriverManagement {
     while($true){ 
         Show-MainTitle
-        Write-Host "`n GESTION DE DRIVERS PRO" -ForegroundColor $COLOR_MENU
-        Write-Host ' [A] EXPORTAR DRIVERS (BACKOP LOCAL EN USB/SCRIPT)'
-        Write-Host ' [B] RE-INSTALAR DRIVERS (DESDE BACKOP)'
-        Write-Host ' [C] BUSCAR EN SERVIDORES OFICIALES (WINDOWS UPDATE)'
-        Write-Host ' [D] VER IDENTIFICADORES DE HARDWARE (SIN DRIVER)'
-        Write-Host "`n CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
-        
+		Write-Host "`n 🔧 GESTION DE DRIVERS PRO" -ForegroundColor $COLOR_MENU
+        Write-Host ' 💾 [A] EXPORTAR DRIVERS (BACKUP LOCAL EN USB/SCRIPT)'
+        Write-Host ' 🔄 [B] RE-INSTALAR DRIVERS (DESDE BACKUP)'
+        Write-Host ' 🔍 [C] BUSCAR EN SERVIDORES OFICIALES (WINDOWS UPDATE)'
+        Write-Host ' 🆔 [D] VER IDENTIFICADORES DE HARDWARE (SIN DRIVER)'
+        Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray ; Write-Host " -------------------" -ForegroundColor $COLOR_DANGER ; Write-Host " ❌ [X] VOLVER" -ForegroundColor $COLOR_DANGER
+      
         $o = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","X")
         if($o -eq "X"){break}
         
@@ -2934,35 +3117,35 @@ function Invoke-DriverManagement {
         if($o -eq "C") {
             if(-not (Require-Admin "buscar drivers en Windows Update")){ continue }
             Write-Host "`n [+] CONFIGURANDO ENTORNO SEGURO..." -ForegroundColor Gray
-            # ============================================================
+# ============================================================
 # MEJORA CRITICA: Bypass de confirmaciones y protocolos
 # ============================================================
-            Set-ExecutionPolicy Bypass -Scope Process -Force
+Set-ExecutionPolicy Bypass -Scope Process -Force
             [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
             
-            Write-Host " [+] CONECTANDO CON MICROSOFT UPDATE..." -ForegroundColor $COLOR_PRIMARY
+            Write-Host " 🔌 [+] CONECTANDO CON MICROSOFT UPDATE..." -ForegroundColor $COLOR_PRIMARY
             
             if(!(Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)){
-                Write-Host " [+] Instalando proveedor NuGet..." -ForegroundColor Gray
+                Write-Host " 📦 [+] Instalando proveedor NuGet..." -ForegroundColor Gray
                 Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false | Out-Null
             }
             
             if(!(Get-Module -ListAvailable PSWindowsUpdate)){
-                Write-Host " [+] Instalando módulo PSWindowsUpdate..." -ForegroundColor Gray
+                Write-Host " 📥 [+] Instalando módulo PSWindowsUpdate..." -ForegroundColor Gray
                 Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope CurrentUser | Out-Null
             }
             
             Import-Module PSWindowsUpdate
-            Write-Host " [+] Buscando e instalando controladores certificados..." -ForegroundColor $COLOR_MENU
+            Write-Host " 🔍 [+] Buscando e instalando controladores certificados..." -ForegroundColor $COLOR_MENU
             
             # El comando clave: Solo baja Categoría "Drivers" (ignora parches de seguridad pesados)
             $wuOut = Get-WindowsUpdate -Category "Drivers" -Install -AcceptAll -IgnoreReboot 2>&1
             $needsReboot = ($wuOut | Out-String) -match "reboot|reiniciar|restart"
             Write-Log "DRIVER" ("WindowsUpdate Drivers finished NeedsReboot={0}" -f $needsReboot)
             
-            Write-Host "`n [OK] BUSQUEDA Y CARGA FINALIZADA." -ForegroundColor Green
-            if($needsReboot){ Write-Host " [!] Puede requerir reinicio." -ForegroundColor $COLOR_ALERT }
-            Pause-Enter " ENTER PARA VOLVER"
+            Write-Host "`n ✅ [OK] BUSQUEDA Y CARGA FINALIZADA." -ForegroundColor Green
+            if($needsReboot){ Write-Host " ⚠️ [!] Puede requerir reinicio." -ForegroundColor $COLOR_ALERT }
+            Pause-Enter " ↩️ ENTER PARA VOLVER"
         }
 
         if($o -eq "D") {
@@ -3136,11 +3319,11 @@ function Invoke-DefenderScan {
     Write-Host "`n 🦠 ESCANEO DE MALWARE - WINDOWS DEFENDER" -ForegroundColor $COLOR_MENU
     Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
     Write-Host ""
-    Write-Host " [1] ESCANEO RÁPIDO (recomendado)"
-    Write-Host " [2] ESCANEO COMPLETO (puede tardar horas)"
-    Write-Host " [3] VER AMENAZAS ENCONTRADAS"
-    Write-Host " [4] ACTUALIZAR DEFINICIONES"
-    Write-Host "`n [X] VOLVER"
+	Write-Host " ⚡ [1] ESCANEO RÁPIDO (recomendado)"
+    Write-Host " 🔍 [2] ESCANEO COMPLETO (puede tardar horas)"
+    Write-Host " 🦠 [3] VER AMENAZAS ENCONTRADAS"
+    Write-Host " 🔄 [4] ACTUALIZAR DEFINICIONES"
+    Write-Host "`n ❌ [X] VOLVER"
     
     $opt = Read-MenuOption "`n > SELECCIONE" -Valid @("1","2","3","4","X")
     if ($opt -eq "X") { return }
@@ -3193,23 +3376,23 @@ function Invoke-PasswordGenerator {
     while ($true) {
         [Console]::Clear()
         Show-MainTitle
-        Write-Host "`n GENERADOR DE CONTRASEÑAS SEGURAS" -ForegroundColor $COLOR_MENU
+		Write-Host "`n 🔐 GENERADOR DE CONTRASEÑAS SEGURAS" -ForegroundColor $COLOR_MENU
         Write-Host " -----------------------------------------------------------------------------"
-        Write-Host " CONFIGURACIÓN ACTUAL:" -ForegroundColor $COLOR_ALERT
-        Write-Host "   [1] Longitud: $longitud caracteres"
-        Write-Host "   [2] Mayúsculas (A-Z): $(if($usarMayusculas){'✅ Activado'}else{'❌ Desactivado'})"
-        Write-Host "   [3] Minúsculas (a-z): $(if($usarMinusculas){'✅ Activado'}else{'❌ Desactivado'})"
-        Write-Host "   [4] Números (0-9): $(if($usarNumeros){'✅ Activado'}else{'❌ Desactivado'})"
-        Write-Host "   [5] Símbolos (!@#$%^&*): $(if($usarSimbolos){'✅ Activado'}else{'❌ Desactivado'})"
-        Write-Host "   [6] Cantidad a generar: $cantidad"
+        Write-Host " ⚙️ CONFIGURACIÓN ACTUAL:" -ForegroundColor $COLOR_ALERT
+        Write-Host "   🔢 [1] Longitud: $longitud caracteres"
+        Write-Host "   🔠 [2] Mayúsculas (A-Z): $(if($usarMayusculas){'✅ Activado'}else{'❌ Desactivado'})"
+        Write-Host "   🔡 [3] Minúsculas (a-z): $(if($usarMinusculas){'✅ Activado'}else{'❌ Desactivado'})"
+        Write-Host "   🔢 [4] Números (0-9): $(if($usarNumeros){'✅ Activado'}else{'❌ Desactivado'})"
+        Write-Host "   ✨ [5] Símbolos (!@#$%^&*): $(if($usarSimbolos){'✅ Activado'}else{'❌ Desactivado'})"
+        Write-Host "   🔢 [6] Cantidad a generar: $cantidad"
         Write-Host ""
-        Write-Host " ACCIONES:" -ForegroundColor $COLOR_PRIMARY
-        Write-Host "   [G] GENERAR CONTRASEÑAS"
-        Write-Host "   [C] COPIAR AL PORTAPAPELES (la primera contraseña)"
+        Write-Host " 🎯 ACCIONES:" -ForegroundColor $COLOR_PRIMARY
+        Write-Host "   🔑 [G] GENERAR CONTRASEÑAS"
+        Write-Host "   📋 [C] COPIAR AL PORTAPAPELES (la primera contraseña)"
         Write-Host ""
-        Write-Host " CONTROL" -ForegroundColor Gray
+        Write-Host " ⌨️ CONTROL" -ForegroundColor Gray
         Write-Host " -----------------------------------------------------------------------------"
-        Write-Host "   [X] VOLVER AL MENÚ PRINCIPAL"
+        Write-Host "   ❌ [X] VOLVER AL MENÚ PRINCIPAL"
         
         $opt = Read-MenuOption "`n > SELECCIONE" -Valid @("1","2","3","4","5","6","G","C","X")
         
@@ -3534,16 +3717,16 @@ function Invoke-RemoteDesktop {
     while ($true) {
         Clear-Host
         Show-MainTitle
-        Write-Host "`n ESCRITORIO REMOTO - CONEXIONES" -ForegroundColor $COLOR_MENU
-        Write-Host " [1] ESCRITORIO REMOTO (mstsc) - Nativo Windows" -ForegroundColor $COLOR_PRIMARY
-        Write-Host " [2] ANYDESK - App gráfica ligera" -ForegroundColor $COLOR_MENU
-        Write-Host " [3] RUSTDESK - Open source, gratuito" -ForegroundColor $COLOR_MENU
-        Write-Host " [4] TEAMVIEWER - App gráfica completa" -ForegroundColor $COLOR_MENU
-        Write-Host "`n CONTROL" -ForegroundColor Gray
+		Write-Host "`n 🖥️ ESCRITORIO REMOTO - CONEXIONES" -ForegroundColor $COLOR_MENU
+        Write-Host " 🖥️ [1] ESCRITORIO REMOTO (mstsc) - Nativo Windows" -ForegroundColor $COLOR_PRIMARY
+        Write-Host " 🚀 [2] ANYDESK - App gráfica ligera" -ForegroundColor $COLOR_MENU
+        Write-Host " 🔓 [3] RUSTDESK - Open source, gratuito" -ForegroundColor $COLOR_MENU
+        Write-Host " 👁️ [4] TEAMVIEWER - App gráfica completa" -ForegroundColor $COLOR_MENU
+        Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray
         Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
-        Write-Host " [X] VOLVER"
+        Write-Host " ❌ [X] VOLVER"
         
-        $sub = Read-Host "`n > SELECCIONE"
+        $sub = Read-Host "🔽 > SELECCIONE"
         
         switch ($sub.ToUpper()) {
             "1" {
@@ -3603,18 +3786,18 @@ function Show-DiagnosticMenu {
     while($true){
         Clear-Host
         Show-MainTitle
-        Write-Host "`n PURGA Y FORMATEO - LIMPIEZA AVANZADA" -ForegroundColor $COLOR_DANGER
+		Write-Host "`n 🧹 PURGA Y FORMATEO - LIMPIEZA AVANZADA" -ForegroundColor $COLOR_DANGER
         Write-Host " ---------------------------------------------------------------------------"
-        Write-Host " [1] LIMPIAR ARCHIVOS TEMPORALES PROFUNDO"
-        Write-Host " [2] LIMPIAR CACHÉ DE WINDOWS (WinSxS)"
-        Write-Host " [3] ELIMINAR RESTOS DE ACTUALIZACIONES ANTIGUAS"
-        Write-Host " [4] ANALIZAR Y LIMPIAR DISCO (cleanmgr)"
-        Write-Host " [5] FORMATEO RÁPIDO DE UNIDAD USB (DiskPart)"
-        Write-Host " [6] CREAR USB BOOTEABLE (Rufus - web)"
-        Write-Host " [8] DISKPART SIMPLIFICADO - Gestión fácil de discos/USB" -ForegroundColor $COLOR_MENU
-        Write-Host "`n CONTROL" -ForegroundColor Gray
+        Write-Host " 🗑️ [1] LIMPIAR ARCHIVOS TEMPORALES PROFUNDO"
+        Write-Host " 🧽 [2] LIMPIAR CACHÉ DE WINDOWS (WinSxS)"
+        Write-Host " 🔄 [3] ELIMINAR RESTOS DE ACTUALIZACIONES ANTIGUAS"
+        Write-Host " 📊 [4] ANALIZAR Y LIMPIAR DISCO (cleanmgr)"
+        Write-Host " ⚡ [5] FORMATEO RÁPIDO DE UNIDAD USB (DiskPart)"
+        Write-Host " 💿 [6] CREAR USB BOOTEABLE (Rufus - web)"
+        Write-Host " 🛠️ [8] DISKPART SIMPLIFICADO - Gestión fácil de discos/USB" -ForegroundColor $COLOR_MENU
+        Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray
         Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
-        Write-Host " [X] VOLVER"
+        Write-Host " ❌ [X] VOLVER"
         
         $opt = Read-MenuOption "`n > SELECCIONE" -Valid @("1","2","3","4","5","6","8","X")
         
@@ -3972,10 +4155,535 @@ function Invoke-SimpleDiskPart {
 }
 
 # ============================================================
+# 🎵 CENTRO DE DESCARGAS INTELIGENTE (yt-dlp)
+# ============================================================
+function Invoke-DownloadCenter {
+    # Configuración inicial
+    $ErrorActionPreference = "Continue"
+    $ProgressPreference = "SilentlyContinue"
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    
+    # Definir rutas
+    $Escritorio = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"))
+    $Herramientas = [System.IO.Path]::Combine($Escritorio, "Herramientas_Descarga")
+    $DescargasPredeterminada = [System.IO.Path]::Combine($Escritorio, "Descargas_YTDLP")
+    $HistorialPath = [System.IO.Path]::Combine($Herramientas, "historial_descargas.txt")
+    $script:DescargasExitosas = 0
+    $script:LimiteDescarga = 50
+    
+    # Crear carpetas
+    if (-not (Test-Path $Herramientas)) { New-Item -ItemType Directory -Path $Herramientas -Force | Out-Null }
+    if (-not (Test-Path $DescargasPredeterminada)) { New-Item -ItemType Directory -Path $DescargasPredeterminada -Force | Out-Null }
+    Set-Location $Herramientas
+    
+    function Descargar-FFmpeg {
+        Write-Host "   🔧 FFmpeg no encontrado. Descargando..." -ForegroundColor $COLOR_ALERT
+        $url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+        $zipPath = "$Herramientas\ffmpeg.zip"
+        $extractPath = "$Herramientas\ffmpeg-temp"
+        try {
+            Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+            Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+            $ffmpegFolder = Get-ChildItem -Path $extractPath -Directory | Select-Object -First 1
+            $binPath = Join-Path $ffmpegFolder.FullName "bin"
+            Copy-Item "$binPath\ffmpeg.exe" "$Herramientas\ffmpeg.exe" -Force
+            Copy-Item "$binPath\ffprobe.exe" "$Herramientas\ffprobe.exe" -Force
+            Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+            Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "   ✅ FFmpeg instalado!" -ForegroundColor $COLOR_PRIMARY
+            Write-Log "DOWN" "FFmpeg installed successfully"
+            return $true
+        }
+        catch {
+            Write-Host "   ⚠️ No se pudo instalar FFmpeg." -ForegroundColor $COLOR_WARNING
+            Write-Log "WARN" "FFmpeg installation failed"
+            return $false
+        }
+    }
+    
+    function Verificar-Herramientas {
+        if (-not (Test-Path "$Herramientas\yt-dlp.exe")) {
+            Write-Host "   📥 Descargando yt-dlp..." -ForegroundColor $COLOR_ALERT
+            try {
+                Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile "$Herramientas\yt-dlp.exe" -UseBasicParsing
+                Write-Host "   ✅ yt-dlp listo!" -ForegroundColor $COLOR_PRIMARY
+                Write-Log "DOWN" "yt-dlp downloaded"
+            }
+            catch {
+                Write-Host "   ❌ ERROR: No se pudo descargar yt-dlp.exe" -ForegroundColor $COLOR_DANGER
+                Write-Log "ERROR" "yt-dlp download failed"
+                Read-Host "   Presiona Enter para volver"
+                return $false
+            }
+        }
+        $ffmpegPath = Get-Command ffmpeg -ErrorAction SilentlyContinue
+        if (-not $ffmpegPath -and (Test-Path "$Herramientas\ffmpeg.exe")) {
+            $ffmpegPath = "$Herramientas\ffmpeg.exe"
+        }
+        if (-not $ffmpegPath) {
+            $global:FFmpegDisponible = Descargar-FFmpeg
+        } else {
+            $global:FFmpegDisponible = $true
+        }
+        return $true
+    }
+    
+    function Guardar-Historial {
+        param([string]$Titulo, [string]$Plataforma, [string]$URL, [string]$Destino)
+        $fecha = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $linea = "$fecha | $Plataforma | $Titulo | $URL | $Destino"
+        Add-Content -Path $HistorialPath -Value $linea -Encoding UTF8
+        Write-Log "DOWN" "Downloaded: $Titulo from $Plataforma"
+    }
+    
+    function Mostrar-Historial {
+        Clear-Host
+        Show-MainTitle
+        Write-Host "`n 📜 HISTORIAL DE DESCARGAS" -ForegroundColor $COLOR_MENU
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        if (Test-Path $HistorialPath) {
+            $historial = Get-Content $HistorialPath -Encoding UTF8
+            if ($historial.Count -eq 0) {
+                Write-Host "   ℹ️ Aún no hay descargas registradas." -ForegroundColor $COLOR_ALERT
+            } else {
+                Write-Host "   📋 Últimas 20 descargas:" -ForegroundColor $COLOR_PRIMARY
+                Write-Host ""
+                $historial | Select-Object -Last 20 | ForEach-Object {
+                    Write-Host "   $_" -ForegroundColor Gray
+                }
+                Write-Host ""
+                Write-Host "   📊 Total de descargas registradas: $($historial.Count)" -ForegroundColor Cyan
+            }
+        } else {
+            Write-Host "   ℹ️ Aún no hay historial. Realiza tu primera descarga!" -ForegroundColor $COLOR_ALERT
+        }
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    }
+    
+    function Detectar-USB {
+        try {
+            $drives = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DriveType -eq 2 -and $_.Size -gt 0 }
+            if ($drives) { return $drives[0].DeviceID.Replace(":", "") }
+        } catch { 
+            $vol = Get-Volume | Where-Object { $_.DriveType -eq 'Removable' -and $_.DriveLetter } | Select-Object -First 1
+            if ($vol) { return $vol.DriveLetter }
+        }
+        return $null
+    }
+    
+    function Evaluar-Apagado {
+        if ($Global:ModoNocturno) {
+            Write-Host "`n   🔥 MODO NOCTURNO ACTIVO. Apagando PC en 60 segundos..." -ForegroundColor $COLOR_DANGER
+            Write-Host "   📊 Total descargas: $script:DescargasExitosas" -ForegroundColor Cyan
+            Start-Sleep -Seconds 5
+            shutdown /s /f /t 60
+            exit
+        }
+    }
+    
+    function Limpiar-Nombre {
+        param([string]$Nombre)
+        $invalidChars = [System.IO.Path]::GetInvalidFileNameChars()
+        foreach ($char in $invalidChars) { $Nombre = $Nombre.Replace($char, '_') }
+        return $Nombre.Trim()
+    }
+    
+    function Mostrar-Notas {
+        Clear-Host
+        Show-MainTitle
+        Write-Host "`n 📖 GUÍA RÁPIDA - CENTRO DE DESCARGAS" -ForegroundColor $COLOR_ALERT
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "   1. LÍMITE DE RESULTADOS: Controla cuántas canciones descarga"
+        Write-Host "   2. DESCARGA POR LOTES: Crea archivo lista_descargas.txt"
+        Write-Host "   3. SOLO CONTENIDO PÚBLICO"
+        Write-Host "   4. Presiona Ctrl+C para cancelar"
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    }
+    
+    function Descargar-DesdeArchivo {
+        param([string]$RutaDestino)
+        Clear-Host
+        Show-MainTitle
+        Write-Host "`n 📦 DESCARGA POR LOTES DESDE ARCHIVO" -ForegroundColor $COLOR_MENU
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        $archivoLista = Join-Path $Herramientas "lista_descargas.txt"
+        if (-not (Test-Path $archivoLista)) {
+            Write-Host "   ⚠️ No se encontró el archivo 'lista_descargas.txt'" -ForegroundColor $COLOR_DANGER
+            $ejemplo = @("# Lista de descargas", "https://youtube.com/watch?v=ejemplo")
+            $ejemplo | Out-File -FilePath $archivoLista -Encoding UTF8
+            Write-Host "   ✅ Se creó archivo de ejemplo." -ForegroundColor $COLOR_PRIMARY
+            Read-Host "   Presiona Enter para continuar"
+            return
+        }
+        $urls = Get-Content $archivoLista -Encoding UTF8 | Where-Object { $_ -and $_ -notmatch '^\s*#' -and $_ -match '^https?://' }
+        if ($urls.Count -eq 0) {
+            Write-Host "   ❌ No se encontraron URLs válidas." -ForegroundColor $COLOR_DANGER
+            Read-Host "   Presiona Enter para continuar"
+            return
+        }
+        Write-Host "   📊 Se encontraron $($urls.Count) URLs" -ForegroundColor $COLOR_PRIMARY
+        $confirmar = Read-Host "   ❓ Descargar todas? (S/N)"
+        if ($confirmar -ne "s" -and $confirmar -ne "S") {
+            Write-Host "   ❌ Cancelado." -ForegroundColor $COLOR_ALERT
+            Read-Host "   Presiona Enter para continuar"
+            return
+        }
+        $contador = 0
+        foreach ($url in $urls) {
+            $contador++
+            Write-Host "   [$contador/$($urls.Count)] $url" -ForegroundColor Cyan
+            & .\yt-dlp.exe --no-playlist -o "$RutaDestino/%(title)s.%(ext)s" $url 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $script:DescargasExitosas++
+                Write-Host "      ✅ Éxito!" -ForegroundColor Green
+            } else {
+                Write-Host "      ❌ Fallo" -ForegroundColor Red
+            }
+        }
+        Write-Host "`n   📊 RESUMEN: Exitosas: $contador" -ForegroundColor Cyan
+        Read-Host "   Presiona Enter para continuar"
+    }
+    
+    # Inicializar
+    if (-not (Verificar-Herramientas)) { return }
+    
+    # Variables de estado
+    if ($null -eq $Global:CalidadAudio) { $Global:CalidadAudio = "5" }
+    if ($null -eq $Global:CalidadVideo) { $Global:CalidadVideo = "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]" }
+    if ($null -eq $Global:TextoCalidad) { $Global:TextoCalidad = "Media (192kbps / 720p)" }
+    if ($null -eq $Global:ModoNocturno) { $Global:ModoNocturno = $false }
+    if ($null -eq $Global:ModoSilencioso) { $Global:ModoSilencioso = $false }
+    $Global:RutaDestinoActual = $DescargasPredeterminada
+    
+    # MENU PRINCIPAL DEL CENTRO
+    do {
+        $USBDrive = Detectar-USB
+        if ($USBDrive) {
+            $MensajeUSB = "USB DETECTADA (Unidad ${USBDrive}:)"
+            $ColorUSB = "Green"
+        } else {
+            $MensajeUSB = "Sin USB conectada"
+            $ColorUSB = "DarkGray"
+        }
+        $EstadoNocturno = if ($Global:ModoNocturno) { "ACTIVO" } else { "DESACTIVADO" }
+        $EstadoSilencioso = if ($Global:ModoSilencioso) { "SI" } else { "NO" }
+        $ColorNocturno = if ($Global:ModoNocturno) { "Red" } else { "Gray" }
+        
+        Clear-Host
+        Show-MainTitle
+        Write-Host "`n 🎵 CENTRO DE DESCARGAS INTELIGENTE v4.0" -ForegroundColor $COLOR_MENU
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        Write-Host "   📂 Destino actual: $Global:RutaDestinoActual" -ForegroundColor Yellow
+        Write-Host "   💿 $MensajeUSB" -ForegroundColor $ColorUSB
+        Write-Host "   🎚️ Calidad    : $Global:TextoCalidad" -ForegroundColor Cyan
+        Write-Host "   🔢 Límite     : $script:LimiteDescarga canciones" -ForegroundColor Cyan
+        Write-Host "   🔇 Modo Silent: $EstadoSilencioso" -ForegroundColor Cyan
+        Write-Host "   🌙 Modo Noche : $EstadoNocturno" -ForegroundColor $ColorNocturno
+        Write-Host "   📊 Descargas  : $script:DescargasExitosas" -ForegroundColor Green
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "   🎬 YOUTUBE:" -ForegroundColor Magenta
+        Write-Host "   [1] Descargar Disco / Playlist"
+        Write-Host "   [2] Descargar Canción sola"
+        Write-Host "   [3] YouTube por ENLACE"
+        Write-Host ""
+        Write-Host "   📱 OTRAS PLATAFORMAS:" -ForegroundColor Cyan
+        Write-Host "   [4] TikTok, Instagram, Facebook, Twitter"
+        Write-Host ""
+        Write-Host "   🛠️ HERRAMIENTAS:" -ForegroundColor Yellow
+        if ($global:FFmpegDisponible) {
+            Write-Host "   [5] MODO DJ: Recortar audio"
+        } else {
+            Write-Host "   [5] MODO DJ: NO DISPONIBLE" -ForegroundColor DarkGray
+        }
+        Write-Host "   [6] Configurar Calidad"
+        Write-Host "   [7] Configurar Límite"
+        Write-Host "   [8] Configurar Modo Nocturno"
+        Write-Host "   [9] Configurar Modo Silencioso"
+        Write-Host "   [C] Seleccionar Carpeta"
+        Write-Host "   [H] Ver Historial"
+        Write-Host "   [L] Descarga por lotes"
+        Write-Host "   [N] Ver NOTAS"
+        Write-Host "   [U] Actualizar yt-dlp"
+        Write-Host ""
+        Write-Host "   ⌨️ CONTROL" -ForegroundColor Gray
+        Write-Host "   ═══════════════════════════════════════════════════════════════════" -ForegroundColor $COLOR_DANGER
+        Write-Host "   [X] SALIR DEL CENTRO DE DESCARGAS" -ForegroundColor $COLOR_DANGER
+        
+        $opcion = Read-Host "`n   > SELECCIONE"
+        
+        if ($Global:ModoSilencioso) {
+            $argsBase = @("--restrict-filenames", "--no-mtime", "--quiet", "--no-warnings")
+        } else {
+            $argsBase = @("--restrict-filenames", "--no-mtime")
+        }
+        
+        switch -Wildcard ($opcion) {
+            "1" {
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n 🎵 DESCARGAR DISCO / PLAYLIST" -ForegroundColor Magenta
+                Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+                $album = Read-Host "   Artista y nombre del Álbum"
+                $nombreLimpio = Limpiar-Nombre -Nombre $album
+                Write-Host "   ⏳ Descargando (máx $script:LimiteDescarga)..." -ForegroundColor Yellow
+                & .\yt-dlp.exe -x --audio-format mp3 --audio-quality $Global:CalidadAudio --yes-playlist --playlist-end $script:LimiteDescarga $argsBase "ytsearchplaylist$script:LimiteDescarga:$album" -o "$Global:RutaDestinoActual/$nombreLimpio/%(playlist_index)s - %(title)s.%(ext)s" 2>$null
+                if ($LASTEXITCODE -eq 0) { 
+                    $script:DescargasExitosas++
+                    Write-Host "   ✅ Disco descargado!" -ForegroundColor $COLOR_PRIMARY 
+                    Guardar-Historial -Titulo $album -Plataforma "YouTube" -URL "Búsqueda: $album" -Destino $Global:RutaDestinoActual
+                } else {
+                    Write-Host "   ❌ No se encontró" -ForegroundColor $COLOR_DANGER
+                }
+                Read-Host "   Presiona Enter"
+                Evaluar-Apagado
+            }
+            "2" {
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n 🎵 DESCARGAR CANCIÓN SOLA" -ForegroundColor Magenta
+                Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+                $busqueda = Read-Host "   Nombre del tema"
+                Write-Host "   ⏳ Descargando..." -ForegroundColor Yellow
+                & .\yt-dlp.exe -x --audio-format mp3 --audio-quality $Global:CalidadAudio --no-playlist $argsBase "ytsearch1:$busqueda" -o "$Global:RutaDestinoActual/%(title)s.%(ext)s" 2>$null
+                if ($LASTEXITCODE -eq 0) { 
+                    $script:DescargasExitosas++
+                    Write-Host "   ✅ Canción guardada!" -ForegroundColor $COLOR_PRIMARY 
+                    Guardar-Historial -Titulo $busqueda -Plataforma "YouTube" -URL "Búsqueda: $busqueda" -Destino $Global:RutaDestinoActual
+                } else {
+                    Write-Host "   ❌ No se encontró" -ForegroundColor $COLOR_DANGER
+                }
+                Read-Host "   Presiona Enter"
+                Evaluar-Apagado
+            }
+            "3" {
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n 🎬 YOUTUBE POR ENLACE" -ForegroundColor White
+                Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+                $link = Read-Host "   Pega la URL"
+                $tipo = Read-Host "   Música [M] o Video [V]?"
+                Write-Host "   ⏳ Descargando..." -ForegroundColor Yellow
+                if ($tipo -eq "v" -or $tipo -eq "V") {
+                    & .\yt-dlp.exe -f $Global:CalidadVideo --no-playlist $argsBase -o "$Global:RutaDestinoActual/%(title)s.%(ext)s" $link 2>$null
+                } else {
+                    & .\yt-dlp.exe -x --audio-format mp3 --audio-quality $Global:CalidadAudio --no-playlist $argsBase -o "$Global:RutaDestinoActual/%(title)s.%(ext)s" $link 2>$null
+                }
+                if ($LASTEXITCODE -eq 0) { 
+                    $script:DescargasExitosas++
+                    Write-Host "   ✅ Descargado!" -ForegroundColor $COLOR_PRIMARY 
+                    Guardar-Historial -Titulo "URL" -Plataforma "YouTube" -URL $link -Destino $Global:RutaDestinoActual
+                } else {
+                    Write-Host "   ❌ URL inválida" -ForegroundColor $COLOR_DANGER
+                }
+                Read-Host "   Presiona Enter"
+                Evaluar-Apagado
+            }
+            "4" {
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n 📱 REDES SOCIALES" -ForegroundColor Cyan
+                Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+                Write-Host "   ⚠️ ATENCIÓN: Solo videos PÚBLICOS" -ForegroundColor $COLOR_ALERT
+                $url = Read-Host "   Pega la URL"
+                $tipo = Read-Host "   Solo audio [S] o Video [N]?"
+                Write-Host "   ⏳ Descargando..." -ForegroundColor Yellow
+                if ($tipo -eq "s" -or $tipo -eq "S") {
+                    & .\yt-dlp.exe -x --audio-format mp3 --audio-quality $Global:CalidadAudio --no-playlist $argsBase -o "$Global:RutaDestinoActual/%(title)s.%(ext)s" $url 2>$null
+                } else {
+                    & .\yt-dlp.exe --no-playlist $argsBase -o "$Global:RutaDestinoActual/%(title)s.%(ext)s" $url 2>$null
+                }
+                if ($LASTEXITCODE -eq 0) { 
+                    $script:DescargasExitosas++
+                    Write-Host "   ✅ Descargado!" -ForegroundColor $COLOR_PRIMARY
+                } else {
+                    Write-Host "   ❌ Fallo - video privado o URL incorrecta" -ForegroundColor $COLOR_DANGER
+                }
+                Read-Host "   Presiona Enter"
+                Evaluar-Apagado
+            }
+            "5" {
+                Clear-Host
+                Show-MainTitle
+                if (-not $global:FFmpegDisponible) {
+                    Write-Host "`n   ⚠️ MODO DJ NO DISPONIBLE" -ForegroundColor $COLOR_DANGER
+                    Write-Host "   💡 FFmpeg no está instalado correctamente" -ForegroundColor $COLOR_ALERT
+                    Read-Host "   Presiona Enter"
+                    continue
+                }
+                Write-Host "`n 🎧 MODO DJ: RECORTAR AUDIO" -ForegroundColor Yellow
+                Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+                $busqueda = Read-Host "   Nombre de la canción"
+                $inicio = Read-Host "   Inicio (00:00:00)"
+                $fin = Read-Host "   Fin (00:00:00)"
+                Write-Host "   ⏳ Procesando..." -ForegroundColor Yellow
+                & .\yt-dlp.exe -x --audio-format mp3 --audio-quality $Global:CalidadAudio --no-playlist $argsBase --download-sections "*$inicio-$fin" --force-keyframes-at-cuts "ytsearch1:$busqueda" -o "$Global:RutaDestinoActual/%(title)s_recortado.%(ext)s" 2>$null
+                if ($LASTEXITCODE -eq 0) { 
+                    $script:DescargasExitosas++
+                    Write-Host "   ✅ Fragmento guardado!" -ForegroundColor $COLOR_PRIMARY 
+                } else {
+                    Write-Host "   ❌ No se pudo recortar" -ForegroundColor $COLOR_DANGER
+                }
+                Read-Host "   Presiona Enter"
+                Evaluar-Apagado
+            }
+            "6" {
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n ⚙️ CONFIGURAR CALIDAD" -ForegroundColor Yellow
+                Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+                Write-Host "   [1] Alta (320kbps / 1080p)"
+                Write-Host "   [2] Media (192kbps / 720p)"
+                Write-Host "   [3] Baja (128kbps / 480p)"
+                $setCalidad = Read-Host "`n   Opción"
+                switch ($setCalidad) {
+                    "1" { 
+                        $Global:CalidadAudio = "0"
+                        $Global:CalidadVideo = "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]"
+                        $Global:TextoCalidad = "Alta (320kbps / 1080p)"
+                    }
+                    "3" { 
+                        $Global:CalidadAudio = "9"
+                        $Global:CalidadVideo = "bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[height<=480][ext=mp4]"
+                        $Global:TextoCalidad = "Baja (128kbps / 480p)"
+                    }
+                    default { 
+                        $Global:CalidadAudio = "5"
+                        $Global:CalidadVideo = "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]"
+                        $Global:TextoCalidad = "Media (192kbps / 720p)"
+                    }
+                }
+                Write-Host "`n   ✅ Calidad cambiada a: $Global:TextoCalidad" -ForegroundColor $COLOR_PRIMARY
+                Write-Log "DOWN" "Quality changed to: $Global:TextoCalidad"
+                Start-Sleep -Seconds 2
+            }
+            "7" {
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n ⚙️ CONFIGURAR LÍMITE" -ForegroundColor Yellow
+                Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+                Write-Host "   Límite actual: $script:LimiteDescarga"
+                Write-Host "   [1] 10   [2] 25   [3] 50   [4] 100   [5] Todos"
+                $opcionLimite = Read-Host "`n   Opción"
+                switch ($opcionLimite) {
+                    "1" { $script:LimiteDescarga = 10 }
+                    "2" { $script:LimiteDescarga = 25 }
+                    "3" { $script:LimiteDescarga = 50 }
+                    "4" { $script:LimiteDescarga = 100 }
+                    "5" { $script:LimiteDescarga = 9999 }
+                    default { Write-Host "   ❌ Inválido" -ForegroundColor $COLOR_DANGER }
+                }
+                Write-Host "`n   ✅ Límite cambiado a $script:LimiteDescarga" -ForegroundColor $COLOR_PRIMARY
+                Start-Sleep -Seconds 2
+            }
+            "8" {
+                $Global:ModoNocturno = (-not $Global:ModoNocturno)
+                if ($Global:ModoNocturno) {
+                    Write-Host "`n   🌙 Modo Nocturno ACTIVADO" -ForegroundColor $COLOR_ALERT
+                    Write-Host "   ⚠️ El PC se apagará automáticamente al finalizar las descargas" -ForegroundColor $COLOR_DANGER
+                } else {
+                    Write-Host "`n   🌙 Modo Nocturno DESACTIVADO" -ForegroundColor $COLOR_PRIMARY
+                }
+                Start-Sleep -Seconds 2
+            }
+            "9" {
+                $Global:ModoSilencioso = (-not $Global:ModoSilencioso)
+                if ($Global:ModoSilencioso) {
+                    Write-Host "`n   🔇 Modo Silencioso ACTIVADO (sin mensajes detallados)" -ForegroundColor $COLOR_ALERT
+                } else {
+                    Write-Host "`n   🔇 Modo Silencioso DESACTIVADO" -ForegroundColor $COLOR_PRIMARY
+                }
+                Start-Sleep -Seconds 2
+            }
+            "c" { 
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n 📂 SELECCIONAR CARPETA" -ForegroundColor Cyan
+                Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+                Write-Host "   [1] Carpeta por defecto (Escritorio\Descargas_YTDLP)"
+                Write-Host "   [2] Escribir ruta manual"
+                $opt = Read-Host "`n   Opción"
+                if ($opt -eq "2") {
+                    $ruta = Read-Host "   Escribe la ruta completa"
+                    if (-not (Test-Path $ruta)) { New-Item -ItemType Directory -Path $ruta -Force | Out-Null }
+                    $Global:RutaDestinoActual = $ruta
+                    Write-Host "`n   ✅ Carpeta cambiada a: $ruta" -ForegroundColor $COLOR_PRIMARY
+                } else {
+                    $Global:RutaDestinoActual = $DescargasPredeterminada
+                    Write-Host "`n   ✅ Carpeta cambiada a: $DescargasPredeterminada" -ForegroundColor $COLOR_PRIMARY
+                }
+                Write-Log "DOWN" "Download folder changed to: $Global:RutaDestinoActual"
+                Start-Sleep -Seconds 2
+            }
+            "C" { 
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n 📂 SELECCIONAR CARPETA" -ForegroundColor Cyan
+                Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+                Write-Host "   [1] Carpeta por defecto (Escritorio\Descargas_YTDLP)"
+                Write-Host "   [2] Escribir ruta manual"
+                $opt = Read-Host "`n   Opción"
+                if ($opt -eq "2") {
+                    $ruta = Read-Host "   Escribe la ruta completa"
+                    if (-not (Test-Path $ruta)) { New-Item -ItemType Directory -Path $ruta -Force | Out-Null }
+                    $Global:RutaDestinoActual = $ruta
+                    Write-Host "`n   ✅ Carpeta cambiada a: $ruta" -ForegroundColor $COLOR_PRIMARY
+                } else {
+                    $Global:RutaDestinoActual = $DescargasPredeterminada
+                    Write-Host "`n   ✅ Carpeta cambiada a: $DescargasPredeterminada" -ForegroundColor $COLOR_PRIMARY
+                }
+                Write-Log "DOWN" "Download folder changed to: $Global:RutaDestinoActual"
+                Start-Sleep -Seconds 2
+            }
+            "h" { Mostrar-Historial; Read-Host "`n   Presiona Enter" }
+            "H" { Mostrar-Historial; Read-Host "`n   Presiona Enter" }
+            "l" { Descargar-DesdeArchivo -RutaDestino $Global:RutaDestinoActual }
+            "L" { Descargar-DesdeArchivo -RutaDestino $Global:RutaDestinoActual }
+            "n" { Mostrar-Notas; Read-Host "`n   Presiona Enter" }
+            "N" { Mostrar-Notas; Read-Host "`n   Presiona Enter" }
+            "u" {
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n 🔄 ACTUALIZANDO YT-DLP" -ForegroundColor Cyan
+                Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+                Write-Host "   ⏳ Descargando última versión..." -ForegroundColor Yellow
+                & .\yt-dlp.exe -U 2>$null
+                Write-Host "`n   ✅ yt-dlp actualizado!" -ForegroundColor $COLOR_PRIMARY
+                Write-Log "DOWN" "yt-dlp updated"
+                Read-Host "`n   Presiona Enter"
+            }
+            "U" {
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n 🔄 ACTUALIZANDO YT-DLP" -ForegroundColor Cyan
+                Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+                Write-Host "   ⏳ Descargando última versión..." -ForegroundColor Yellow
+                & .\yt-dlp.exe -U 2>$null
+                Write-Host "`n   ✅ yt-dlp actualizado!" -ForegroundColor $COLOR_PRIMARY
+                Write-Log "DOWN" "yt-dlp updated"
+                Read-Host "`n   Presiona Enter"
+            }
+            "x" { break }
+        }
+    } while ($opcion -ne "x")
+    
+    Clear-Host
+    Show-MainTitle
+    Write-Host "`n ═══════════════════════════════════════════════════════════════════" -ForegroundColor Green
+    Write-Host "   📊 RESUMEN - Descargas exitosas: $script:DescargasExitosas" -ForegroundColor Cyan
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Green
+    Write-Host "   🎵 Gracias por usar el centro de descargas!" -ForegroundColor Magenta
+    Write-Log "DOWN" "Download center closed. Total downloads: $script:DescargasExitosas"
+    Start-Sleep -Seconds 2
+}
+
+# ============================================================
 # MENU PRINCIPAL
 # ============================================================
 while ($true) {
-	Clear-Host #nuevo
+#	Clear-Host #nuevo
     Show-MainTitle
 	    if ($Host.UI.RawUI.KeyAvailable) {
         $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
@@ -3986,44 +4694,44 @@ while ($true) {
         }
     }
 	$horaActual = Get-Date -Format "HH:mm:ss"
-	Write-Host "`n SISTEMA OK | USUARIO $env:USERNAME | VISTA $vista | HORA: $horaActual" -ForegroundColor Gray
+	Write-Host "`n ✅ SISTEMA OK | 👤 USUARIO $env:USERNAME | 🖥️ VISTA $vista | ⏰ HORA: $horaActual" -ForegroundColor Gray
     Write-Host " -----------------------------------------------------------------------------" -ForegroundColor Gray
     
     if ($Global:MenuHorizontal) {
-        Write-Host "    [A]  BACKOP TOTAL             [E]  OPTIMIZAR TEMP           [I]  KIT POST FORMAT" 		-ForegroundColor Green
-        Write-Host "    [B]  RESTORE TOTAL            [F]  WIN UTIL TITUS           [J]  GESTION USUARIOS" 		-ForegroundColor Green
-        Write-Host "    [C]  GESTION DRIVERS          [G]  MASSGRAVE ACT            [K]  SOPORTE TECNICO PRO" 	-ForegroundColor Green
-        Write-Host "    [D]  PURGA Y FORMATEO         [H]  GESTION PAQUETES PRO     [L]  BYPASS WINDOWS 11" 	-ForegroundColor Green
-        Write-Host '    [M]  RED Y REPARACION         [N]  MANTENIM DISCO           [O]  MONITOR EN VIVO (PRO)' -ForegroundColor Green
-        Write-Host '    [P]  WINDOWS DEFENDER TOTAL   [Q]  AUTO-FLOW (EXPRESS)      [U]  SYSINTERNALS KIT' 		-ForegroundColor Green
-        Write-Host '    [T]  ESCRITORIO REMOTO  	  [Y]  GENERADOR CONTRASEÑAS							  ' -ForegroundColor Green	
+		Write-Host "    💾 [A]  BACKUP TOTAL             🧹 [E]  OPTIMIZAR TEMP           📦 [I]  KIT POST FORMAT" 		-ForegroundColor Green
+        Write-Host "    📀 [B]  RESTORE TOTAL            🛠️ [F]  WIN UTIL TITUS           👥 [J]  GESTION USUARIOS" 		-ForegroundColor Green
+        Write-Host "    🔧 [C]  GESTION DRIVERS          🔑 [G]  MASSGRAVE ACT            🛠️ [K]  SOPORTE TECNICO PRO" 	-ForegroundColor Green
+        Write-Host "    🧹 [D]  PURGA Y FORMATEO         📦 [H]  GESTION PAQUETES PRO     🚀 [L]  BYPASS WINDOWS 11" 	-ForegroundColor Green
+        Write-Host '    🌐 [M]  RED Y REPARACION         💾 [N]  MANTENIM DISCO           📊 [O]  MONITOR EN VIVO (PRO)' -ForegroundColor Green
+        Write-Host '    🛡️ [P]  WINDOWS DEFENDER TOTAL   ⚡ [Q]  AUTO-FLOW (EXPRESS)      🛠️ [U]  SYSINTERNALS KIT' 		-ForegroundColor Green
+		Write-Host '    🖥️ [T]  ESCRITORIO REMOTO        🔐 [Y]  GENERADOR CONTRASEÑAS    🎵 [Z]  CENTRO DESCARGAS (yt-dlp)	 ' -ForegroundColor Green	
          } else {
-             Write-Host "    [A] BACKOP TOTAL"
-             Write-Host "    [B] RESTORE TOTAL"
-             Write-Host "    [C] GESTION DRIVERS"
-             Write-Host "    [D] PURGA Y FORMATEO"
-             Write-Host "    [E] OPTIMIZAR TEMP"
-             Write-Host "    [F] WIN UTIL TITUS"
-             Write-Host "    [G] MASSGRAVE ACT"
-             Write-Host "    [H] GESTION PAQUETES PRO"
-             Write-Host "    [I] KIT POST FORMAT"
-             Write-Host "    [J] GESTION USUARIOS"
-             Write-Host "    [K] SOPORTE TECNICO PRO"
-             Write-Host "    [L] BYPASS WINDOWS 11"
-             Write-Host "    [M] RED Y REPARACION"
-             Write-Host "    [N] MANTENIM DISCO"
-             Write-Host "    [O] MONITOR EN VIVO (PRO)"
-             Write-Host "    [P] WINDOWS DEFENDER TOTAL"
-             Write-Host "    [Q] AUTO-FLOW (MANTENIMIENTO EXPRESS)"
-             Write-Host "    [T] ESCRITORIO REMOTO"
-             Write-Host "    [U] SYSINTERNALS KIT (11 herramientas)"
-             Write-Host "	 [Y]  GENERADOR CONTRASEÑAS"
+             Write-Host "    💾 [A] BACKUP TOTAL"
+             Write-Host "    📀 [B] RESTORE TOTAL"
+             Write-Host "    🔧 [C] GESTION DRIVERS"
+             Write-Host "    🧹 [D] PURGA Y FORMATEO"
+             Write-Host "    🧹 [E] OPTIMIZAR TEMP"
+             Write-Host "    🛠️ [F] WIN UTIL TITUS"
+             Write-Host "    🔑 [G] MASSGRAVE ACT"
+             Write-Host "    📦 [H] GESTION PAQUETES PRO"
+             Write-Host "    📦 [I] KIT POST FORMAT"
+             Write-Host "    👥 [J] GESTION USUARIOS"
+             Write-Host "    🛠️ [K] SOPORTE TECNICO PRO"
+             Write-Host "    🚀 [L] BYPASS WINDOWS 11"
+             Write-Host "    🌐 [M] RED Y REPARACION"
+             Write-Host "    💾 [N] MANTENIM DISCO"
+             Write-Host "    📊 [O] MONITOR EN VIVO (PRO)"
+             Write-Host "    🛡️ [P] WINDOWS DEFENDER TOTAL"
+             Write-Host "    ⚡ [Q] AUTO-FLOW (MANTENIMIENTO EXPRESS)"
+             Write-Host "    🖥️ [T] ESCRITORIO REMOTO"
+             Write-Host "    🛠️ [U] SYSINTERNALS KIT (11 herramientas)"
+             Write-Host "	 🔐 [Y]  GENERADOR CONTRASEÑAS"
+			 Write-Host "	 🎵 [Z]  CENTRO DESCARGAS (yt-dlp)"
          }
-
-    Write-Host "`n CONFIGURACION Y VISTA" -ForegroundColor Gray
+	Write-Host "`n ⚙️ CONFIGURACION Y VISTA" -ForegroundColor Gray
     Write-Host "  -----------------------------------------------------------------------------" -ForegroundColor $COLOR_MENU
-    Write-Host '    [R] REFRESCAR MENU            [V] CAMBIAR VISTA (V)' -ForegroundColor $COLOR_MENU
-    Write-Host "    [X] SALIR DEL SCRIPT" -ForegroundColor $COLOR_DANGER
+    Write-Host '    🔄 [R] REFRESCAR MENU            🖥️ [V] CAMBIAR VISTA (V)' -ForegroundColor $COLOR_MENU
+    Write-Host "    ❌ [X] SALIR DEL SCRIPT" -ForegroundColor $COLOR_DANGER
 
     $opt = (Read-Host "`n ``> OPCION").ToUpper()
     switch ($opt) {
@@ -4032,21 +4740,21 @@ while ($true) {
         "Q" { Invoke-AutoFlow }
         "U" {  while ($true) {
         Show-MainTitle
-        Write-Host "`n SYSINTERNALS KIT - 11 HERRAMIENTAS PRO" -ForegroundColor $COLOR_MENU
-        Write-Host " [1]  PROCEXP         - Process Explorer (gestor de procesos avanzado)"
-        Write-Host " [2]  AUTORUNS       - Programas de inicio, servicios, drivers"
-        Write-Host " [3]  PROCMON        - Monitor en vivo de archivos, registro, red"
-        Write-Host " [4]  TCPVIEW        - Conexiones de red abiertas"
-        Write-Host " [5]  RAMMAP         - Análisis detallado de memoria física"
-        Write-Host " [6]  VMMAP          - Mapa de memoria virtual por proceso"
-        Write-Host " [7]  DISK2VHD       - Convierte disco físico a VHD (virtualización)"
-        Write-Host " [8]  WINOBJ         - Explorador de objetos del kernel"
-        Write-Host " [9]  SIGCHECK       - Verifica firmas digitales y VirusTotal"
-        Write-Host "[10]  SDELETE        - Borrado seguro de archivos (sobrescritura)"
-        Write-Host "[11]  ACCESSENUM     - Examina permisos de carpetas y archivos"
-        Write-Host "`n CONTROL" -ForegroundColor Gray
+		Write-Host "`n 🛠️ SYSINTERNALS KIT - 11 HERRAMIENTAS PRO" -ForegroundColor $COLOR_MENU
+        Write-Host " 🔍 [1]  PROCEXP         - Process Explorer (gestor de procesos avanzado)"
+        Write-Host " 🚀 [2]  AUTORUNS       - Programas de inicio, servicios, drivers"
+        Write-Host " 📊 [3]  PROCMON        - Monitor en vivo de archivos, registro, red"
+        Write-Host " 🌐 [4]  TCPVIEW        - Conexiones de red abiertas"
+        Write-Host " 🧠 [5]  RAMMAP         - Análisis detallado de memoria física"
+        Write-Host " 📋 [6]  VMMAP          - Mapa de memoria virtual por proceso"
+        Write-Host " 💿 [7]  DISK2VHD       - Convierte disco físico a VHD (virtualización)"
+        Write-Host " 🔧 [8]  WINOBJ         - Explorador de objetos del kernel"
+        Write-Host " ✅ [9]  SIGCHECK       - Verifica firmas digitales y VirusTotal"
+        Write-Host " 🗑️ [10] SDELETE        - Borrado seguro de archivos (sobrescritura)"
+        Write-Host " 🔐 [11] ACCESSENUM     - Examina permisos de carpetas y archivos"
+        Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray
         Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
-        Write-Host " [X] VOLVER AL MENU PRINCIPAL" -ForegroundColor $COLOR_DANGER
+        Write-Host " ❌ [X] VOLVER AL MENU PRINCIPAL" -ForegroundColor $COLOR_DANGER
         
         $sub = Read-MenuOption "`n ``> SELECCIONE (1-11 o X)" -Valid @("1","2","3","4","5","6","7","8","9","10","11","X")
         if ($sub -eq "X") { break }
@@ -4115,22 +4823,22 @@ while ($true) {
         "J" { 
             while($true){ 
                 Show-MainTitle
-                Write-Host "`n GESTION USUARIOS" -ForegroundColor $COLOR_MENU
-                Write-Host " Usuarios locales / administrar comun" -ForegroundColor $COLOR_PRIMARY
-                Write-Host "  [A] LISTAR USUARIOS"
-                Write-Host "  [B] CREAR LOCAL ADMIN"
-                Write-Host "  [C] ELIMINAR USUARIO`n" -ForegroundColor $COLOR_MENU
-                Write-Host " Admin Oculto" -ForegroundColor $COLOR_PRIMARY
-                Write-Host "  [D] ACTIVAR SUPER ADMIN"
-                Write-Host "  [E] DESACTIVAR SUPER ADMIN"
-                Write-Host "  [F] CAMBIAR PASSWORD"
+				Write-Host "`n 👥 GESTION USUARIOS" -ForegroundColor $COLOR_MENU
+                Write-Host " 👤 Usuarios locales / administrar comun" -ForegroundColor $COLOR_PRIMARY
+                Write-Host "  📋 [A] LISTAR USUARIOS"
+                Write-Host "  ➕ [B] CREAR LOCAL ADMIN"
+                Write-Host "  ❌ [C] ELIMINAR USUARIO`n" -ForegroundColor $COLOR_MENU
+                Write-Host " 👑 Admin Oculto" -ForegroundColor $COLOR_PRIMARY
+                Write-Host "  ✅ [D] ACTIVAR SUPER ADMIN"
+                Write-Host "  ⛔ [E] DESACTIVAR SUPER ADMIN"
+                Write-Host "  🔑 [F] CAMBIAR PASSWORD"
 
                 Write-Host ""
-                Write-Host "Ejecutar el comando: Escribe net user administrador /active:yes (o net user administrator /active:yes si tu Windows está en inglés) y presiona Enter." -ForegroundColor $COLOR_ALERT
+                Write-Host " 💡 Ejecutar el comando: Escribe net user administrador /active:yes (o net user administrator /active:yes si tu Windows está en inglés) y presiona Enter." -ForegroundColor $COLOR_ALERT
                 Write-Host "para activar y desactivar`n" -ForegroundColor $COLOR_MENU
-                Write-Host " CONTROL" -ForegroundColor Gray
+                Write-Host " ⌨️ CONTROL" -ForegroundColor Gray
                 Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
-                Write-Host "  [X] VOLVER" -ForegroundColor $COLOR_DANGER
+                Write-Host "  ❌ [X] VOLVER" -ForegroundColor $COLOR_DANGER
                 $u = Read-MenuOption "`n `> SELECCIONE:" -Valid @("A","B","C","D","E","F","X")
                 if($u -eq "X"){ break }
 
@@ -4209,21 +4917,21 @@ while ($true) {
                 }
             }
         }
-		        "K" { 
+	    "K" { 
             while($true){ 
                 Show-MainTitle
-                Write-Host "`n SOPORTE TECNICO PRO" -ForegroundColor $COLOR_MENU
-                Write-Host " [A] SALUD DISCO"
-                Write-Host " [B] REPARAR SISTEMA"
-                Write-Host " [C] CLAVE BIOS - Recupera la licencia original del equipo."
-                Write-Host " [D] SINCRONIZAR HORA"
-                Write-Host " [F] SALUD DE BATERIA"
-                Write-Host " [T] TEMPERATURAS CPU/GPU - Monitoreo en tiempo real" -ForegroundColor $COLOR_MENU	
-                Write-Host " [G] INFO TÉCNICA COMPLETA (HW/SW)"
-                Write-Host " [Z] MODO DIOS - Todos los accesos de configuración" -ForegroundColor $COLOR_MENU
-                Write-Host "`n CONTROL" -ForegroundColor Gray
+				Write-Host "`n 🛠️ SOPORTE TECNICO PRO" -ForegroundColor $COLOR_MENU
+                Write-Host " 💾 [A] SALUD DISCO"
+                Write-Host " 🔧 [B] REPARAR SISTEMA"
+                Write-Host " 🔑 [C] CLAVE BIOS - Recupera la licencia original del equipo."
+                Write-Host " ⏰ [D] SINCRONIZAR HORA"
+                Write-Host " 🔋 [F] SALUD DE BATERIA"
+                Write-Host " 🌡️ [T] TEMPERATURAS CPU/GPU - Monitoreo en tiempo real" -ForegroundColor $COLOR_MENU	
+                Write-Host " ℹ️ [G] INFO TÉCNICA COMPLETA (HW/SW)"
+                Write-Host " ⚡ [Z] MODO DIOS - Todos los accesos de configuración" -ForegroundColor $COLOR_MENU
+                Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray
                 Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
-                Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+                Write-Host " ❌ [X] VOLVER" -ForegroundColor $COLOR_DANGER
 
                 $s = Read-MenuOption ([Environment]::NewLine + ' >') -Valid @("A","B","C","D","F","G","T","Z","X")
                 if ($s -eq "X") { break }
@@ -4277,14 +4985,14 @@ while ($true) {
         "L" { 
             while($true){ 
                 Show-MainTitle
-                Write-Host "`n BYPASS WINDOWS 11" -ForegroundColor $COLOR_ALERT
-                Write-Host " [A] BYPASS HARDWARE   - Omitir TPM, SecureBoot y chequeos de RAM"
-                Write-Host " [B] BYPASS INTERNET   - Evitar conexión a Internet durante la instalación"
-                Write-Host " [C] VER ESTADO ACTUAL (REGISTRO)"
-                Write-Host " [D] REVERTIR BYPASS HARDWARE"
-                Write-Host "`n CONTROL" -ForegroundColor Gray
+				Write-Host "`n 🚀 BYPASS WINDOWS 11" -ForegroundColor $COLOR_ALERT
+                Write-Host " 🔓 [A] BYPASS HARDWARE   - Omitir TPM, SecureBoot y chequeos de RAM"
+                Write-Host " 🌐 [B] BYPASS INTERNET   - Evitar conexión a Internet durante la instalación"
+                Write-Host " 📊 [C] VER ESTADO ACTUAL (REGISTRO)"
+                Write-Host " 🔄 [D] REVERTIR BYPASS HARDWARE"
+                Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray
                 Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
-                Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+                Write-Host " ❌ [X] VOLVER" -ForegroundColor $COLOR_DANGER
 
                 $b = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","X")
                 if (-not $b) { continue }
@@ -4342,15 +5050,15 @@ while ($true) {
 		"M" {  
     while($true){ 
         Show-MainTitle
-        Write-Host "`n RED Y REPARACION" -ForegroundColor $COLOR_MENU
-        Write-Host ' [A] RESETEAR RED           [F] TRAZA DE RUTA (TRACERT)'
-        Write-Host ' [B] REPARAR UPDATE         [G] TEST VELOCIDAD (FAST.COM)'
-        Write-Host " [C] VER IP                 [E] VER CLAVES WI FI"
-        Write-Host " [D] PING MONITOR           [W] WIRESHARK - Análisis gráfico de red"
-        Write-Host " [H] LIMPIAR DNS CACHE      [P] ESCANEAR PUERTOS (IP local)" -ForegroundColor $COLOR_MENU
-        Write-Host "`n CONTROL" -ForegroundColor Gray
+		Write-Host "`n 🌐 RED Y REPARACION" -ForegroundColor $COLOR_MENU
+        Write-Host ' 🔄 [A] RESETEAR RED           🧭 [F] TRAZA DE RUTA (TRACERT)'
+        Write-Host ' 🔧 [B] REPARAR UPDATE         ⚡ [G] TEST VELOCIDAD (FAST.COM)'
+        Write-Host " 📡 [C] VER IP                 🔑 [E] VER CLAVES WI FI"
+        Write-Host " 📊 [D] PING MONITOR           🦈 [W] WIRESHARK - Análisis gráfico de red"
+        Write-Host " 🗑️ [H] LIMPIAR DNS CACHE      🔍 [P] ESCANEAR PUERTOS (IP local)" -ForegroundColor $COLOR_MENU
+        Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray
         Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
-        Write-Host " [X] VOLVER" -ForegroundColor $COLOR_DANGER
+        Write-Host " ❌ [X] VOLVER" -ForegroundColor $COLOR_DANGER
         
         $m = Read-MenuOption "`n ``> SELECCIONE" -Valid @("A","B","C","D","E","F","G","H","P","W","X")
         if(-not $m){ continue }
@@ -4524,6 +5232,7 @@ while ($true) {
         "O" { Show-LiveMonitor }
 		"Y" { Invoke-PasswordGenerator }
         "P" { Invoke-DefenderControl }
+		"Z" { Invoke-DownloadCenter }
         "X" { exit }
     }
 }
