@@ -1,7 +1,7 @@
-# 🚀 TECH FLOW SUITE PRO v5.7
+# 🚀 TECH FLOW SUITE PRO v5.8
 
 [![Descargar EXE](https://img.shields.io/badge/DESCARGAR-EJECUTABLE_PRO-green?style=for-the-badge&logo=windows)](https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro/releases/latest)
-[![Versión](https://img.shields.io/badge/Versión-5.7-blue?style=flat-square&logo=windows)](https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro)
+[![Versión](https://img.shields.io/badge/Versión-5.8-blue?style=flat-square&logo=windows)](https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue?style=flat-square&logo=powershell)](https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro)
 
 **Suite definitiva de herramientas IT para optimización de sistemas, backups de alto rendimiento y automatización avanzada en Windows mediante PowerShell.**
@@ -10,11 +10,11 @@
 
 ## 🧐 ¿Qué es Tech Flow Suite Pro?
 
-Es una solución de automatización de nivel profesional diseñada para **especialistas en soporte TI**. La v5.7 redefine el flujo de trabajo desde el despliegue inicial (Post-Format) hasta el mantenimiento crítico. Desarrollada en PowerShell y optimizada como ejecutable para garantizar portabilidad, seguridad y una experiencia de usuario fluida.
+Es una solución de automatización de nivel profesional diseñada para **especialistas en soporte TI**. La v5.8 redefine el flujo de trabajo desde el despliegue inicial (Post-Format) hasta el mantenimiento crítico. Desarrollada en PowerShell y optimizada como ejecutable para garantizar portabilidad, seguridad y una experiencia de usuario fluida.
 
 ---
 
-## ✨ Novedades en v5.7
+## ✨ Novedades en v5.8
 
 ### 🆕 NUEVAS FUNCIONES
 
@@ -97,7 +97,7 @@ Diseñado para adaptarse a la carga de trabajo del taller:
 ## 🛠️ Especificaciones Técnicas
 
 - **Lenguaje:** PowerShell 5.1 / Core (con auto-elevación a Administrador).
-- **Compilación:** Versión 5.7 optimizada para estabilidad.
+- **Compilación:** Versión 5.8 optimizada para estabilidad.
 - **Trazabilidad:** Generación automática de **Logs de sesión** con rotación automática (>10 MB).
 - **Seguridad:** Lógica de "Freno de Mano" (Tecla `X` para abortar) y validación de integridad.
 - **Exclusiones:** Drivers de monitoreo (CPU-Z, HWMonitor, GPU-Z, MSI Afterburner) excluidos de limpieza.
@@ -121,7 +121,7 @@ Diseñado para adaptarse a la carga de trabajo del taller:
 ## ❓ Preguntas Frecuentes (FAQ)
 
 **1. ¿Por qué el .EXE tiene alertas en antivirus?** ⚠️
-El código en PowerShell (.ps1) es transparente. Las alertas ocurren porque las herramientas de conversión (ps2exe) empaquetan el script de una forma que algunos antivirus detectan como "sospechosa" al no tener una firma digital de pago. Es un **falso positivo**. La v5.7 incluye auto-exclusión silenciosa para mitigar esto.
+El código en PowerShell (.ps1) es transparente. Las alertas ocurren porque las herramientas de conversión (ps2exe) empaquetan el script de una forma que algunos antivirus detectan como "sospechosa" al no tener una firma digital de pago. Es un **falso positivo**. La v5.8 incluye auto-exclusión silenciosa para mitigar esto.
 
 **2. ¿Es seguro el proceso de optimización?** 🛡️
 Totalmente. La suite utiliza comandos nativos de Windows (SFC, DISM, Optimize-Volume) para asegurar que la integridad del sistema nunca se vea comprometida.
@@ -130,7 +130,7 @@ Totalmente. La suite utiliza comandos nativos de Windows (SFC, DISM, Optimize-Vo
 Estas aplicaciones **no permiten instalación en modo administrador** por decisión de sus desarrolladores. La suite detecta el fallo y muestra el enlace oficial de descarga.
 
 **4. ¿Qué pasa si Winget o Chocolatey están rotos?** 🔧
-La v5.7 incluye **auto-reparación inteligente**. Si un gestor falla, el sistema lo repara automáticamente o muestra la URL de descarga manual.
+La v5.8 incluye **auto-reparación inteligente**. Si un gestor falla, el sistema lo repara automáticamente o muestra la URL de descarga manual.
 
 **5. ¿Cómo puedo apoyar?** ⭐
 - **Danos una Estrella:** Haz clic en la ⭐ arriba a la derecha en GitHub
@@ -142,7 +142,7 @@ La v5.7 incluye **auto-reparación inteligente**. Si un gestor falla, el sistema
 
 | Métrica | Valor |
 |---------|-------|
-| **Versión** | v5.7 |
+| **Versión** | v5.8 |
 | **Total de funciones** | 35+ |
 | **Total de líneas de código** | ~5000 |
 | **Aplicaciones en catálogo** | 117 |
