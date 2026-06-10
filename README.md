@@ -1,6 +1,7 @@
 # 🚀 TECH FLOW SUITE PRO v5.8
 
 [![Descargar EXE](https://img.shields.io/badge/DESCARGAR-EJECUTABLE_PRO-green?style=for-the-badge&logo=windows)](https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro/releases/latest)
+[![Ejecutar Remoto](https://img.shields.io/badge/EJECUTAR_REMOTO-irm_|_iex-blue?style=for-the-badge&logo=powershell)](https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro#🚀-cómo-usarla)
 [![Versión](https://img.shields.io/badge/Versión-5.8-blue?style=flat-square&logo=windows)](https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue?style=flat-square&logo=powershell)](https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro)
 
@@ -20,6 +21,8 @@ Es una solución de automatización de nivel profesional diseñada para **especi
 
 | Función | Menú | Descripción |
 |---------|------|-------------|
+| **🎵 Centro de Descargas** | `Z` | Descarga música/videos desde YouTube, TikTok, Instagram, etc. con yt-dlp |
+| **📊 Barra de Progreso** | `I → 4` | Animación visual al actualizar todas las apps del sistema |
 | **Generador de Contraseñas** | `Y` | Contraseñas seguras de 8-64 caracteres con copia al portapapeles |
 | **Temperaturas CPU/GPU** | `K → T` | Monitoreo en tiempo real con colores según nivel térmico |
 | **Modo Dios** | `K → Z` | Acceso a todas las herramientas de configuración de Windows |
@@ -35,6 +38,7 @@ Es una solución de automatización de nivel profesional diseñada para **especi
 |--------|-------------|
 | **BACKOP con tabla de progreso** | Muestra tamaño, barra de progreso y carpetas respaldadas |
 | **RESTORE con tabla de progreso** | Mismo formato visual profesional para restaurar |
+| **Actualización con barra animada** | Progreso visual al actualizar software (KIT Post-Format) |
 | **Auto-reparación de Winget/Chocolatey** | Repara automáticamente si están rotos o ausentes |
 | **Auto-exclusión silenciosa de Defender** | Se excluye automáticamente al iniciar |
 | **Ctrl+C para salir limpio** | Salida del script sin errores rojos |
@@ -53,7 +57,9 @@ Es una solución de automatización de nivel profesional diseñada para **especi
 
 ## 🛠️ Características Principales
 
+- **🎵 Centro de Descargas v4.0:** Descarga música y videos desde YouTube, TikTok, Instagram, Facebook, Twitter usando yt-dlp. Modo DJ para recortar audios, modo nocturno (apagado automático), descarga por lotes y más.
 - **🧠 Motor Híbrido v5:** Instalación masiva de **117 aplicaciones** con lógica de redundancia inteligente: si **Winget** falla, el sistema conmuta automáticamente a **Chocolatey** (Mapeo Manual + URLs de respaldo).
+- **📊 Barra de progreso animada:** Visualización en tiempo real al actualizar todo el software del sistema.
 - **🔗 URLs de respaldo:** Si una app falla, la suite muestra el enlace oficial para descarga manual.
 - **🛡️ Seguridad Avanzada:** Implementación de **PIN dinámico aleatorio** para confirmar operaciones críticas y doble autenticación en DiskPart.
 - **⚡ Auto-Flow Express 2.0:** Mantenimiento "Zero-Click" mejorado que ejecuta limpieza profunda de Bloatware, borrado de temporales e instalación de la suite esencial en tiempo récord.
@@ -80,6 +86,9 @@ Diseñado para adaptarse a la carga de trabajo del taller:
 
 ## 📋 Menús Actualizados
 
+### 🎵 CENTRO DE DESCARGAS (Z)
+`[1] Disco/Playlist | [2] Canción sola | [3] YouTube por ENLACE | [4] TikTok/IG/FB/Twitter | [5] MODO DJ (recortar audio) | [6] Configurar Calidad | [7] Configurar Límite | [8] Modo Nocturno | [9] Modo Silencioso | [C] Seleccionar Carpeta | [H] Ver Historial | [L] Descarga por lotes | [U] Actualizar yt-dlp | [X] Salir`
+
 ### 🎯 SOPORTE TÉCNICO PRO (K)
 `[A] Salud Disco | [B] Reparar Sistema | [C] Clave BIOS | [D] Sincronizar Hora | [F] Salud Batería | [T] 🌡️ Temperaturas | [G] Info Técnica | [Z] 🕹️ Modo Dios | [X] Volver`
 
@@ -87,10 +96,34 @@ Diseñado para adaptarse a la carga de trabajo del taller:
 `[A] Resetear Red | [B] Reparar Update | [C] Ver IP | [D] Ping Monitor | [E] Ver WiFi | [F] Tracert | [G] Fast.com | [H] 🧹 Limpiar DNS | [P] 🔌 Escanear Puertos | [W] Wireshark | [X] Volver`
 
 ### 🛡️ WINDOWS DEFENDER (P)
-`[A] Activar Defender | [B] Desactivar Defender | [C] 🦠 Escanear Malware | [X] Volver`
+`[1] Activar Defender | [2] Reparar Defender | [3] Escaneo de Malware | [4] Desactivar Defender | [X] Volver`
 
 ### 💿 PURGA Y FORMATEO (D)
 `[1] Limpiar Temp | [2] Limpiar WinSxS | [3] Eliminar Actualizaciones | [4] Cleanmgr | [5] Formateo USB | [6] Rufus | [8] 💿 DiskPart Simplificado | [X] Volver`
+
+### 📦 KIT POST FORMAT (I)
+`[0] Limpiar Bloatware | [1] Perfil Gaming | [2] Perfil Básico | [3] Selección Manual (125 apps) | [4] 🔄 Actualizar TODO el software (con barra de progreso) | [5] Desinstalar Programas | [X] Volver`
+
+---
+
+## 🚀 Cómo usarla
+
+> ### ⚡ MODO RÁPIDO (NUEVO)
+> Ejecuta TechFlow al instante sin descargar nada. Abre **PowerShell como Administrador** y pega este comando:
+> ```powershell
+> irm "https://raw.githubusercontent.com/LUISFGARCIAE/TechFlow_Suite_Pro/main/TECHFLOW_SUITE_1.ps1" | iex
+> ```
+
+### 📥 MODO TRADICIONAL
+1. **Descarga:** Haz clic en el botón verde de arriba o ve a **[Releases](https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro/releases)**.
+2. **Ejecución:** Haz clic derecho en el archivo descargado y selecciona **Ejecutar como administrador**.
+3. **Navegación:**
+   - Tecla `V`: Cambia el estilo visual del menú
+   - Tecla `X`: Regresa al menú anterior o cancela un proceso
+   - Tecla `T`: Acceso directo a Escritorio Remoto
+   - Tecla `Y`: Generador de contraseñas seguras
+   - Tecla `Z`: Centro de Descargas (música/videos)
+   - Tecla `Ctrl+C`: Salida limpia del script
 
 ---
 
@@ -102,19 +135,6 @@ Diseñado para adaptarse a la carga de trabajo del taller:
 - **Seguridad:** Lógica de "Freno de Mano" (Tecla `X` para abortar) y validación de integridad.
 - **Exclusiones:** Drivers de monitoreo (CPU-Z, HWMonitor, GPU-Z, MSI Afterburner) excluidos de limpieza.
 - **Auto-reparación:** Winget, Chocolatey y Scoop se reparan automáticamente al inicio.
-
----
-
-## 🚀 Cómo usarla
-
-1. **Descarga:** Haz clic en el botón verde de arriba o ve a **[Releases](https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro/releases)**.
-2. **Ejecución:** Haz clic derecho y selecciona **Ejecutar como administrador**.
-3. **Navegación:**
-   - Tecla `V`: Cambia el estilo visual del menú
-   - Tecla `X`: Regresa al menú anterior o cancela un proceso
-   - Tecla `T`: Acceso directo a Escritorio Remoto
-   - Tecla `Y`: Generador de contraseñas seguras
-   - Tecla `Ctrl+C`: Salida limpia del script
 
 ---
 
@@ -132,7 +152,10 @@ Estas aplicaciones **no permiten instalación en modo administrador** por decisi
 **4. ¿Qué pasa si Winget o Chocolatey están rotos?** 🔧
 La v5.8 incluye **auto-reparación inteligente**. Si un gestor falla, el sistema lo repara automáticamente o muestra la URL de descarga manual.
 
-**5. ¿Cómo puedo apoyar?** ⭐
+**5. ¿Cómo funciona el Centro de Descargas?** 🎵
+TechFlow descarga automáticamente `yt-dlp.exe` y `ffmpeg.exe` (si no existen). Soporta YouTube, TikTok, Instagram, Facebook, Twitter. Puedes descargar discos completos, canciones sueltas, o videos por URL. Incluye modo DJ para recortar audios y modo nocturno que apaga el PC al terminar.
+
+**6. ¿Cómo puedo apoyar?** ⭐
 - **Danos una Estrella:** Haz clic en la ⭐ arriba a la derecha en GitHub
 - **Feedback:** Si encuentras un error, abre un "Issue" para corregirlo
 
@@ -147,6 +170,7 @@ La v5.8 incluye **auto-reparación inteligente**. Si un gestor falla, el sistema
 | **Total de líneas de código** | ~5000 |
 | **Aplicaciones en catálogo** | 117 |
 | **Herramientas Sysinternals** | 11 |
+| **Plataformas de descarga** | 6 (YouTube, TikTok, IG, FB, Twitter, +) |
 | **Puntuación** | 9.8/10 |
 
 ---
@@ -167,6 +191,7 @@ Este proyecto cuenta con una **Licencia MIT**. Uso profesional, libre y transpar
 ## 🔗 Enlaces
 
 - 📥 **Descarga:** https://techflowsuitepro.apsoft.xyz/
+- ⚡ **Ejecución Rápida:** `irm "https://raw.githubusercontent.com/LUISFGARCIAE/TechFlow_Suite_Pro/main/TECHFLOW_SUITE_1.ps1" | iex`
 - ⭐ **GitHub:** https://github.com/LUISFGARCIAE/TechFlow_Suite_Pro
 - 💬 **WhatsApp (Betas):** https://chat.whatsapp.com/FCA1akMPOBFAMDxoKyZYiQ
 - 👥 **Facebook:** https://www.facebook.com/groups/1994403741952828
