@@ -16,12 +16,22 @@ $currentUser = [Security.Principal.WindowsPrincipal]::new([Security.Principal.Wi
 $isAdmin = $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (-not $isAdmin) {
-    $scriptPath = $PSCommandPath
-    if (-not $scriptPath) { $scriptPath = $MyInvocation.MyCommand.Path }
+    # Detectar si se ejecutó desde irm | iex (sin archivo)
+    $ejecucionRemota = (-not $PSCommandPath -or -not $MyInvocation.MyCommand.Path -or $PSCommandPath -eq "")
     
-    # Lanzar como administrador y cerrar esta ventana
-    Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`"" -Verb RunAs
-    exit
+    if ($ejecucionRemota) {
+        Write-Host "`n⚠️ TechFlow se ejecuta en MODO REMOTO (irm | iex)" -ForegroundColor Yellow
+        Write-Host "   Para ejecutar correctamente, abre PowerShell COMO ADMINISTRADOR" -ForegroundColor Yellow
+        Write-Host "   y vuelve a pegar el comando." -ForegroundColor Yellow
+        Write-Host "`n   Presiona ENTER para salir..."
+        Read-Host
+        exit
+    } else {
+        $scriptPath = $PSCommandPath
+        if (-not $scriptPath) { $scriptPath = $MyInvocation.MyCommand.Path }
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`"" -Verb RunAs
+        exit
+    }
 }
 
 # Limpiar pantalla al iniciar como admin
@@ -56,6 +66,20 @@ function Test-AdminAndContinue {
 
 # Llamar a la función después de la auto-elevación
 Test-AdminAndContinue
+
+# ============================================================
+# 🔧 DETECCIÓN DE EJECUCIÓN REMOTA (para que $PSScriptRoot no falle)
+# ============================================================
+$esScriptRemoto = $false
+if (-not $PSScriptRoot -or $PSScriptRoot -eq "") {
+    $esScriptRemoto = $true
+    $carpetaTemp = "$env:TEMP\TechFlow_Suite_$(Get-Random)"
+    if (-not (Test-Path $carpetaTemp)) {
+        New-Item -ItemType Directory -Path $carpetaTemp -Force | Out-Null
+    }
+    $PSScriptRoot = $carpetaTemp
+    Write-Host "   🌐 Modo remoto detectado. Usando carpeta: $carpetaTemp" -ForegroundColor DarkGray
+}
 
 # ============================================================
 # 🛠️ [AUTO-REPARADOR] - WINGET & CHOCOLATEY
@@ -1656,17 +1680,183 @@ Clear-Host
                 }
                 $selection = $finalSelection
             }
-            "4" { 
-                if(Get-Command winget -ErrorAction SilentlyContinue){
-                    winget upgrade --all --silent
-                    Write-Log "KIT" ("winget upgrade all exit={0}" -f $LASTEXITCODE)
-                } else {
-                    Write-Host "`n [!] winget no disponible." -ForegroundColor $COLOR_DANGER
-                    Write-Log "KIT" "winget not available"
+"4" { 
+    Clear-Host
+    Show-MainTitle
+    Write-Host "`n 🔄 ACTUALIZACIÓN INTELIGENTE DE SOFTWARE" -ForegroundColor $COLOR_MENU
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    
+    # 1. DETECTAR APPS DESACTUALIZADAS (WINGET)
+    $appsToUpdate = @()
+    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
+    
+    if ($wingetAvailable) {
+        Write-Host "`n 📡 Escaneando actualizaciones disponibles..." -ForegroundColor $COLOR_ALERT
+        
+        # Obtener lista de actualizaciones sin basura
+        $upgradeList = winget upgrade --accept-source-agreements 2>$null | Where-Object { $_ -match "^\S" -and $_ -notmatch "Nombre|Versión|Disponible|ID" -and $_ -notmatch "^-" } | Select-Object -Skip 1
+        
+        if ($upgradeList -and $upgradeList.Count -gt 0) {
+            foreach ($line in $upgradeList) {
+                if ($line -match "^\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)") {
+                    $appsToUpdate += [PSCustomObject]@{
+                        ID = $matches[1]
+                        VersionActual = $matches[2]
+                        VersionNueva = $matches[3]
+                        Nombre = $matches[4] -replace "\s+", " "
+                    }
                 }
-                Pause-Enter " OK. ENTER"
-                continue
             }
+        }
+    }
+    
+    # 2. CHOCOLATEY (opcional)
+    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
+    $chocoUpdates = @()
+    
+    if ($chocoAvailable) {
+        Write-Host " 📦 Escaneando Chocolatey..." -ForegroundColor $COLOR_ALERT
+        $chocoOut = choco outdated --limit-output 2>$null
+        if ($chocoOut) {
+            $chocoUpdates = $chocoOut -split "`n" | Where-Object { $_ -match "\|" } | ForEach-Object {
+                $parts = $_ -split "\|"
+                [PSCustomObject]@{
+                    Nombre = $parts[0]
+                    VersionActual = $parts[1]
+                    VersionNueva = $parts[2]
+                }
+            }
+        }
+    }
+    
+    # 3. MOSTAR RESUMEN DE LO QUE SE VA A ACTUALIZAR
+    Clear-Host
+    Show-MainTitle
+    Write-Host "`n 📋 APLICACIONES A ACTUALIZAR" -ForegroundColor $COLOR_MENU
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    
+    $totalUpdates = $appsToUpdate.Count + $chocoUpdates.Count
+    
+    if ($totalUpdates -eq 0) {
+        Write-Host "`n   ✅ ¡TODO ESTÁ ACTUALIZADO!" -ForegroundColor Green
+        Write-Host "   No se encontraron actualizaciones disponibles." -ForegroundColor Gray
+        Pause-Enter "`n   ENTER"
+        continue
+    }
+    
+    Write-Host "`n   📊 Se encontraron $totalUpdates actualizaciones:`n" -ForegroundColor Cyan
+    
+    # Mostrar Winget updates
+    if ($appsToUpdate.Count -gt 0) {
+        Write-Host "   🧊 WINGET ($($appsToUpdate.Count) actualizaciones):" -ForegroundColor Magenta
+        foreach ($app in $appsToUpdate) {
+            Write-Host "      • $($app.Nombre)" -ForegroundColor White
+            Write-Host "        📦 $($app.VersionActual) → $($app.VersionNueva)" -ForegroundColor Gray
+        }
+        Write-Host ""
+    }
+    
+    # Mostrar Choco updates
+    if ($chocoUpdates.Count -gt 0) {
+        Write-Host "   🍫 CHOCOLATEY ($($chocoUpdates.Count) actualizaciones):" -ForegroundColor Yellow
+        foreach ($app in $chocoUpdates) {
+            Write-Host "      • $($app.Nombre)" -ForegroundColor White
+            Write-Host "        📦 $($app.VersionActual) → $($app.VersionNueva)" -ForegroundColor Gray
+        }
+        Write-Host ""
+    }
+    
+    $confirm = Read-Host "   ❓ ¿Deseas actualizar todo? (S/N)"
+    if ($confirm -ne "S" -and $confirm -ne "s") {
+        Write-Host "   ❌ Actualización cancelada." -ForegroundColor $COLOR_DANGER
+        Pause-Enter "   ENTER"
+        continue
+    }
+    
+    # 4. BARRA DE PROGRESO ANIMADA
+    Clear-Host
+    Show-MainTitle
+    Write-Host "`n 🔄 ACTUALIZANDO SOFTWARE..." -ForegroundColor $COLOR_MENU
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    Write-Host ""
+    
+    $actualizados = 0
+    $fallidos = 0
+    
+    # Función de barra de progreso
+    function Show-ProgressBar {
+        param([int]$Current, [int]$Total, [string]$Message)
+        $percent = [math]::Round(($Current / $Total) * 100)
+        $barLength = 40
+        $filled = [math]::Round($barLength * $percent / 100)
+        $bar = "█" * $filled + "░" * ($barLength - $filled)
+        Write-Host "`r   📦 [$bar] $percent% - $Message" -ForegroundColor Cyan -NoNewline
+    }
+    
+    # ACTUALIZAR WINGET
+    if ($appsToUpdate.Count -gt 0) {
+        Write-Host "   🧊 Actualizando con Winget...`n" -ForegroundColor Magenta
+        $i = 0
+        foreach ($app in $appsToUpdate) {
+            $i++
+            Show-ProgressBar -Current $i -Total $appsToUpdate.Count -Message "$($app.Nombre) - $($app.VersionActual) → $($app.VersionNueva)"
+            
+            # Ejecutar winget update silenciosamente
+            $result = winget upgrade --id $app.ID --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
+            
+            if ($LASTEXITCODE -eq 0) {
+                $actualizados++
+            } else {
+                $fallidos++
+            }
+        }
+        Write-Host "`n"
+    }
+    
+    # ACTUALIZAR CHOCOLATEY
+    if ($chocoUpdates.Count -gt 0) {
+        Write-Host "   🍫 Actualizando con Chocolatey...`n" -ForegroundColor Yellow
+        $i = 0
+        foreach ($app in $chocoUpdates) {
+            $i++
+            Show-ProgressBar -Current $i -Total $chocoUpdates.Count -Message "$($app.Nombre) - $($app.VersionActual) → $($app.VersionNueva)"
+            
+            # Ejecutar choco update silenciosamente
+            $result = choco upgrade $app.Nombre -y --no-progress 2>&1 | Out-Null
+            
+            if ($LASTEXITCODE -eq 0) {
+                $actualizados++
+            } else {
+                $fallidos++
+            }
+        }
+        Write-Host "`n"
+    }
+    
+    # 5. RESUMEN FINAL
+    Write-Host "`n ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    Write-Host " 📊 RESUMEN DE ACTUALIZACIÓN" -ForegroundColor Cyan
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "   ✅ Actualizados: $actualizados" -ForegroundColor Green
+    Write-Host "   ❌ Fallidos:     $fallidos" -ForegroundColor $(if ($fallidos -gt 0) { "Red" } else { "Green" })
+    Write-Host "   📦 Total:        $totalUpdates" -ForegroundColor Gray
+    Write-Host ""
+    
+    if ($fallidos -gt 0) {
+        Write-Host "   💡 Los fallos pueden deberse a:" -ForegroundColor $COLOR_ALERT
+        Write-Host "      • Aplicación en uso (ciérrala y reintenta)" -ForegroundColor Gray
+        Write-Host "      • Requiere reinicio del sistema" -ForegroundColor Gray
+        Write-Host "      • No disponible en el repositorio" -ForegroundColor Gray
+    }
+    
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    
+    Write-Log "KIT" "UpdateSummary Success=$actualizados Errors=$fallidos Total=$totalUpdates"
+    Pause-Enter "`n   ENTER"
+    continue
+}
+
             "5" {
 			while ($true) {
                Clear-Host
