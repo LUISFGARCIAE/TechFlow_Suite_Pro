@@ -184,10 +184,10 @@ try {
     $latestRelease = Invoke-RestMethod -Uri $apiUrl -ErrorAction SilentlyContinue
     $latestVersion = $latestRelease.tag_name -replace 'v', ''
     
-    if ($latestVersion -and ($latestVersion -ne "5.8")) {
+    if ($latestVersion -and ($latestVersion -ne "5.9")) {
         Write-Host " $LINEA" -ForegroundColor Yellow
         Write-Host "   🚀 ¡NUEVA VERSIÓN DISPONIBLE!" -ForegroundColor Yellow
-        Write-Host "   📦 Actual: v5.8  ➜  Nueva: v$latestVersion" -ForegroundColor Cyan
+        Write-Host "   📦 Actual: v5.9  ➜  Nueva: v$latestVersion" -ForegroundColor Cyan
         Write-Host " $LINEA" -ForegroundColor Yellow
         
         $update = Read-Host "`n   ❓ ¿Deseas actualizar ahora? (S/N)"
@@ -234,7 +234,7 @@ exit
             }
         }
     } else {
-        Write-Host "   ✅ Versión al día (v5.8)." -ForegroundColor Green
+        Write-Host "   ✅ Versión al día (v5.9)." -ForegroundColor Green
     }
 } catch {
     Write-Host "   ⚠️ No se pudo conectar con el servidor de actualizaciones." -ForegroundColor Yellow
@@ -366,7 +366,7 @@ $Banner = @"
  ║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝   ║
  ║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝    ║
  ║                                                                               ║
- ║                                PRO EDITION v5.8                               ║
+ ║                                PRO EDITION v5.9                               ║
  ║                                                                               ║
  ║                    SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                ║
  ║                                                                               ║
@@ -405,7 +405,7 @@ Start-CleanupScheduler
 # ============================================================
 # 🔄 AUTO-ACTUALIZACIÓN - SIMPLE Y DIRECTA
 # ============================================================
-$currentVersion = "5.8"
+$currentVersion = "5.9"
 $repoOwner = "LUISFGARCIAE"
 $repoName = "TechFlow_Suite_Pro"
 
@@ -1202,7 +1202,7 @@ function Show-MainTitle {
  ║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝      ║
  ║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝       ║
  ║                                                                                  ║
- ║                                 PRO EDITION v5.8                                 ║
+ ║                                 PRO EDITION v5.9                                 ║
  ║                                                                                  ║
  ║                    SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                   ║
  ║                                                                                  ║
@@ -1355,6 +1355,16 @@ if (`$LASTEXITCODE -eq 0) { exit 0 } else { exit 1 }
 function Invoke-KitPostFormat {
     # Diccionario de URLs oficiales para descarga manual
     $manualUrls = @{
+        "Jitsi Meet" = "https://jitsi.org/downloads"
+        "Stable Diffusion WebUI" = "https://github.com/AUTOMATIC1111/stable-diffusion-webui"
+        "ComfyUI" = "https://github.com/comfyanonymous/ComfyUI"
+        "Jellyfin Server" = "https://jellyfin.org/downloads"
+        "Sonarr" = "https://sonarr.tv"
+        "Radarr" = "https://radarr.video"
+        "Prowlarr" = "https://prowlarr.com"
+        "Overseerr" = "https://overseerr.dev"
+        "Tautulli" = "https://tautulli.com"
+        "Ventoy" = "https://ventoy.net"
         "WhatsApp Desktop" = "https://www.whatsapp.com/download"
         "Notepad++" = "https://notepad-plus-plus.org/downloads"
         "FileZilla Client" = "https://filezilla-project.org/download.php"
@@ -1376,620 +1386,1132 @@ function Invoke-KitPostFormat {
         "Notion" = "https://www.notion.so/desktop"
         "AnyDesk" = "https://anydesk.com/download"
         "RustDesk" = "https://rustdesk.com/download"
+        "ExpressVPN" = "https://www.expressvpn.com/download"
+        "CyberGhost" = "https://www.cyberghostvpn.com/download"
+        "Private Internet Access" = "https://www.privateinternetaccess.com/download"
+        "Surfshark" = "https://surfshark.com/download"
+        "AtlasVPN" = "https://atlasvpn.com/download"
+        "Hotspot Shield" = "https://www.hotspotshield.com/download"
+        "TunnelBear" = "https://www.tunnelbear.com/download"
+        "CCleaner" = "https://www.ccleaner.com/ccleaner/download"
+        "PrivaZer" = "https://privazer.com/download.php"
+        "Glary Utilities" = "https://www.glarysoft.com/glary-utilities/download"
+        "MemTest86" = "https://www.memtest86.com/download.htm"
+        "HDDScan" = "https://hddscan.com/download.html"
     }
     
-    $apps = @{
-
-    # ========== 1-5: NAVEGADORES ==========
-    "1" = @{Name="Google Chrome"; ID="Google.Chrome"}
-    "2" = @{Name="Mozilla Firefox"; ID="Mozilla.Firefox"}
-    "3" = @{Name="Brave Browser"; ID="Brave.Brave"}
-    "4" = @{Name="Microsoft Edge"; ID="Microsoft.Edge"}
-    "5" = @{Name="Opera"; ID="Opera.Opera"}
+    # ============================================================
+    # ESTRUCTURA DE APPS POR CATEGORÍAS (20 APPS CADA UNA = 440 TOTAL)
+    # ============================================================
     
-    # ========== 6-12: COMUNICACIÓN ==========
-    "6" = @{Name="Discord"; ID="Discord.Discord"}
-    "7" = @{Name="Telegram Desktop"; ID="Telegram.TelegramDesktop"}
-    "8" = @{Name="Signal Desktop"; ID="OpenWhisperSystems.Signal"}
-    "9" = @{Name="Zoom"; ID="Zoom.Zoom"}
-    "10" = @{Name="Microsoft Teams"; ID="Microsoft.Teams"}
-    "11" = @{Name="Slack"; ID="SlackTechnologies.Slack"}
-    "12" = @{Name="WhatsApp Desktop"; ID="9NKSQGP7F2NH"}
+    $categorias = @{
+        # ========== 1. 🌐 NAVEGADORES (20 apps) ==========
+        "1" = @{
+            Nombre = "🌐 NAVEGADORES"
+            Apps = @(
+                @{Num=1; Nombre="Google Chrome"; ID="Google.Chrome"}
+                @{Num=2; Nombre="Mozilla Firefox"; ID="Mozilla.Firefox"}
+                @{Num=3; Nombre="Brave Browser"; ID="Brave.Brave"}
+                @{Num=4; Nombre="Microsoft Edge"; ID="Microsoft.Edge"}
+                @{Num=5; Nombre="Opera"; ID="Opera.Opera"}
+                @{Num=6; Nombre="Vivaldi"; ID="Vivaldi.Vivaldi"}
+                @{Num=7; Nombre="Arc Browser"; ID="Arc.Arc"}
+                @{Num=8; Nombre="Tor Browser"; ID="TorProject.TorBrowser"}
+                @{Num=9; Nombre="Firefox Developer"; ID="Mozilla.Firefox.DeveloperEdition"}
+                @{Num=10; Nombre="Chromium"; ID="Chromium.Chromium"}
+                @{Num=11; Nombre="Brave Beta"; ID="Brave.Brave.Beta"}
+                @{Num=12; Nombre="Opera GX"; ID="Opera.OperaGX"}
+                @{Num=13; Nombre="Pale Moon"; ID="PaleMoon.PaleMoon"}
+                @{Num=14; Nombre="Waterfox"; ID="Waterfox.Waterfox"}
+                @{Num=15; Nombre="LibreWolf"; ID="LibreWolf.LibreWolf"}
+                @{Num=16; Nombre="Falkon"; ID="Falkon.Falkon"}
+                @{Num=17; Nombre="Midori"; ID="Midori.Midori"}
+                @{Num=18; Nombre="SeaMonkey"; ID="SeaMonkey.SeaMonkey"}
+                @{Num=19; Nombre="Ungoogled Chromium"; ID="UngoogledChromium.UngoogledChromium"}
+                @{Num=20; Nombre="Slimjet"; ID="Slimjet.Slimjet"}
+            )
+        }
+        # ========== 2. 💬 COMUNICACIÓN (20 apps) ==========
+        "2" = @{
+            Nombre = "💬 COMUNICACIÓN"
+            Apps = @(
+                @{Num=21; Nombre="Discord"; ID="Discord.Discord"}
+                @{Num=22; Nombre="Telegram Desktop"; ID="Telegram.TelegramDesktop"}
+                @{Num=23; Nombre="Signal Desktop"; ID="OpenWhisperSystems.Signal"}
+                @{Num=24; Nombre="Zoom"; ID="Zoom.Zoom"}
+                @{Num=25; Nombre="Microsoft Teams"; ID="Microsoft.Teams"}
+                @{Num=26; Nombre="Slack"; ID="SlackTechnologies.Slack"}
+                @{Num=27; Nombre="WhatsApp Desktop"; ID="9NKSQGP7F2NH"}
+                @{Num=28; Nombre="Element (Matrix)"; ID="Element.Element"}
+                @{Num=29; Nombre="Thunderbird"; ID="Mozilla.Thunderbird"}
+                @{Num=30; Nombre="BlueMail"; ID="BlueMail.BlueMail"}
+                @{Num=31; Nombre="Skype"; ID="Microsoft.Skype"}
+                @{Num=32; Nombre="Google Meet"; ID="Google.Meet"}
+                @{Num=33; Nombre="Webex"; ID="Cisco.Webex"}
+                @{Num=34; Nombre="Jitsi Meet"; ManualUrl="https://jitsi.org/downloads"}
+                @{Num=35; Nombre="Mattermost"; ID="Mattermost.Mattermost"}
+                @{Num=36; Nombre="Rocket.Chat"; ID="RocketChat.RocketChat"}
+                @{Num=37; Nombre="Flock"; ID="Flock.Flock"}
+                @{Num=38; Nombre="Keybase"; ID="Keybase.Keybase"}
+                @{Num=39; Nombre="Wire"; ID="Wire.Wire"}
+                @{Num=40; Nombre="Tox"; ID="Tox.Tox"}
+            )
+        }
+        # ========== 3. 🛠️ UTILIDADES (20 apps) ==========
+        "3" = @{
+            Nombre = "🛠️ UTILIDADES                   "
+            Apps = @(
+                @{Num=41; Nombre="7-Zip"; ID="7zip.7zip"}
+                @{Num=42; Nombre="WinRAR"; ID="RARLab.WinRAR"}
+                @{Num=43; Nombre="Microsoft PowerToys"; ID="Microsoft.PowerToys"}
+                @{Num=44; Nombre="Everything Search"; ID="voidtools.Everything"}
+                @{Num=45; Nombre="BleachBit"; ID="BleachBit.BleachBit"}
+                @{Num=46; Nombre="Revo Uninstaller"; ID="RevoUninstaller.RevoUninstaller"}
+                @{Num=47; Nombre="Bitwarden"; ID="Bitwarden.Bitwarden"}
+                @{Num=48; Nombre="Malwarebytes"; ID="Malwarebytes.Malwarebytes"}
+                @{Num=49; Nombre="CPU-Z"; ID="CPUID.CPU-Z"}
+                @{Num=50; Nombre="GPU-Z"; ID="TechPowerUp.GPU-Z"}
+                @{Num=51; Nombre="HWMonitor"; ID="CPUID.HWMonitor"}
+                @{Num=52; Nombre="HWINFO"; ID="REALiX.HWiNFO"}
+                @{Num=53; Nombre="MSI Afterburner"; ID="Guru3D.Afterburner"}
+                @{Num=54; Nombre="PeaZip"; ID="PeaZip.PeaZip"}
+                @{Num=55; Nombre="Notepad++"; ID="Notepad++.Notepad++"}
+                @{Num=56; Nombre="Greenshot"; ID="Greenshot.Greenshot"}
+                @{Num=57; Nombre="ShareX"; ID="ShareX.ShareX"}
+                @{Num=58; Nombre="Windirstat"; ID="Windirstat.Windirstat"}
+                @{Num=59; Nombre="WizTree"; ID="WizTree.WizTree"}
+                @{Num=60; Nombre="TreeSize Free"; ID="TreeSize.TreeSize"}
+            )
+        }
+        # ========== 4. 💻 DESARROLLO (20 apps) ==========
+          "4" = @{
+            Nombre = "💻 DESARROLLO"
+            Apps = @(
+                @{Num=61; Nombre="Visual Studio Code"; ID="Microsoft.VisualStudioCode"}
+                @{Num=62; Nombre="Git"; ID="Git.Git"}
+                @{Num=63; Nombre="GitHub Desktop"; ID="GitHub.GitHubDesktop"}
+                @{Num=64; Nombre="Docker Desktop"; ID="Docker.DockerDesktop"}
+                @{Num=65; Nombre="CMake"; ID="Kitware.CMake"}
+                @{Num=66; Nombre="Node.js"; ID="OpenJS.NodeJS"}
+                @{Num=67; Nombre="Python 3"; ID="Python.Python.3"}
+                @{Num=68; Nombre="PuTTY"; ID="PuTTY.PuTTY"}
+                @{Num=69; Nombre="WinSCP"; ID="WinSCP.WinSCP"}
+                @{Num=70; Nombre="FileZilla Client"; ID="FileZilla.Client"}
+                @{Num=71; Nombre="Sublime Text"; ID="SublimeHQ.SublimeText.4"}
+                @{Num=72; Nombre="Neovim"; ID="Neovim.Neovim"}
+                @{Num=73; Nombre="IntelliJ IDEA Community"; ID="JetBrains.IntelliJIDEA.Community"}
+                @{Num=74; Nombre="PyCharm Community"; ID="JetBrains.PyCharm.Community"}
+                @{Num=75; Nombre="Postman"; ID="Postman.Postman"}
+                @{Num=76; Nombre="Insomnia"; ID="Insomnia.Insomnia"}
+                @{Num=77; Nombre="Azure Data Studio"; ID="Microsoft.AzureDataStudio"}
+                @{Num=78; Nombre="DBeaver"; ID="DBeaver.DBeaver"}
+                @{Num=79; Nombre="Fork"; ID="GitFork.Fork"}
+                @{Num=80; Nombre="Android Studio"; ID="Google.AndroidStudio"}
+            )
+        }
+        # ========== 5. 🎬 MULTIMEDIA (20 apps) ==========
+        "5" = @{
+            Nombre = "🎬 MULTIMEDIA"
+            Apps = @(
+                @{Num=81; Nombre="GIMP"; ID="GIMP.GIMP"}
+                @{Num=82; Nombre="Inkscape"; ID="Inkscape.Inkscape"}
+                @{Num=83; Nombre="Krita"; ID="KritaFoundation.Krita"}
+                @{Num=84; Nombre="Blender"; ID="BlenderFoundation.Blender"}
+                @{Num=85; Nombre="Paint.NET"; ID="dotPDN.PaintDotNet"}
+                @{Num=86; Nombre="HandBrake"; ID="HandBrake.HandBrake"}
+                @{Num=87; Nombre="VLC Media Player"; ID="VideoLAN.VLC"}
+                @{Num=88; Nombre="Audacity"; ID="Audacity.Audacity"}
+                @{Num=89; Nombre="Calibre"; ID="Calibre.Calibre"}
+                @{Num=90; Nombre="K-Lite Codec Pack Basic"; ID="CodecGuide.K-LiteCodecPack.Basic"}
+                @{Num=91; Nombre="Spotify"; ID="Spotify.Spotify"}
+                @{Num=92; Nombre="DaVinci Resolve"; ID="BlackmagicDesign.DaVinciResolve"}
+                @{Num=93; Nombre="Shotcut"; ID="Shotcut.Shotcut"}
+                @{Num=94; Nombre="OpenShot"; ID="OpenShot.OpenShot"}
+                @{Num=95; Nombre="LMMS"; ID="LMMS.LMMS"}
+                @{Num=96; Nombre="Darktable"; ID="Darktable.Darktable"}
+                @{Num=97; Nombre="RawTherapee"; ID="RawTherapee.RawTherapee"}
+                @{Num=98; Nombre="Kdenlive"; ID="Kdenlive.Kdenlive"}
+                @{Num=99; Nombre="OBS Studio"; ID="OBSProject.OBSStudio"}
+                @{Num=100; Nombre="Stremio"; ID="Stremio.Stremio"}
+            )
+        }
+        # ========== 6. 📄 OFIMÁTICA (20 apps) ==========
+        "6" = @{
+            Nombre = "📄 OFIMÁTICA"
+            Apps = @(
+                @{Num=101; Nombre="LibreOffice"; ID="TheDocumentFoundation.LibreOffice"}
+                @{Num=102; Nombre="Microsoft 365"; ID="Microsoft.OfficeDeploymentTool"}
+                @{Num=103; Nombre="Notion"; ID="Notion.Notion"}
+                @{Num=104; Nombre="Obsidian"; ID="Obsidian.Obsidian"}
+                @{Num=105; Nombre="Zotero"; ID="Zotero.Zotero"}
+                @{Num=106; Nombre="Adobe Acrobat Reader"; ID="Adobe.Acrobat.Reader.64-bit"}
+                @{Num=107; Nombre="Foxit PDF Reader"; ID="Foxit.FoxitReader"}
+                @{Num=108; Nombre="SumatraPDF"; ID="SumatraPDF.SumatraPDF"}
+                @{Num=109; Nombre="PDF24 Creator"; ID="PDF24.PDF24"}
+                @{Num=110; Nombre="Typora Markdown Editor"; ID="Typora.Typora"}
+                @{Num=111; Nombre="OnlyOffice"; ID="ONLYOFFICE.DesktopEditors"}
+                @{Num=112; Nombre="WPS Office"; ID="WPS.WPSOffice"}
+                @{Num=113; Nombre="FreeOffice"; ID="SoftMaker.FreeOffice"}
+                @{Num=114; Nombre="Evernote"; ID="Evernote.Evernote"}
+                @{Num=115; Nombre="Joplin"; ID="Joplin.Joplin"}
+                @{Num=116; Nombre="Anytype"; ID="Anytype.Anytype"}
+                @{Num=117; Nombre="Zoho Workplace"; ID="Zoho.ZohoWorkplace"}
+                @{Num=118; Nombre="Calligra"; ID="Calligra.Calligra"}
+                @{Num=119; Nombre="Apache OpenOffice"; ID="Apache.OpenOffice"}
+                @{Num=120; Nombre="Google Drive Desktop"; ID="Google.Drive"}
+            )
+        }
+        # ========== 7. 🌐 REDES Y TERMINAL (20 apps) ==========
+        "7" = @{
+            Nombre = "🌐 REDES Y TERMINAL"
+            Apps = @(
+                @{Num=121; Nombre="Wireshark"; ID="WiresharkFoundation.Wireshark"}
+                @{Num=122; Nombre="Nmap"; ID="Nmap.Nmap"}
+                @{Num=123; Nombre="Advanced IP Scanner"; ID="Famatech.AdvancedIPScanner"}
+                @{Num=124; Nombre="MobaXterm"; ID="Mobatek.MobaXterm"}
+                @{Num=125; Nombre="Alacritty"; ID="Alacritty.Alacritty"}
+                @{Num=126; Nombre="Windows Terminal"; ID="Microsoft.WindowsTerminal"}
+                @{Num=127; Nombre="AnyDesk"; ID="AnyDesk.AnyDesk"}
+                @{Num=128; Nombre="RustDesk"; ID="RustDesk.RustDesk"}
+                @{Num=129; Nombre="TeamViewer"; ID="TeamViewer.TeamViewer"}
+                @{Num=130; Nombre="Angry IP Scanner"; ID="AngryIPScanner.AngryIPScanner"}
+                @{Num=131; Nombre="NetScan"; ID="NetScan.NetScan"}
+                @{Num=132; Nombre="Termius"; ID="Termius.Termius"}
+                @{Num=133; Nombre="Tabby"; ID="Eugeny.Tabby"}
+                @{Num=134; Nombre="Hyper"; ID="Hyper.Hyper"}
+                @{Num=135; Nombre="Flipper"; ID="Flipper.Flipper"}
+                @{Num=136; Nombre="MRemoteNG"; ID="MRemoteNG.MRemoteNG"}
+                @{Num=137; Nombre="KiTTY"; ID="KiTTY.KiTTY"}
+                @{Num=138; Nombre="Royal TS"; ID="RoyalApps.RoyalTS"}
+                @{Num=139; Nombre="WinSCP"; ID="WinSCP.WinSCP"}
+                @{Num=140; Nombre="FileZilla"; ID="FileZilla.Client"}
+            )
+        }
+        # ========== 8. 🎮 JUEGOS (20 apps) ==========
+        "8" = @{
+            Nombre = "🎮 JUEGOS"
+            Apps = @(
+                @{Num=141; Nombre="Steam"; ID="Valve.Steam"}
+                @{Num=142; Nombre="Epic Games Launcher"; ID="EpicGames.EpicGamesLauncher"}
+                @{Num=143; Nombre="EA Desktop"; ID="ElectronicArts.EADesktop"}
+                @{Num=144; Nombre="Ubisoft Connect"; ID="Ubisoft.Connect"}
+                @{Num=145; Nombre="GOG Galaxy"; ID="GOG.Galaxy"}
+                @{Num=146; Nombre="Parsec"; ID="Parsec.Parsec"}
+                @{Num=147; Nombre="PlayStation Remote Play"; ID="Sony.PlayStationRemotePlay"}
+                @{Num=148; Nombre="Xbox App"; ID="Microsoft.Xbox"}
+                @{Num=149; Nombre="Battle.net"; ID="Blizzard.BattleNet"}
+                @{Num=150; Nombre="Riot Games"; ID="RiotGames.RiotClient"}
+                @{Num=151; Nombre="Amazon Games"; ID="Amazon.Games"}
+                @{Num=152; Nombre="Itch.io"; ID="Itch.Itch"}
+                @{Num=153; Nombre="Modrinth"; ID="Modrinth.Modrinth"}
+                @{Num=154; Nombre="CurseForge"; ID="Overwolf.CurseForge"}
+                @{Num=155; Nombre="Playnite"; ID="Playnite.Playnite"}
+                @{Num=156; Nombre="Lutris"; ID="Lutris.Lutris"}
+                @{Num=157; Nombre="Heroic Games Launcher"; ID="HeroicGamesLauncher.HeroicGamesLauncher"}
+                @{Num=158; Nombre="Greenlight"; ID="Greenlight.Greenlight"}
+                @{Num=159; Nombre="NVIDIA GeForce Now"; ID="NVIDIA.GeForceNow"}
+                @{Num=160; Nombre="Boosteroid"; ID="Boosteroid.Boosteroid"}
+            )
+        }
+        # ========== 9. 🖥️ VIRTUALIZACIÓN (20 apps) ==========
+        "9" = @{
+            Nombre = "🖥️ VIRTUALIZACIÓN               "
+            Apps = @(
+                @{Num=161; Nombre="Oracle VM VirtualBox"; ID="Oracle.VirtualBox"}
+                @{Num=162; Nombre="VMware Workstation Player"; ID="VMware.WorkstationPlayer"}
+                @{Num=163; Nombre="Raspberry Pi Imager"; ID="RaspberryPiFoundation.RaspberryPiImager"}
+                @{Num=164; Nombre="WSL (Windows Subsystem Linux)"; ID="Microsoft.WSL"}
+                @{Num=165; Nombre="PowerShell 7"; ID="Microsoft.PowerShell"}
+                @{Num=166; Nombre="QEMU"; ID="QEMU.QEMU"}
+                @{Num=167; Nombre="Podman"; ID="RedHat.Podman"}
+                @{Num=168; Nombre="Vagrant"; ID="HashiCorp.Vagrant"}
+                @{Num=169; Nombre="Multipass"; ID="Canonical.Multipass"}
+                @{Num=170; Nombre="Windows Sandbox"; ManualUrl="https://learn.microsoft.com/windows/security/threat-protection/windows-sandbox/windows-sandbox-overview"}
+                @{Num=171; Nombre="Lima"; ID="Lima.Lima"}
+                @{Num=172; Nombre="UTM"; ID="UTM.UTM"}
+                @{Num=173; Nombre="Proxmox VE Client"; ID="Proxmox.ProxmoxVE"}
+                @{Num=174; Nombre="XCP-ng Center"; ID="XCPng.XCPngCenter"}
+                @{Num=175; Nombre="Hyper-V Manager"; ID="Microsoft.HyperVManager"}
+                @{Num=176; Nombre="Docker Desktop"; ID="Docker.DockerDesktop"}
+                @{Num=177; Nombre="Rancher Desktop"; ID="Rancher.RancherDesktop"}
+                @{Num=178; Nombre="Colima"; ID="Colima.Colima"}
+                @{Num=179; Nombre="Minikube"; ID="Kubernetes.Minikube"}
+                @{Num=180; Nombre="Kind"; ID="Kubernetes.Kind"}
+            )
+        }
+        # ========== 10. 💾 RESPALDOS (20 apps) ==========
+            "10" = @{
+            Nombre = "💾 RESPALDOS"
+            Apps = @(
+                @{Num=181; Nombre="Duplicati"; ID="Duplicati.Duplicati"}
+                @{Num=182; Nombre="Nextcloud Desktop"; ID="Nextcloud.NextcloudDesktop"}
+                @{Num=183; Nombre="Google Drive"; ID="Google.Drive"}
+                @{Num=184; Nombre="Dropbox"; ID="Dropbox.Dropbox"}
+                @{Num=185; Nombre="SyncThing"; ID="SyncThing.SyncThing"}
+                @{Num=186; Nombre="Resilio Sync"; ID="Resilio.ResilioSync"}
+                @{Num=187; Nombre="Rclone"; ID="Rclone.Rclone"}
+                @{Num=188; Nombre="Proton Drive"; ID="ProtonTechnologies.ProtonDrive"}
+                @{Num=189; Nombre="OneDrive"; ID="Microsoft.OneDrive"}
+                @{Num=190; Nombre="Mega"; ID="Mega.Mega"}
+                @{Num=191; Nombre="pCloud"; ID="pCloud.pCloud"}
+                @{Num=192; Nombre="FreeFileSync"; ID="FreeFileSync.FreeFileSync"}
+                @{Num=193; Nombre="Duplicacy"; ID="Duplicacy.Duplicacy"}
+                @{Num=194; Nombre="Kopia"; ID="Kopia.Kopia"}
+                @{Num=195; Nombre="BorgBackup"; ID="BorgBackup.BorgBackup"}
+                @{Num=196; Nombre="Restic"; ID="Restic.Restic"}
+                @{Num=197; Nombre="UrBackup"; ID="UrBackup.UrBackup"}
+                @{Num=198; Nombre="BackupPC"; ID="BackupPC.BackupPC"}
+                @{Num=199; Nombre="Cobian Backup"; ID="CobianSoft.CobianBackup"}
+                @{Num=200; Nombre="EaseUS Todo Backup"; ID="EaseUS.TodoBackup"}
+            )
+        }
+        # ========== 11. 🔒 VPN (20 apps) ==========
+        "11" = @{
+            Nombre = "🔒 VPN"
+            Apps = @(
+                @{Num=201; Nombre="ProtonVPN"; ID="ProtonTechnologies.ProtonVPN"}
+                @{Num=202; Nombre="Windscribe VPN"; ID="Windscribe.Windscribe"}
+                @{Num=203; Nombre="OpenVPN"; ID="OpenVPNTechnologies.OpenVPN"}
+                @{Num=204; Nombre="Mullvad VPN"; ID="Mullvad.MullvadVPN"}
+                @{Num=205; Nombre="NordVPN"; ID="NordSecurity.NordVPN"}
+                @{Num=206; Nombre="Tailscale"; ID="Tailscale.Tailscale"}
+                @{Num=207; Nombre="ZeroTier"; ID="ZeroTier.ZeroTier"}
+                @{Num=208; Nombre="WireGuard"; ID="WireGuard.WireGuard"}
+                @{Num=209; Nombre="ExpressVPN"; ManualUrl="https://www.expressvpn.com/download"}
+                @{Num=210; Nombre="CyberGhost"; ManualUrl="https://www.cyberghostvpn.com/download"}
+                @{Num=211; Nombre="Private Internet Access"; ManualUrl="https://www.privateinternetaccess.com/download"}
+                @{Num=212; Nombre="Surfshark"; ManualUrl="https://surfshark.com/download"}
+                @{Num=213; Nombre="AtlasVPN"; ManualUrl="https://atlasvpn.com/download"}
+                @{Num=214; Nombre="Hotspot Shield"; ManualUrl="https://www.hotspotshield.com/download"}
+                @{Num=215; Nombre="TunnelBear"; ManualUrl="https://www.tunnelbear.com/download"}
+                @{Num=216; Nombre="VyprVPN"; ID="VyprVPN.VyprVPN"}
+                @{Num=217; Nombre="Hide.me"; ID="HideMe.HideMe"}
+                @{Num=218; Nombre="IPVanish"; ID="IPVanish.IPVanish"}
+                @{Num=219; Nombre="PureVPN"; ID="PureVPN.PureVPN"}
+                @{Num=220; Nombre="PrivateVPN"; ID="PrivateVPN.PrivateVPN"}
+            )
+        }
+        # ========== 12. 📊 MONITOR (20 apps) ==========
+        "12" = @{
+            Nombre = "📊 MONITOR"
+            Apps = @(
+                @{Num=221; Nombre="OpenHardwareMonitor"; ID="OpenHardwareMonitor.OpenHardwareMonitor"}
+                @{Num=222; Nombre="Core Temp"; ID="CoreTemp.CoreTemp"}
+                @{Num=223; Nombre="CrystalDiskInfo"; ID="CrystalDiskInfo.CrystalDiskInfo"}
+                @{Num=224; Nombre="CrystalDiskMark"; ID="CrystalDiskMark.CrystalDiskMark"}
+                @{Num=225; Nombre="HWiNFO64"; ID="REALiX.HWiNFO"}
+                @{Num=226; Nombre="Performance Monitor"; ID="Microsoft.PerformanceMonitor"}
+                @{Num=227; Nombre="Resource Monitor"; ID="Microsoft.ResourceMonitor"}
+                @{Num=228; Nombre="Task Manager"; ID="Microsoft.TaskManager"}
+                @{Num=229; Nombre="Process Explorer"; ID="Microsoft.Sysinternals.ProcessExplorer"}
+                @{Num=230; Nombre="Process Monitor"; ID="Microsoft.Sysinternals.ProcessMonitor"}
+                @{Num=231; Nombre="RAMMap"; ID="Microsoft.Sysinternals.RAMMap"}
+                @{Num=232; Nombre="VMMap"; ID="Microsoft.Sysinternals.VMMap"}
+                @{Num=233; Nombre="TCPView"; ID="Microsoft.Sysinternals.TCPView"}
+                @{Num=234; Nombre="Disk2VHD"; ID="Microsoft.Sysinternals.Disk2VHD"}
+                @{Num=235; Nombre="Autoruns"; ID="Microsoft.Sysinternals.Autoruns"}
+                @{Num=236; Nombre="BgInfo"; ID="Microsoft.Sysinternals.BgInfo"}
+                @{Num=237; Nombre="PsTools"; ID="Microsoft.Sysinternals.PsTools"}
+                @{Num=238; Nombre="Sysmon"; ID="Microsoft.Sysinternals.Sysmon"}
+                @{Num=239; Nombre="WinObj"; ID="Microsoft.Sysinternals.WinObj"}
+                @{Num=240; Nombre="ZoomIt"; ID="Microsoft.Sysinternals.ZoomIt"}
+            )
+        }
+        # ========== 13. 📝 NOTAS (20 apps) ==========
+        "13" = @{
+            Nombre = "📝 NOTAS"
+            Apps = @(
+                @{Num=241; Nombre="Simplenote"; ID="Simplenote.Simplenote"}
+                @{Num=242; Nombre="Joplin"; ID="Joplin.Joplin"}
+                @{Num=243; Nombre="Obsidian"; ID="Obsidian.Obsidian"}
+                @{Num=244; Nombre="Notion"; ID="Notion.Notion"}
+                @{Num=245; Nombre="Standard Notes"; ID="StandardNotes.StandardNotes"}
+                @{Num=246; Nombre="CherryTree"; ID="CherryTree.CherryTree"}
+                @{Num=247; Nombre="Zim Desktop Wiki"; ID="Zim.Zim"}
+                @{Num=248; Nombre="QOwnNotes"; ID="QOwnNotes.QOwnNotes"}
+                @{Num=249; Nombre="Trilium Notes"; ID="TriliumNotes.TriliumNotes"}
+                @{Num=250; Nombre="BoostNote"; ID="BoostNote.BoostNote"}
+                @{Num=251; Nombre="Zettlr"; ID="Zettlr.Zettlr"}
+                @{Num=252; Nombre="Mark Text"; ID="MarkText.MarkText"}
+                @{Num=253; Nombre="Typora"; ID="Typora.Typora"}
+                @{Num=254; Nombre="Ghostwriter"; ID="Ghostwriter.Ghostwriter"}
+                @{Num=255; Nombre="Remarkable"; ID="Remarkable.Remarkable"}
+                @{Num=256; Nombre="Org mode"; ID="OrgMode.OrgMode"}
+                @{Num=257; Nombre="Logseq"; ID="Logseq.Logseq"}
+                @{Num=258; Nombre="Dendron"; ID="Dendron.Dendron"}
+                @{Num=259; Nombre="Foam"; ID="Foam.Foam"}
+                @{Num=260; Nombre="Notable"; ID="Notable.Notable"}
+            )
+        }
+        # ========== 14. ⚡ UTILIDADES AVANZADAS (20 apps) ==========
+        "14" = @{
+            Nombre = "⚡ UTILIDADES AVANZADAS"
+            Apps = @(
+                @{Num=261; Nombre="Bulk Rename Utility"; ID="BulkRenameUtility.BulkRenameUtility"}
+                @{Num=262; Nombre="AutoHotkey"; ID="AutoHotkey.AutoHotkey"}
+                @{Num=263; Nombre="Espanso Text Expander"; ID="Espanso.Espanso"}
+                @{Num=264; Nombre="Gsudo"; ID="Gsudo.Gsudo"}
+                @{Num=265; Nombre="Nushell"; ID="Nushell.Nushell"}
+                @{Num=266; Nombre="Fastfetch"; ID="Fastfetch.Fastfetch"}
+                @{Num=267; Nombre="Monitorian"; ID="Monitorian.Monitorian"}
+                @{Num=268; Nombre="qBittorrent"; ID="qBittorrent.qBittorrent"}
+                @{Num=269; Nombre="TeraBox (Baidu)"; ID="Baidu.TeraBox"}
+                @{Num=270; Nombre="Power Automate Desktop"; ID="Microsoft.PowerAutomateDesktop"}
+                @{Num=271; Nombre="Cheat Engine"; ID="CheatEngine.CheatEngine"}
+                @{Num=272; Nombre="dnSpy"; ID="dnSpy.dnSpy"}
+                @{Num=273; Nombre="OllyDbg"; ID="OllyDbg.OllyDbg"}
+                @{Num=274; Nombre="x64dbg"; ID="x64dbg.x64dbg"}
+                @{Num=275; Nombre="Process Hacker"; ID="ProcessHacker.ProcessHacker"}
+                @{Num=276; Nombre="Registry Workshop"; ID="RegistryWorkshop.RegistryWorkshop"}
+                @{Num=277; Nombre="Sysinternals Suite"; ID="Microsoft.Sysinternals"}
+                @{Num=278; Nombre="Windows ADK"; ID="Microsoft.WindowsADK"}
+                @{Num=279; Nombre="Windows PE"; ID="Microsoft.WindowsPE"}
+                @{Num=280; Nombre="WinDbg"; ID="Microsoft.WinDbg"}
+            )
+        }
+        # ========== 15. 📦 CLIENTES (20 apps) ==========
+        "15" = @{
+            Nombre = "📦 CLIENTES"
+            Apps = @(
+                @{Num=281; Nombre="Motrix Download Manager"; ID="Motrix.Motrix"}
+                @{Num=282; Nombre="LocalSend"; ID="LocalSend.LocalSend"}
+                @{Num=283; Nombre="KDE Connect"; ID="KDE.KDEConnect"}
+                @{Num=284; Nombre="croc file transfer"; ID="Schollz.croc"}
+                @{Num=285; Nombre="Transmission"; ID="Transmission.Transmission"}
+                @{Num=286; Nombre="Deluge"; ID="DelugeTeam.Deluge"}
+                @{Num=287; Nombre="Aria2"; ID="Aria2.Aria2"}
+                @{Num=288; Nombre="JDownloader"; ID="JDownloader.JDownloader"}
+                @{Num=289; Nombre="Internet Download Manager"; ID="InternetDownloadManager.IDM"}
+                @{Num=290; Nombre="EagleGet"; ID="EagleGet.EagleGet"}
+                @{Num=291; Nombre="Xtreme Download Manager"; ID="XtremeDownloadManager.XDM"}
+                @{Num=292; Nombre="Free Download Manager"; ID="FreeDownloadManager.FDM"}
+                @{Num=293; Nombre="uGet"; ID="uGet.uGet"}
+                @{Num=294; Nombre="Persepolis Download Manager"; ID="Persepolis.Persepolis"}
+                @{Num=295; Nombre="Neat Download Manager"; ID="NeatDownloadManager.NDM"}
+                @{Num=296; Nombre="DownThemAll"; ID="DownThemAll.DownThemAll"}
+                @{Num=297; Nombre="Wget"; ID="Wget.Wget"}
+                @{Num=298; Nombre="Curl"; ID="Curl.Curl"}
+                @{Num=299; Nombre="HTTPie"; ID="HTTPie.HTTPie"}
+                @{Num=300; Nombre="Postman"; ID="Postman.Postman"}
+            )
+        }
+        # ========== 16. 🧹 LIMPIEZA (20 apps) ==========
+        "16" = @{
+            Nombre = "🧹 LIMPIEZA"
+            Apps = @(
+                @{Num=301; Nombre="TreeSize Free"; ID="TreeSize.TreeSize"}
+                @{Num=302; Nombre="WizTree"; ID="WizTree.WizTree"}
+                @{Num=303; Nombre="DiskGenius"; ID="DiskGenius.DiskGenius"}
+                @{Num=304; Nombre="Rainmeter"; ID="Rainmeter.Rainmeter"}
+                @{Num=305; Nombre="BleachBit"; ID="BleachBit.BleachBit"}
+                @{Num=306; Nombre="CCleaner"; ManualUrl="https://www.ccleaner.com/ccleaner/download"}
+                @{Num=307; Nombre="PrivaZer"; ManualUrl="https://privazer.com/download.php"}
+                @{Num=308; Nombre="Glary Utilities"; ManualUrl="https://www.glarysoft.com/glary-utilities/download"}
+                @{Num=309; Nombre="Wise Disk Cleaner"; ID="WiseCleaner.WiseDiskCleaner"}
+                @{Num=310; Nombre="System Ninja"; ID="SystemNinja.SystemNinja"}
+                @{Num=311; Nombre="Clean Master"; ID="CleanMaster.CleanMaster"}
+                @{Num=312; Nombre="Advanced SystemCare"; ID="IObit.AdvancedSystemCare"}
+                @{Num=313; Nombre="Ashampoo WinOptimizer"; ID="Ashampoo.WinOptimizer"}
+                @{Num=314; Nombre="Auslogics Disk Defrag"; ID="Auslogics.DiskDefrag"}
+                @{Num=315; Nombre="Defraggler"; ID="Piriform.Defraggler"}
+                @{Num=316; Nombre="MyDefrag"; ID="MyDefrag.MyDefrag"}
+                @{Num=317; Nombre="O&O Defrag"; ID="OODefrag.OODefrag"}
+                @{Num=318; Nombre="UltraDefrag"; ID="UltraDefrag.UltraDefrag"}
+                @{Num=319; Nombre="Windows Disk Cleanup"; ID="Microsoft.DiskCleanup"}
+                @{Num=320; Nombre="Storage Sense"; ID="Microsoft.StorageSense"}
+            )
+        }
+        # ========== 17. 🎨 PERSONALIZACIÓN (20 apps) ==========
+        "17" = @{
+            Nombre = "🎨 PERSONALIZACIÓN"
+            Apps = @(
+                @{Num=321; Nombre="f.lux"; ID="f.lux.f.lux"}
+                @{Num=322; Nombre="Ditto Clipboard Manager"; ID="Ditto.Ditto"}
+                @{Num=323; Nombre="CopyQ Clipboard Manager"; ID="CopyQ.CopyQ"}
+                @{Num=324; Nombre="Wallpaper Engine"; ID="WallpaperEngine.WallpaperEngine"}
+                @{Num=325; Nombre="Lively Wallpaper"; ID="LivelyWallpaper.LivelyWallpaper"}
+                @{Num=326; Nombre="TranslucentTB"; ID="TranslucentTB.TranslucentTB"}
+                @{Num=327; Nombre="WindowBlinds"; ID="Stardock.WindowBlinds"}
+                @{Num=328; Nombre="Start11"; ID="Stardock.Start11"}
+                @{Num=329; Nombre="Fences"; ID="Stardock.Fences"}
+                @{Num=330; Nombre="Groupy"; ID="Stardock.Groupy"}
+                @{Num=331; Nombre="ObjectDock"; ID="Stardock.ObjectDock"}
+                @{Num=332; Nombre="Rainmeter"; ID="Rainmeter.Rainmeter"}
+                @{Num=333; Nombre="RocketDock"; ID="RocketDock.RocketDock"}
+                @{Num=334; Nombre="Nexus Dock"; ID="Winstep.NexusDock"}
+                @{Num=335; Nombre="TaskbarX"; ID="TaskbarX.TaskbarX"}
+                @{Num=336; Nombre="StartAllBack"; ID="StartAllBack.StartAllBack"}
+                @{Num=337; Nombre="Open-Shell"; ID="OpenShell.OpenShell"}
+                @{Num=338; Nombre="Classic Shell"; ID="ClassicShell.ClassicShell"}
+                @{Num=339; Nombre="Winaero Tweaker"; ID="Winaero.WinaeroTweaker"}
+                @{Num=340; Nombre="Ultimate Windows Tweaker"; ID="UltimateWindowsTweaker.UWT"}
+            )
+        }
+        # ========== 18. 🤖 INTELIGENCIA ARTIFICIAL (20 apps) ==========
+        "18" = @{
+            Nombre = "🤖 INTELIGENCIA ARTIFICIAL"
+            Apps = @(
+                @{Num=341; Nombre="LM Studio"; ID="LMStudio.LMStudio"}
+                @{Num=342; Nombre="Ollama"; ID="Ollama.Ollama"}
+                @{Num=343; Nombre="GPT4All"; ID="GPT4All.GPT4All"}
+                @{Num=344; Nombre="Upscayl"; ID="Upscayl.Upscayl"}
+                @{Num=345; Nombre="Continue (VS Code AI)"; ID="Continue.continue"}
+                @{Num=346; Nombre="Cody AI"; ID="Sourcegraph.cody"}
+                @{Num=347; Nombre="TabNine"; ID="TabNine.tabnine"}
+                @{Num=348; Nombre="Codeium"; ID="Codeium.Codeium"}
+                @{Num=349; Nombre="Stable Diffusion WebUI"; ManualUrl="https://github.com/AUTOMATIC1111/stable-diffusion-webui"}
+                @{Num=350; Nombre="ComfyUI"; ManualUrl="https://github.com/comfyanonymous/ComfyUI"}
+                @{Num=351; Nombre="Whisper Desktop"; ID="Const-me.Whisper"}
+                @{Num=352; Nombre="ChatGPT Desktop"; ID="ChatGPT.ChatGPT"}
+                @{Num=353; Nombre="Claude Desktop"; ID="Anthropic.Claude"}
+                @{Num=354; Nombre="Perplexity AI"; ManualUrl="https://www.perplexity.ai/download"}
+                @{Num=355; Nombre="KoboldCP"; ID="KoboldAI.KoboldCP"}
+                @{Num=356; Nombre="Text Generation WebUI"; ManualUrl="https://github.com/oobabooga/text-generation-webui"}
+                @{Num=357; Nombre="InvokeAI"; ManualUrl="https://github.com/invoke-ai/InvokeAI"}
+                @{Num=358; Nombre="Automatic1111 WebUI"; ManualUrl="https://github.com/AUTOMATIC1111/stable-diffusion-webui"}
+                @{Num=359; Nombre="Fooocus"; ManualUrl="https://github.com/lllyasviel/Fooocus"}
+                @{Num=360; Nombre="EasyDiffusion"; ManualUrl="https://github.com/easydiffusion/easydiffusion"}
+            )
+        }
+        # ========== 19. 🔐 SEGURIDAD AVANZADA (20 apps) ==========
+        "19" = @{
+            Nombre = "🔐 SEGURIDAD AVANZADA"
+            Apps = @(
+                @{Num=361; Nombre="VeraCrypt"; ID="IDRIX.VeraCrypt"}
+                @{Num=362; Nombre="KeePassXC"; ID="KeePassXCTeam.KeePassXC"}
+                @{Num=363; Nombre="ProtonMail Bridge"; ID="ProtonTechnologies.ProtonMailBridge"}
+                @{Num=364; Nombre="Sysinternals Suite"; ID="Microsoft.Sysinternals"}
+                @{Num=365; Nombre="Process Hacker"; ID="ProcessHacker.ProcessHacker"}
+                @{Num=366; Nombre="Autoruns"; ID="Microsoft.Autoruns"}
+                @{Num=367; Nombre="TCPView"; ID="Microsoft.TCPView"}
+                @{Num=368; Nombre="Wireshark"; ID="WiresharkFoundation.Wireshark"}
+                @{Num=369; Nombre="Nmap"; ID="Nmap.Nmap"}
+                @{Num=370; Nombre="Metasploit"; ManualUrl="https://metasploit.help.rapid7.com"}
+                @{Num=371; Nombre="Burp Suite"; ID="PortSwigger.BurpSuite"}
+                @{Num=372; Nombre="Nikto"; ID="Nikto.Nikto"}
+                @{Num=373; Nombre="SQLmap"; ID="SQLmap.SQLmap"}
+                @{Num=374; Nombre="Hydra"; ID="Hydra.Hydra"}
+                @{Num=375; Nombre="John the Ripper"; ID="JohnTheRipper.John"}
+                @{Num=376; Nombre="HashCat"; ID="HashCat.HashCat"}
+                @{Num=377; Nombre="AirCrack-ng"; ID="AirCrackNG.AirCrackNG"}
+                @{Num=378; Nombre="Kismet"; ID="Kismet.Kismet"}
+                @{Num=379; Nombre="Reaver"; ID="Reaver.Reaver"}
+                @{Num=380; Nombre="OpenSSL"; ID="OpenSSL.OpenSSL"}
+            )
+        }
+        # ========== 20. 📊 DATA SCIENCE (20 apps) ==========
+        "20" = @{
+            Nombre = "📊 DATA SCIENCE"
+            Apps = @(
+                @{Num=381; Nombre="Anaconda"; ID="Anaconda.Anaconda3"}
+                @{Num=382; Nombre="Miniconda"; ID="Anaconda.Miniconda3"}
+                @{Num=383; Nombre="R for Windows"; ID="RProject.R"}
+                @{Num=384; Nombre="RStudio"; ID="RStudio.RStudio"}
+                @{Num=385; Nombre="Julia"; ID="JuliaComputing.Julia"}
+                @{Num=386; Nombre="Tableau Public"; ID="Tableau.TableauPublic"}
+                @{Num=387; Nombre="Power BI Desktop"; ID="Microsoft.PowerBIDesktop"}
+                @{Num=388; Nombre="QGIS"; ID="QGIS.QGIS"}
+                @{Num=389; Nombre="Orange"; ID="Orange.Orange"}
+                @{Num=390; Nombre="KNIME"; ID="KNIME.KNIME"}
+                @{Num=391; Nombre="Weka"; ID="Weka.Weka"}
+                @{Num=392; Nombre="RapidMiner"; ID="RapidMiner.RapidMiner"}
+                @{Num=393; Nombre="DataGrip"; ID="JetBrains.DataGrip"}
+                @{Num=394; Nombre="DBeaver"; ID="DBeaver.DBeaver"}
+                @{Num=395; Nombre="HeidiSQL"; ID="HeidiSQL.HeidiSQL"}
+                @{Num=396; Nombre="MongoDB Compass"; ID="MongoDB.Compass"}
+                @{Num=397; Nombre="PostgreSQL"; ID="PostgreSQL.PostgreSQL"}
+                @{Num=398; Nombre="MySQL Workbench"; ID="Oracle.MySQLWorkbench"}
+                @{Num=399; Nombre="Azure Data Studio"; ID="Microsoft.AzureDataStudio"}
+                @{Num=400; Nombre="TensorFlow"; ManualUrl="https://tensorflow.org"}
+            )
+        }
+        # ========== 21. 🎬 MEDIA SERVER (20 apps) ==========
+        "21" = @{
+            Nombre = "🎬 MEDIA SERVER"
+            Apps = @(
+                @{Num=401; Nombre="Plex Media Server"; ID="Plex.Plex"}
+                @{Num=402; Nombre="Jellyfin Server"; ManualUrl="https://jellyfin.org/downloads"}
+                @{Num=403; Nombre="Emby Server"; ID="Emby.Emby"}
+                @{Num=404; Nombre="Sonarr"; ManualUrl="https://sonarr.tv"}
+                @{Num=405; Nombre="Radarr"; ManualUrl="https://radarr.video"}
+                @{Num=406; Nombre="Prowlarr"; ManualUrl="https://prowlarr.com"}
+                @{Num=407; Nombre="Overseerr"; ManualUrl="https://overseerr.dev"}
+                @{Num=408; Nombre="Tautulli"; ManualUrl="https://tautulli.com"}
+                @{Num=409; Nombre="Jackett"; ManualUrl="https://github.com/Jackett/Jackett"}
+                @{Num=410; Nombre="Bazarr"; ManualUrl="https://www.bazarr.media"}
+                @{Num=411; Nombre="Lidarr"; ManualUrl="https://lidarr.audio"}
+                @{Num=412; Nombre="Readarr"; ManualUrl="https://readarr.com"}
+                @{Num=413; Nombre="Mylar3"; ManualUrl="https://github.com/mylar3/mylar3"}
+                @{Num=414; Nombre="NZBGet"; ManualUrl="https://nzbget.net"}
+                @{Num=415; Nombre="SABnzbd"; ManualUrl="https://sabnzbd.org"}
+                @{Num=416; Nombre="qBittorrent"; ID="qBittorrent.qBittorrent"}
+                @{Num=417; Nombre="Transmission"; ID="Transmission.Transmission"}
+                @{Num=418; Nombre="Deluge"; ID="DelugeTeam.Deluge"}
+                @{Num=419; Nombre="Tdarr"; ManualUrl="https://tdarr.io"}
+                @{Num=420; Nombre="FileFlows"; ManualUrl="https://fileflows.com"}
+            )
+        }
+        # ========== 22. 🛠️ HERRAMIENTAS SISTEMA (20 apps) ==========
+        "22" = @{
+            Nombre = "🛠️ HERRAMIENTAS SISTEMA"
+            Apps = @(
+                @{Num=421; Nombre="Process Lasso"; ID="Bitsum.ProcessLasso"}
+                @{Num=422; Nombre="Macrium Reflect Free"; ID="Macrium.MacriumReflect"}
+                @{Num=423; Nombre="Veeam Agent"; ID="Veeam.VeeamAgent"}
+                @{Num=424; Nombre="Rufus"; ID="Rufus.Rufus"}
+                @{Num=425; Nombre="Ventoy"; ManualUrl="https://ventoy.net"}
+                @{Num=426; Nombre="BalenaEtcher"; ID="Balena.Etcher"}
+                @{Num=427; Nombre="Clonezilla"; ManualUrl="https://clonezilla.org"}
+                @{Num=428; Nombre="Hiren's BootCD PE"; ManualUrl="https://www.hirensbootcd.org"}
+                @{Num=429; Nombre="Medicat USB"; ManualUrl="https://medicatusb.com"}
+                @{Num=430; Nombre="GParted Live"; ManualUrl="https://gparted.org"}
+                @{Num=431; Nombre="HDDScan"; ManualUrl="https://hddscan.com/download.html"}
+                @{Num=432; Nombre="MemTest86"; ManualUrl="https://www.memtest86.com/download.htm"}
+                @{Num=433; Nombre="Prime95"; ID="Prime95.Prime95"}
+                @{Num=434; Nombre="FurMark"; ID="FurMark.FurMark"}
+                @{Num=435; Nombre="Cinebench"; ID="Maxon.Cinebench"}
+                @{Num=436; Nombre="Geekbench"; ID="PrimateLabs.Geekbench"}
+                @{Num=437; Nombre="3DMark"; ID="UL.3DMark"}
+                @{Num=438; Nombre="PassMark"; ID="PassMark.PassMark"}
+                @{Num=439; Nombre="OCCT"; ID="OCCT.OCCT"}
+                @{Num=440; Nombre="HWMonitor"; ID="CPUID.HWMonitor"}
+            )
+        }
+    }
     
-    # ========== 13-26: UTILIDADES ==========
-    "13" = @{Name="7-Zip"; ID="7zip.7zip"}
-    "14" = @{Name="WinRAR"; ID="RARLab.WinRAR"}
-    "15" = @{Name="Microsoft PowerToys"; ID="Microsoft.PowerToys"}
-    "16" = @{Name="Everything Search"; ID="voidtools.Everything"}
-    "17" = @{Name="BleachBit"; ID="BleachBit.BleachBit"}
-    "18" = @{Name="Revo Uninstaller"; ID="RevoUninstaller.RevoUninstaller"}
-    "19" = @{Name="Bitwarden"; ID="Bitwarden.Bitwarden"}
-    "20" = @{Name="Malwarebytes"; ID="Malwarebytes.Malwarebytes"}
-    "21" = @{Name="CPU-Z"; ID="CPUID.CPU-Z"}
-    "22" = @{Name="GPU-Z"; ID="TechPowerUp.GPU-Z"}
-    "23" = @{Name="HWMonitor"; ID="CPUID.HWMonitor"}
-    "24" = @{Name="HWINFO"; ID="REALiX.HWiNFO"}
-    "25" = @{Name="MSI Afterburner"; ID="Guru3D.Afterburner"}
-    "26" = @{Name="PeaZip"; ID="PeaZip.PeaZip"}
-    "27" = @{Name="Notepad++"; ID="Notepad++.Notepad++"}
+    # ============================================================
+    # FUNCIONES AUXILIARES
+    # ============================================================
     
-    # ========== 28-37: DESARROLLO ==========
-    "28" = @{Name="Visual Studio Code"; ID="Microsoft.VisualStudioCode"}
-    "29" = @{Name="Git"; ID="Git.Git"}
-    "30" = @{Name="GitHub Desktop"; ID="GitHub.GitHubDesktop"}
-    "31" = @{Name="Docker Desktop"; ID="Docker.DockerDesktop"}
-    "32" = @{Name="CMake"; ID="Kitware.CMake"}
-    "33" = @{Name="Node.js"; ID="OpenJS.NodeJS"}
-    "34" = @{Name="Python 3"; ID="Python.Python.3"}
-    "35" = @{Name="PuTTY"; ID="PuTTY.PuTTY"}
-    "36" = @{Name="WinSCP"; ID="WinSCP.WinSCP"}
-    "37" = @{Name="FileZilla Client"; ID="FileZilla.Client"}
+    function Show-CategoryApps {
+        param($CatId)
+        $cat = $categorias[$CatId]
+        Clear-Host
+        Show-MainTitle
+        Write-Host "`n 📂 $($cat.Nombre) - $($cat.Apps.Count) aplicaciones" -ForegroundColor $COLOR_MENU
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        
+        # Mostrar en 2 columnas
+        $cols = 2
+        for ($i = 0; $i -lt $cat.Apps.Count; $i += $cols) {
+            $row = "   "
+            for ($j = 0; $j -lt $cols; $j++) {
+                if (($i + $j) -lt $cat.Apps.Count) {
+                    $app = $cat.Apps[$i + $j]
+                    $numStr = "[$($app.Num.ToString().PadLeft(3))]"
+                    $nameStr = $app.Nombre
+                    if ($nameStr.Length -gt 30) { $nameStr = $nameStr.Substring(0, 27) + "..." }
+                    $row += "$numStr $($nameStr.PadRight(35))"
+                }
+            }
+            Write-Host $row
+        }
+        
+        Write-Host "`n ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        Write-Host " 💡 CONSEJO: Selecciona números separados por comas (ej: 1,3,5) o rangos (1-5)" -ForegroundColor $COLOR_ALERT
+        Write-Host " 📌 También puedes escribir 'TODO' para instalar TODAS las apps de esta categoría" -ForegroundColor $COLOR_ALERT
+        Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray
+        Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
+        Write-Host " ❌ [X] VOLVER AL MENÚ PRINCIPAL" -ForegroundColor $COLOR_DANGER
+        Write-Host " 🔍 [B] BUSCAR en TODAS las categorías" -ForegroundColor $COLOR_MENU
+        
+        $input = Read-Host "`n ``> SELECCIONE números, rangos, TODO o X"
+        
+        if ($input.ToUpper() -eq "X") { return $null }
+        if ($input.ToUpper() -eq "B") { return "BUSCAR" }
+        if ($input.ToUpper() -eq "TODO") {
+            return ($cat.Apps | ForEach-Object { $_.Num.ToString() })
+        }
+        
+        $selection = @()
+        $parts = $input -split ','
+        foreach($part in $parts){
+            $part = $part.Trim()
+            if($part -match '^(\d+)-(\d+)$'){
+                $start = [int]$matches[1]
+                $end = [int]$matches[2]
+                for($k=$start; $k -le $end; $k++){ $selection += $k.ToString() }
+            } elseif ($part -match '^\d+$') {
+                $selection += $part
+            }
+        }
+        
+        $validNums = $cat.Apps | ForEach-Object { $_.Num.ToString() }
+        $selection = $selection | Where-Object { $_ -in $validNums }
+        
+        if ($selection.Count -eq 0) {
+            Write-Host "`n ❌ No seleccionaste ninguna app válida." -ForegroundColor $COLOR_DANGER
+            Start-Sleep -Seconds 1.5
+            return $null
+        }
+        
+        return $selection
+    }
     
-    # ========== 38-49: MULTIMEDIA ==========
-    "38" = @{Name="GIMP"; ID="GIMP.GIMP"}
-    "39" = @{Name="Inkscape"; ID="Inkscape.Inkscape"}
-    "40" = @{Name="Krita"; ID="KritaFoundation.Krita"}
-    "41" = @{Name="Blender"; ID="BlenderFoundation.Blender"}
-    "42" = @{Name="Paint.NET"; ID="dotPDN.PaintDotNet"}
-    "43" = @{Name="HandBrake"; ID="HandBrake.HandBrake"}
-    "44" = @{Name="VLC Media Player"; ID="VideoLAN.VLC"}
-    "45" = @{Name="OBS Studio"; ID="OBSProject.OBSStudio"}
-    "46" = @{Name="Audacity"; ID="Audacity.Audacity"}
-    "47" = @{Name="Calibre"; ID="Calibre.Calibre"}
-    "48" = @{Name="K-Lite Codec Pack Basic"; ID="CodecGuide.K-LiteCodecPack.Basic"}
-    "49" = @{Name="Spotify"; ID="Spotify.Spotify"}
+    function Search-AllApps {
+        param($SearchTerm)
+        Clear-Host
+        Show-MainTitle
+        Write-Host "`n 🔍 BUSCANDO: '$SearchTerm'" -ForegroundColor $COLOR_MENU
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        
+        $results = @()
+        foreach ($catId in $categorias.Keys | Sort-Object {[int]$_}) {
+            $cat = $categorias[$catId]
+            foreach ($app in $cat.Apps) {
+                if ($app.Nombre -like "*$SearchTerm*") {
+                    $results += [PSCustomObject]@{
+                        Num = $app.Num
+                        Nombre = $app.Nombre
+                        Categoria = $cat.Nombre
+                        CatId = $catId
+                    }
+                }
+            }
+        }
+        
+        if ($results.Count -eq 0) {
+            Write-Host "`n   ❌ No se encontraron apps con '$SearchTerm'" -ForegroundColor $COLOR_DANGER
+            Pause-Enter "`n   ENTER"
+            return $null
+        }
+        
+        Write-Host "`n   📊 Se encontraron $($results.Count) resultados:`n" -ForegroundColor Cyan
+        
+        foreach ($res in $results) {
+            Write-Host "   [$($res.Num.ToString().PadLeft(3))] $($res.Nombre.PadRight(40)) ($($res.Categoria))" -ForegroundColor $COLOR_MENU
+        }
+        
+        Write-Host "`n ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        Write-Host " 💡 Selecciona los números para instalar (separados por comas o rangos)" -ForegroundColor $COLOR_ALERT
+        Write-Host " ❌ [X] Cancelar" -ForegroundColor $COLOR_DANGER
+        
+        $input = Read-Host "`n ``> SELECCIONE"
+        if ($input.ToUpper() -eq "X") { return $null }
+        
+        $selection = @()
+        $parts = $input -split ','
+        foreach($part in $parts){
+            $part = $part.Trim()
+            if($part -match '^(\d+)-(\d+)$'){
+                $start = [int]$matches[1]
+                $end = [int]$matches[2]
+                for($k=$start; $k -le $end; $k++){ $selection += $k.ToString() }
+            } elseif ($part -match '^\d+$') {
+                $selection += $part
+            }
+        }
+        
+        $validNums = $results | ForEach-Object { $_.Num.ToString() }
+        $selection = $selection | Where-Object { $_ -in $validNums }
+        
+        if ($selection.Count -eq 0) {
+            Write-Host "`n ❌ Selección inválida" -ForegroundColor $COLOR_DANGER
+            Start-Sleep -Seconds 1.5
+            return $null
+        }
+        
+        return $selection
+    }
     
-    # ========== 50-58: OFIMÁTICA ==========
-    "50" = @{Name="LibreOffice"; ID="TheDocumentFoundation.LibreOffice"}
-    "51" = @{Name="Microsoft 365"; ID="Microsoft.OfficeDeploymentTool"}
-    "52" = @{Name="Notion"; ID="Notion.Notion"}
-    "53" = @{Name="Obsidian"; ID="Obsidian.Obsidian"}
-    "54" = @{Name="Zotero"; ID="Zotero.Zotero"}
-    "55" = @{Name="Adobe Acrobat Reader"; ID="Adobe.Acrobat.Reader.64-bit"}
-    "56" = @{Name="Foxit PDF Reader"; ID="Foxit.FoxitReader"}
-    "57" = @{Name="SumatraPDF"; ID="SumatraPDF.SumatraPDF"}
-    "58" = @{Name="PDF24 Creator"; ID="PDF24.PDF24"}
-    "59" = @{Name="Typora Markdown Editor"; ID="Typora.Typora"}
+    # ============================================================
+    # MENÚ PRINCIPAL DEL KIT
+    # ============================================================
     
-    # ========== 60-68: REDES Y TERMINAL ==========
-    "60" = @{Name="Wireshark"; ID="WiresharkFoundation.Wireshark"}
-    "61" = @{Name="Nmap"; ID="Nmap.Nmap"}
-    "62" = @{Name="Advanced IP Scanner"; ID="Famatech.AdvancedIPScanner"}
-    "63" = @{Name="MobaXterm"; ID="Mobatek.MobaXterm"}
-    "64" = @{Name="Alacritty"; ID="Alacritty.Alacritty"}
-    "65" = @{Name="Windows Terminal"; ID="Microsoft.WindowsTerminal"}
-    "66" = @{Name="AnyDesk"; ID="AnyDesk.AnyDesk"}
-    "67" = @{Name="RustDesk"; ID="RustDesk.RustDesk"}
-    "68" = @{Name="TeamViewer"; ID="TeamViewer.TeamViewer"}
-    
-    # ========== 69-74: JUEGOS ==========
-    "69" = @{Name="Steam"; ID="Valve.Steam"}
-    "70" = @{Name="Epic Games Launcher"; ID="EpicGames.EpicGamesLauncher"}
-    "71" = @{Name="EA Desktop"; ID="ElectronicArts.EADesktop"}
-    "72" = @{Name="Ubisoft Connect"; ID="Ubisoft.Connect"}
-    "73" = @{Name="GOG Galaxy"; ID="GOG.Galaxy"}
-    "74" = @{Name="Parsec"; ID="Parsec.Parsec"}
-    
-    # ========== 75-79: VIRTUALIZACIÓN ==========
-    "75" = @{Name="Oracle VM VirtualBox"; ID="Oracle.VirtualBox"}
-    "76" = @{Name="VMware Workstation Player"; ID="VMware.WorkstationPlayer"}
-    "77" = @{Name="Raspberry Pi Imager"; ID="RaspberryPiFoundation.RaspberryPiImager"}
-    "78" = @{Name="WSL (Windows Subsystem Linux)"; ID="Microsoft.WSL"}
-    "79" = @{Name="PowerShell 7"; ID="Microsoft.PowerShell"}
-    
-    # ========== 80-87: RESPALDOS ==========
-    "80" = @{Name="Duplicati"; ID="Duplicati.Duplicati"}
-    "81" = @{Name="Nextcloud Desktop"; ID="Nextcloud.NextcloudDesktop"}
-    "82" = @{Name="Google Drive"; ID="Google.Drive"}
-    "83" = @{Name="Dropbox"; ID="Dropbox.Dropbox"}
-    "84" = @{Name="SyncThing"; ID="SyncThing.SyncThing"}
-    "85" = @{Name="Resilio Sync"; ID="Resilio.ResilioSync"}
-    "86" = @{Name="Rclone"; ID="Rclone.Rclone"}
-    "87" = @{Name="Proton Drive"; ID="ProtonTechnologies.ProtonDrive"}
-    
-    # ========== 88-90: VPN ==========
-    "88" = @{Name="ProtonVPN"; ID="ProtonTechnologies.ProtonVPN"}
-    "89" = @{Name="Windscribe VPN"; ID="Windscribe.Windscribe"}
-    "90" = @{Name="OpenVPN"; ID="OpenVPNTechnologies.OpenVPN"}
-    
-    # ========== 91-94: MONITOR ==========
-    "91" = @{Name="OpenHardwareMonitor"; ID="OpenHardwareMonitor.OpenHardwareMonitor"}
-    "92" = @{Name="Core Temp"; ID="CoreTemp.CoreTemp"}
-    "93" = @{Name="CrystalDiskInfo"; ID="CrystalDiskInfo.CrystalDiskInfo"}
-    "94" = @{Name="CrystalDiskMark"; ID="CrystalDiskMark.CrystalDiskMark"}
-    
-    # ========== 95-96: NOTAS ==========
-    "95" = @{Name="Simplenote"; ID="Simplenote.Simplenote"}
-    "96" = @{Name="Joplin"; ID="Joplin.Joplin"}
-    
-    # ========== 97-104: UTILIDADES AVANZADAS ==========
-    "97" = @{Name="Bulk Rename Utility"; ID="BulkRenameUtility.BulkRenameUtility"}
-    "98" = @{Name="AutoHotkey"; ID="AutoHotkey.AutoHotkey"}
-    "99" = @{Name="Espanso Text Expander"; ID="Espanso.Espanso"}
-    "100" = @{Name="Gsudo"; ID="Gsudo.Gsudo"}
-    "101" = @{Name="Nushell"; ID="Nushell.Nushell"}
-    "102" = @{Name="Fastfetch"; ID="Fastfetch.Fastfetch"}
-    "103" = @{Name="Monitorian"; ID="Monitorian.Monitorian"}
-    "104" = @{Name="qBittorrent"; ID="qBittorrent.qBittorrent"}
-    
-    # ========== 105-108: CLIENTES ==========
-    "105" = @{Name="Motrix Download Manager"; ID="Motrix.Motrix"}
-    "106" = @{Name="LocalSend"; ID="LocalSend.LocalSend"}
-    "107" = @{Name="KDE Connect"; ID="KDE.KDEConnect"}
-    "108" = @{Name="croc file transfer"; ID="Schollz.croc"}
-    
-    # ========== 109-112: LIMPIEZA ==========
-    "109" = @{Name="TreeSize Free"; ID="TreeSize.TreeSize"}
-    "110" = @{Name="WizTree"; ID="WizTree.WizTree"}
-    "111" = @{Name="DiskGenius"; ID="DiskGenius.DiskGenius"}
-    "112" = @{Name="Rainmeter"; ID="Rainmeter.Rainmeter"}
-    
-    # ========== 113-115: PERSONALIZACIÓN ==========
-    "113" = @{Name="f.lux"; ID="f.lux.f.lux"}
-    "114" = @{Name="Ditto Clipboard Manager"; ID="Ditto.Ditto"}
-    "115" = @{Name="CopyQ Clipboard Manager"; ID="CopyQ.CopyQ"}
-    
-    # ========== 116-117: EXTRAS ==========
-    "116" = @{Name="Power Automate Desktop"; ID="Microsoft.PowerAutomateDesktop"}
-    "117" = @{Name="Windows Terminal"; ID="Microsoft.WindowsTerminal"}
-	
-	# ========== UTILIDADES Y DESINSTALADORES ==========
-	"118" = @{Name="Geek Uninstaller"; ID="GeekUninstaller.GeekUninstaller"}
-	"119" = @{Name="TeraBox (Baidu)"; ID="Baidu.TeraBox"}
-}
-
-    # Resto del código de la función (el bucle while, el menú, etc.)
     $prefs = Get-Prefs
     $lastOpt = $null
     try { $lastOpt = $prefs.lastKitOption } catch { $lastOpt = $null }
 
     while($true){
         Clear-Host
-		Show-MainTitle
-        Write-Host "`n 📦 KIT POST FORMAT - INSTALACION INTELIGENTE (125 APPS)" -ForegroundColor $COLOR_PRIMARY
-        Write-Host ' 🧹 [0] LIMPIEZA DE BLOATWARE (CandyCrush, Netflix, etc.)'
-        Write-Host ' 🎮 [1] PERFIL GAMING (Steam, Discord, OBS, DirectX)'
-        Write-Host ' 🛠️ [2] PERFIL BASICO (Chrome, 7Zip, VLC, AnyDesk, Teams)'
-        Write-Host ' 📋 [3] SELECCION MANUAL (Listado Completo 125 apps)'
-        Write-Host ' 🔄 [4] ACTUALIZAR TODO EL SOFTWARE'
-        Write-Host ' 🗑️ [5] DESINSTALAR PROGRAMAS (Revo, BCUninstaller, Panel de Control)' -ForegroundColor $COLOR_MENU	
-        Write-Host "`n ⌨️ CONTROL" -ForegroundColor Gray
+        Show-MainTitle
+        Write-Host "`n 📦 KIT POST FORMAT - INSTALACION INTELIGENTE (440 APPS)" -ForegroundColor $COLOR_PRIMARY
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        Write-Host ""
+        
+		# Mostrar menú de categorías en 2 columnas (ordenado numéricamente)
+		$cols = 2
+		$catList = $categorias.Keys | Sort-Object {[int]$_}
+		for ($i = 0; $i -lt $catList.Count; $i += $cols) {
+			$row = ""
+			for ($j = 0; $j -lt $cols; $j++) {
+				if (($i + $j) -lt $catList.Count) {
+					$catId = $catList[$i + $j]
+					$cat = $categorias[$catId]
+					# 👇 CORREGIDO: usa PadLeft en lugar de PadRight
+					$row += "[$($catId.ToString().PadLeft(2))]`t$($cat.Nombre.PadRight(32))"
+					#                                       ↑↑
+					#                        DOS espacios después del corchete
+				}
+			}
+			Write-Host " $row" -ForegroundColor $COLOR_MENU
+		}
+        
+        Write-Host ""
+        Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+        Write-Host " 🎮 [P] PERFILES PREDEFINIDOS (Gaming, Básico, IA, Seguridad, Data, Media, Dev, Office)" -ForegroundColor Cyan
+        Write-Host " 🔄 [U] ACTUALIZAR TODO EL SOFTWARE" -ForegroundColor Yellow
+        Write-Host " 🗑️ [R] DESINSTALAR PROGRAMAS" -ForegroundColor Red
+        Write-Host " 🧹 [0] LIMPIEZA DE BLOATWARE" -ForegroundColor Magenta
+        Write-Host " 🔍 [B] BUSCAR APP (por nombre)" -ForegroundColor Green
+        Write-Host ""
+        Write-Host " ⌨️ CONTROL" -ForegroundColor Gray
         Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
-        Write-Host " ❌ [X] VOLVER" -ForegroundColor $COLOR_DANGER
+        Write-Host " ❌ [X] VOLVER AL MENÚ PRINCIPAL" -ForegroundColor $COLOR_DANGER
         
-        $opt = Read-MenuOption "`n ``> SELECCIONE" -Valid @("0","1","2","3","4","5","X")
+        $opt = Read-MenuOption "`n ``> SELECCIONE (número de categoría, P, U, R, 0, B, X)" -Valid @("0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","P","U","R","B","X")
         if($opt -eq "X"){break}
-        if(-not $opt){ continue }
-
-        $prefs.lastKitOption = $opt
-        Save-Prefs $prefs
-        Write-Log "KIT" "Selected option=$opt"
         
-        $selection = @()
-        switch ($opt) {
-            "0" {
-                Write-Host "`n [!] Eliminando Bloatware..." -ForegroundColor $COLOR_ALERT
-                $bloat = @("*CandyCrush*", "*Disney*", "*Netflix*", "*TikTok*", "*Instagram*")
-                foreach($b in $bloat){ Get-AppxPackage $b | Remove-AppxPackage -ErrorAction SilentlyContinue }
-                Pause-Enter " OK. ENTER"
-            }
-            "1" { $selection = "1","13","45","67","10" }  # Chrome, 7-Zip, VLC, AnyDesk, Teams
-            "2" { $selection = "70","6","45" }            # Steam, Discord, VLC
-            "3" {
-Clear-Host
-                Show-MainTitle
-                Write-Host "`n 📋 LISTADO MAESTRO (125 APPS) - PAGINADO + BUSCADOR" -ForegroundColor $COLOR_MENU
-                $sortedKeysAll = $apps.Keys | Sort-Object {[int]$_}
-                $filteredKeys = $sortedKeysAll
-                $searchText = ""
-                $appsPerPage = 40
-                $totalPages = [math]::Ceiling($filteredKeys.Count / $appsPerPage)
-                $currentPage = 1
-                $cols = 4
-
-               while ($true) {
-                    Clear-Host
-                    Show-MainTitle
-                    $totalFiltered = $filteredKeys.Count
-                    $totalPages = [math]::Ceiling($totalFiltered / $appsPerPage)
-                    if ($currentPage -gt $totalPages) { $currentPage = $totalPages }
-                    if ($currentPage -lt 1) { $currentPage = 1 }
-                    
-                    Write-Host "`n 📄 LISTADO MAESTRO - PÁGINA $currentPage DE $totalPages" -ForegroundColor $COLOR_MENU
-                    if ($searchText) { Write-Host " 🔍 BUSCANDO: '$searchText' (Total: $totalFiltered apps)" -ForegroundColor $COLOR_ALERT }
-                    Write-Host "`n 📦 APPS DISPONIBLES:" -ForegroundColor $COLOR_PRIMARY
-                    
-                    $startIdx = ($currentPage - 1) * $appsPerPage
-                    $endIdx = [math]::Min($startIdx + $appsPerPage, $totalFiltered) - 1
-                    
-                    $pageApps = @($filteredKeys[$startIdx..$endIdx])
-                    for ($i = 0; $i -lt $pageApps.Count; $i += $cols) {
-                        $row = ""
-                        for ($j = 0; $j -lt $cols; $j++) {
-                            if (($i + $j) -lt $pageApps.Count) {
-                                $key = $pageApps[$i + $j]
-                                $name = $apps[$key].Name
-                                if ($name.Length -gt 22) {
-                                    $displayName = $name.Substring(0, 19) + "..."
-                                } else {
-                                    $displayName = $name
-                                }
-                                $row += "[$($key.ToString().PadLeft(3))] $($displayName.PadRight(22))"
-                            }
-                        }
-                        Write-Host " $row"
-                    }
-                    
-					Write-Host "`n 🎮 CONTROLES:" -ForegroundColor $COLOR_ALERT
-                    Write-Host " 📄 [N] Siguiente página   ⬅️ [P] Página anterior   🎯 [G] Ir a página   🔍 [B] Buscar por nombre"
-                    Write-Host " 🔄 [R] Reiniciar búsqueda   ❌ [X] Cancelar   ✅ [ENTER] Continuar con selección" -ForegroundColor $COLOR_MENU                    
-                    $optPage = Read-Host "`n ``>"
-                    switch ($optPage.ToUpper()) {
-                        "N" { if ($currentPage -lt $totalPages) { $currentPage++ } else { Write-Host " Ya es la última página." -ForegroundColor $COLOR_DANGER; Start-Sleep -Seconds 1 } }
-                        "P" { if ($currentPage -gt 1) { $currentPage-- } else { Write-Host " Ya es la primera página." -ForegroundColor $COLOR_DANGER; Start-Sleep -Seconds 1 } }
-                        "G" {
-                            $pg = Read-Host " Número de página (1-$totalPages)"
-                            if ($pg -match '^\d+$' -and [int]$pg -ge 1 -and [int]$pg -le $totalPages) { $currentPage = [int]$pg }
-                            else { Write-Host " Número inválido." -ForegroundColor $COLOR_DANGER; Start-Sleep -Seconds 1 }
-                        }
-                        "B" {
-                            $searchText = Read-Host " INGRESE TEXTO A BUSCAR (nombre parcial)"
-                            if ($searchText) {
-                                $filteredKeys = @($sortedKeysAll | Where-Object { $apps[$_].Name -like "*$searchText*" })
-                                if ($filteredKeys.Count -eq 0) {
-                                    Write-Host " No se encontraron apps con '$searchText'." -ForegroundColor $COLOR_DANGER
-                                    Start-Sleep -Seconds 1
-                                    $filteredKeys = $sortedKeysAll
-                                    $searchText = ""
-                                } else {
-                                    $currentPage = 1
-                                }
-                            }
-                        }
-                        "R" {
-                            $filteredKeys = $sortedKeysAll
-                            $searchText = ""
-                            $currentPage = 1
-                            Write-Host " Búsqueda reiniciada." -ForegroundColor $COLOR_PRIMARY
-                            Start-Sleep -Seconds 1
-                        }
-                        "X" { $manual = "X"; break }
-                        default { break }
-                    }
-                    if ($optPage.ToUpper() -eq "X") { break }
-                    if ($optPage -eq "") { break }
-                }
-                
-                if ($optPage.ToUpper() -eq "X") { continue }
-                
-                Write-Host "`n CONSEJO: Puedes escribir rangos (ej: 1-10) o lista separada por comas (1,5,20)" -ForegroundColor $COLOR_ALERT
-                $manual = Read-Host "`n ``> INGRESE NUMEROS SEPARADOS POR COMA O RANGOS (X para cancelar)"
-                if($manual -eq "X"){ continue }
-                
-                $finalSelection = @()
-                $parts = $manual -split ','
-                foreach($part in $parts){
-                    $part = $part.Trim()
-                    if($part -match '^(\d+)-(\d+)$'){
-                        $start = [int]$matches[1]
-                        $end = [int]$matches[2]
-                        for($k=$start; $k -le $end; $k++){ $finalSelection += $k.ToString() }
-                    } else {
-                        $finalSelection += $part
-                    }
-                }
-                $selection = $finalSelection
-            }
-"4" { 
-    Clear-Host
-    Show-MainTitle
-    Write-Host "`n 🔄 ACTUALIZACIÓN INTELIGENTE DE SOFTWARE" -ForegroundColor $COLOR_MENU
-    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
-    
-    # 1. DETECTAR APPS DESACTUALIZADAS (WINGET)
-    $appsToUpdate = @()
-    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
-    
-    if ($wingetAvailable) {
-        Write-Host "`n 📡 Escaneando actualizaciones disponibles..." -ForegroundColor $COLOR_ALERT
+        # Limpieza de Bloatware
+        if($opt -eq "0") {
+            Write-Host "`n [!] Eliminando Bloatware..." -ForegroundColor $COLOR_ALERT
+            $bloat = @("*CandyCrush*", "*Disney*", "*Netflix*", "*TikTok*", "*Instagram*", "*Facebook*", "*Twitter*", "*Pandora*", "*Spotify*", "*LinkedIn*")
+            foreach($b in $bloat){ Get-AppxPackage $b | Remove-AppxPackage -ErrorAction SilentlyContinue }
+            Pause-Enter " OK. ENTER"
+            continue
+        }
         
-        # Obtener lista de actualizaciones sin basura
-        $upgradeList = winget upgrade --accept-source-agreements 2>$null | Where-Object { $_ -match "^\S" -and $_ -notmatch "Nombre|Versión|Disponible|ID" -and $_ -notmatch "^-" } | Select-Object -Skip 1
-        
-        if ($upgradeList -and $upgradeList.Count -gt 0) {
-            foreach ($line in $upgradeList) {
-                if ($line -match "^\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)") {
-                    $appsToUpdate += [PSCustomObject]@{
-                        ID = $matches[1]
-                        VersionActual = $matches[2]
-                        VersionNueva = $matches[3]
-                        Nombre = $matches[4] -replace "\s+", " "
-                    }
-                }
-            }
-        }
-    }
-    
-    # 2. CHOCOLATEY (opcional)
-    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
-    $chocoUpdates = @()
-    
-    if ($chocoAvailable) {
-        Write-Host " 📦 Escaneando Chocolatey..." -ForegroundColor $COLOR_ALERT
-        $chocoOut = choco outdated --limit-output 2>$null
-        if ($chocoOut) {
-            $chocoUpdates = $chocoOut -split "`n" | Where-Object { $_ -match "\|" } | ForEach-Object {
-                $parts = $_ -split "\|"
-                [PSCustomObject]@{
-                    Nombre = $parts[0]
-                    VersionActual = $parts[1]
-                    VersionNueva = $parts[2]
-                }
-            }
-        }
-    }
-    
-    # 3. MOSTAR RESUMEN DE LO QUE SE VA A ACTUALIZAR
-    Clear-Host
-    Show-MainTitle
-    Write-Host "`n 📋 APLICACIONES A ACTUALIZAR" -ForegroundColor $COLOR_MENU
-    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
-    
-    $totalUpdates = $appsToUpdate.Count + $chocoUpdates.Count
-    
-    if ($totalUpdates -eq 0) {
-        Write-Host "`n   ✅ ¡TODO ESTÁ ACTUALIZADO!" -ForegroundColor Green
-        Write-Host "   No se encontraron actualizaciones disponibles." -ForegroundColor Gray
-        Pause-Enter "`n   ENTER"
-        continue
-    }
-    
-    Write-Host "`n   📊 Se encontraron $totalUpdates actualizaciones:`n" -ForegroundColor Cyan
-    
-    # Mostrar Winget updates
-    if ($appsToUpdate.Count -gt 0) {
-        Write-Host "   🧊 WINGET ($($appsToUpdate.Count) actualizaciones):" -ForegroundColor Magenta
-        foreach ($app in $appsToUpdate) {
-            Write-Host "      • $($app.Nombre)" -ForegroundColor White
-            Write-Host "        📦 $($app.VersionActual) → $($app.VersionNueva)" -ForegroundColor Gray
-        }
-        Write-Host ""
-    }
-    
-    # Mostrar Choco updates
-    if ($chocoUpdates.Count -gt 0) {
-        Write-Host "   🍫 CHOCOLATEY ($($chocoUpdates.Count) actualizaciones):" -ForegroundColor Yellow
-        foreach ($app in $chocoUpdates) {
-            Write-Host "      • $($app.Nombre)" -ForegroundColor White
-            Write-Host "        📦 $($app.VersionActual) → $($app.VersionNueva)" -ForegroundColor Gray
-        }
-        Write-Host ""
-    }
-    
-    $confirm = Read-Host "   ❓ ¿Deseas actualizar todo? (S/N)"
-    if ($confirm -ne "S" -and $confirm -ne "s") {
-        Write-Host "   ❌ Actualización cancelada." -ForegroundColor $COLOR_DANGER
-        Pause-Enter "   ENTER"
-        continue
-    }
-    
-    # 4. BARRA DE PROGRESO ANIMADA
-    Clear-Host
-    Show-MainTitle
-    Write-Host "`n 🔄 ACTUALIZANDO SOFTWARE..." -ForegroundColor $COLOR_MENU
-    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
-    Write-Host ""
-    
-    $actualizados = 0
-    $fallidos = 0
-    
-    # Función de barra de progreso
-    function Show-ProgressBar {
-        param([int]$Current, [int]$Total, [string]$Message)
-        $percent = [math]::Round(($Current / $Total) * 100)
-        $barLength = 40
-        $filled = [math]::Round($barLength * $percent / 100)
-        $bar = "█" * $filled + "░" * ($barLength - $filled)
-        Write-Host "`r   📦 [$bar] $percent% - $Message" -ForegroundColor Cyan -NoNewline
-    }
-    
-    # ACTUALIZAR WINGET
-    if ($appsToUpdate.Count -gt 0) {
-        Write-Host "   🧊 Actualizando con Winget...`n" -ForegroundColor Magenta
-        $i = 0
-        foreach ($app in $appsToUpdate) {
-            $i++
-            Show-ProgressBar -Current $i -Total $appsToUpdate.Count -Message "$($app.Nombre) - $($app.VersionActual) → $($app.VersionNueva)"
+        # Perfiles predefinidos
+        if($opt -eq "P") {
+            Clear-Host
+            Show-MainTitle
+            Write-Host "`n 🎮 PERFILES PREDEFINIDOS" -ForegroundColor $COLOR_MENU
+            Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+            Write-Host " 🎮 [1] PERFIL GAMING (Steam, Discord, OBS, 7-Zip, Epic Games)"
+            Write-Host " 🛠️ [2] PERFIL BASICO (Chrome, 7-Zip, VLC, AnyDesk, Teams, WhatsApp)"
+            Write-Host " 🤖 [3] PERFIL IA/ML (LM Studio, Ollama, Continue, Codeium, GPT4All)"
+            Write-Host " 🔒 [4] PERFIL SEGURIDAD (VeraCrypt, KeePassXC, ProtonVPN, Wireshark)"
+            Write-Host " 📊 [5] PERFIL DATA SCIENCE (Anaconda, RStudio, DBeaver, Power BI)"
+            Write-Host " 🎬 [6] PERFIL MEDIA SERVER (Plex, Sonarr, Radarr, Jellyfin, qBittorrent)"
+            Write-Host " 💻 [7] PERFIL DESARROLLADOR (VSCode, Git, Docker, Node.js, Python, Postman)"
+            Write-Host " 📄 [8] PERFIL OFIMATICA (LibreOffice, Adobe Reader, Notion, Obsidian)"
+            Write-Host " 🌐 [9] PERFIL REDES (Wireshark, Nmap, AnyDesk, TeamViewer, Windows Terminal)"
+            Write-Host " 🎨 [10] PERFIL PERSONALIZACION (f.lux, Ditto, Wallpaper Engine, Rainmeter)"
+            Write-Host "`n ❌ [X] VOLVER"
             
-            # Ejecutar winget update silenciosamente
-            $result = winget upgrade --id $app.ID --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
+            $perfil = Read-MenuOption "`n ``> SELECCIONE PERFIL" -Valid @("1","2","3","4","5","6","7","8","9","10","X")
+            if($perfil -eq "X"){ continue }
             
-            if ($LASTEXITCODE -eq 0) {
-                $actualizados++
-            } else {
-                $fallidos++
+            $selection = @()
+            switch ($perfil) {
+                "1" { $selection = "141","21","99","41","142" }  # Steam, Discord, OBS, 7Zip, Epic
+                "2" { $selection = "1","41","87","127","25","27" }  # Chrome, 7Zip, VLC, AnyDesk, Teams, WhatsApp
+                "3" { $selection = "341","342","345","348","343" }  # IA Profile
+                "4" { $selection = "361","362","201","121" }  # Security
+                "5" { $selection = "381","384","78","387" }  # Data Science
+                "6" { $selection = "401","404","405","402","268" }  # Media Server
+                "7" { $selection = "61","62","64","66","67","75" }  # Developer
+                "8" { $selection = "101","106","103","104" }  # Office
+                "9" { $selection = "121","122","127","129","126" }  # Networking
+                "10" { $selection = "321","322","324","304" }  # Personalization
             }
-        }
-        Write-Host "`n"
-    }
-    
-    # ACTUALIZAR CHOCOLATEY
-    if ($chocoUpdates.Count -gt 0) {
-        Write-Host "   🍫 Actualizando con Chocolatey...`n" -ForegroundColor Yellow
-        $i = 0
-        foreach ($app in $chocoUpdates) {
-            $i++
-            Show-ProgressBar -Current $i -Total $chocoUpdates.Count -Message "$($app.Nombre) - $($app.VersionActual) → $($app.VersionNueva)"
             
-            # Ejecutar choco update silenciosamente
-            $result = choco upgrade $app.Nombre -y --no-progress 2>&1 | Out-Null
-            
-            if ($LASTEXITCODE -eq 0) {
-                $actualizados++
-            } else {
-                $fallidos++
-            }
-        }
-        Write-Host "`n"
-    }
-    
-    # 5. RESUMEN FINAL
-    Write-Host "`n ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
-    Write-Host " 📊 RESUMEN DE ACTUALIZACIÓN" -ForegroundColor Cyan
-    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "   ✅ Actualizados: $actualizados" -ForegroundColor Green
-    Write-Host "   ❌ Fallidos:     $fallidos" -ForegroundColor $(if ($fallidos -gt 0) { "Red" } else { "Green" })
-    Write-Host "   📦 Total:        $totalUpdates" -ForegroundColor Gray
-    Write-Host ""
-    
-    if ($fallidos -gt 0) {
-        Write-Host "   💡 Los fallos pueden deberse a:" -ForegroundColor $COLOR_ALERT
-        Write-Host "      • Aplicación en uso (ciérrala y reintenta)" -ForegroundColor Gray
-        Write-Host "      • Requiere reinicio del sistema" -ForegroundColor Gray
-        Write-Host "      • No disponible en el repositorio" -ForegroundColor Gray
-    }
-    
-    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
-    
-    Write-Log "KIT" "UpdateSummary Success=$actualizados Errors=$fallidos Total=$totalUpdates"
-    Pause-Enter "`n   ENTER"
-    continue
-}
-
-            "5" {
-			while ($true) {
-               Clear-Host
-               Show-MainTitle
-				Write-Host "`n 🗑️ DESINSTALACIÓN DE PROGRAMAS" -ForegroundColor $COLOR_MENU
-               Write-Host " 🖥️ [1] PANEL DE CONTROL (appwiz.cpl) - Gráfico nativo" -ForegroundColor $COLOR_MENU
-               Write-Host " ⚡ [2] WINGET UNINSTALL - Código nativo (rápido)" -ForegroundColor $COLOR_MENU
-               Write-Host " 🔧 [3] REVO UNINSTALLER - App gráfica avanzada" -ForegroundColor $COLOR_MENU
-               Write-Host " 🧹 [4] BCUNINSTALLER - Bulk Crap Uninstaller" -ForegroundColor $COLOR_MENU
-               Write-Host "`n ❌ [X] VOLVER AL KIT" -ForegroundColor $COLOR_DANGER
-               
-               $subOpt = Read-Host "`n 🔽 > SELECCIONE"
-               
-               switch ($subOpt.ToUpper()) {
-                   "1" {
-                       Start-Process "appwiz.cpl"
-                       Pause-Enter " ENTER después de cerrar"
-                       continue
-                   }
-                   "2" {
-                       Write-Host "`n [+] LISTA DE PROGRAMAS INSTALADOS:" -ForegroundColor $COLOR_PRIMARY
-                       winget list
-                       $app = Read-Host "`n NOMBRE EXACTO DEL PROGRAMA A DESINSTALAR"
-                       if ($app) {
-                           Write-Host " [+] Desinstalando $app..." -ForegroundColor Yellow
-                           winget uninstall "$app" --silent
-                           if ($LASTEXITCODE -eq 0) {
-                               Write-Host " [✔] Desinstalación completada" -ForegroundColor Green
-                           } else {
-                               Write-Host " [✘] Error. Prueba con la opción 1 o 3." -ForegroundColor Red
-                           }
-                       }
-                       Pause-Enter " ENTER"
-                       continue
-                   }
-                   "3" {
-                       $installed = Get-Command revo -ErrorAction SilentlyContinue
-                       if (-not $installed) {
-                           Write-Host "`n [+] Instalando Revo Uninstaller..." -ForegroundColor Yellow
-                           winget install RevoUninstaller.RevoUninstaller --silent
-                           Start-Sleep -Seconds 5
-                           Write-Host " [✔] Revo instalado." -ForegroundColor Green
-                       }
-                       Write-Host "`n [+] Abre Revo Uninstaller manualmente desde el menú inicio." -ForegroundColor Yellow
-                       Pause-Enter " ENTER después de cerrar Revo"
-                       continue
-                   }
-                   "4" {
-                       $installed = Get-Command bcuninstaller -ErrorAction SilentlyContinue
-                       if (-not $installed) {
-                           Write-Host "`n [+] Instalando Bulk Crap Uninstaller..." -ForegroundColor Yellow
-                           winget install Klocman.BulkCrapUninstaller --silent
-                           Start-Sleep -Seconds 5
-                           Write-Host " [✔] BCUninstaller instalado." -ForegroundColor Green
-                       }
-                       Write-Host "`n [+] Abre BCUninstaller manualmente desde el menú inicio." -ForegroundColor Yellow
-                       Pause-Enter " ENTER después de cerrar BCUninstaller"
-                       continue
-                   }
-                   "X" { break }
-                   default {
-                       Write-Host " Opción no válida" -ForegroundColor Red
-                       Start-Sleep -Seconds 1
-                   }
-               }
-               if ($subOpt.ToUpper() -eq "X") { break }
-           }
-           continue
-       }		
-               }
-       
-if($selection.Count -gt 0){
+            # Instalar selección
             $results = @()
             $successCount = 0
             $errorCount = 0
             
             foreach($item in $selection){
-                if($apps.ContainsKey($item)){
-                    $res = Invoke-SmartInstall -AppID $apps[$item].ID -AppName $apps[$item].Name
-                    if($res -ne "OK" -and $res -notlike "MANUAL|*"){
-                        Write-Host " [!] Reintentando: $($apps[$item].Name)" -ForegroundColor $COLOR_ALERT
-                        Write-Log "KIT" "Retry app=$($apps[$item].Name) id=$($apps[$item].ID)"
-                        $res = Invoke-SmartInstall -AppID $apps[$item].ID -AppName $apps[$item].Name
+                $found = $false
+                foreach($cat in $categorias.Values) {
+                    $app = $cat.Apps | Where-Object { $_.Num -eq [int]$item }
+                    if($app) {
+                        $res = Invoke-SmartInstall -AppID $app.ID -AppName $app.Nombre
+                        if($res -ne "OK" -and $res -notlike "MANUAL|*"){
+                            $res = Invoke-SmartInstall -AppID $app.ID -AppName $app.Nombre
+                        }
+                        if ($res -like "MANUAL|*") {
+                            $url = ($res -split "\|")[1]
+                            $results += "[ ERROR ] $($app.Nombre)`n   → Descárgala manualmente desde: $url"
+                            $errorCount++
+                        } elseif ($res -eq "OK") {
+                            $results += "[ OK ] $($app.Nombre)"
+                            $successCount++
+                        } else {
+                            $results += "[ ERROR ] $($app.Nombre)"
+                            $errorCount++
+                        }
+                        $found = $true
+                        break
                     }
-                    
-                    if ($res -like "MANUAL|*") {
-                        $url = ($res -split "\|")[1]
-                        $results += "[ ERROR ] $($apps[$item].Name)`n   → Descárgala manualmente desde: $url"
-                        $errorCount++
-                    } elseif ($res -eq "OK") {
-                        $results += "[ OK ] $($apps[$item].Name)"
-                        $successCount++
-                    } else {
-                        $results += "[ ERROR ] $($apps[$item].Name)"
-                        $errorCount++
-                    }
-                    
-                    Write-Log "KIT" "Install app=$($apps[$item].Name) result=$res"
-                } else {
-                    Write-Host " [!] Número inválido: $item" -ForegroundColor $COLOR_DANGER
+                }
+                if(-not $found){
+                    $results += "[ ERROR ] App no encontrada: $item"
+                    $errorCount++
                 }
             }
             
-            # ============================================================
-            # RESUMEN FINAL CON ESTADO DE WINGET
-            # ============================================================
             Show-MainTitle
-            Write-Host "`n══════════════════════════��════════════════════════════════════" -ForegroundColor Cyan
+            Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
             Write-Host " 📊 RESUMEN DE INSTALACIÓN" -ForegroundColor Cyan
             Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
             $results | ForEach-Object { Write-Host " $_" }
-            
             Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-            Write-Host " ESTADÍSTICAS:" -ForegroundColor Yellow
-            Write-Host "   ✅ Instaladas exitosamente: $successCount" -ForegroundColor Green
-            Write-Host "   ❌ Errores/Fallidas: $errorCount" -ForegroundColor Red
-            Write-Host "   📦 Total procesadas: $($selection.Count)" -ForegroundColor Gray
+            Write-Host "   ✅ Exitosas: $successCount  |  ❌ Fallidas: $errorCount" -ForegroundColor Yellow
+            Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+            Pause-Enter "`n PRESIONE ENTER PARA CONTINUAR"
+            continue
+        }
+        
+        # Actualizar software (mismo código que antes)
+        if($opt -eq "U") {
+            Clear-Host
+            Show-MainTitle
+            Write-Host "`n 🔄 ACTUALIZACIÓN INTELIGENTE DE SOFTWARE" -ForegroundColor $COLOR_MENU
+            Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
             
-            # Verificar estado final de winget
-            $wingetFinal = Get-Command winget -ErrorAction SilentlyContinue
-            if ($wingetFinal) {
-                $versionFinal = (winget --version 2>&1) -replace 'v', ''
-                Write-Host "`n   🟢 Estado de winget: FUNCIONAL (v$versionFinal)" -ForegroundColor Green
-            } else {
-                Write-Host "`n   🔴 Estado de winget: NO DISPONIBLE" -ForegroundColor Red
+            $appsToUpdate = @()
+            $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
+            
+            if ($wingetAvailable) {
+                Write-Host "`n 📡 Escaneando actualizaciones disponibles..." -ForegroundColor $COLOR_ALERT
+                $upgradeList = winget upgrade --accept-source-agreements 2>$null | Where-Object { $_ -match "^\S" -and $_ -notmatch "Nombre|Versión|Disponible|ID" -and $_ -notmatch "^-" } | Select-Object -Skip 1
+                
+                if ($upgradeList -and $upgradeList.Count -gt 0) {
+                    foreach ($line in $upgradeList) {
+                        if ($line -match "^\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)") {
+                            $appsToUpdate += [PSCustomObject]@{
+                                ID = $matches[1]
+                                VersionActual = $matches[2]
+                                VersionNueva = $matches[3]
+                                Nombre = $matches[4] -replace "\s+", " "
+                            }
+                        }
+                    }
+                }
             }
             
-            Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+            if ($appsToUpdate.Count -eq 0) {
+                Write-Host "`n   ✅ ¡TODO ESTÁ ACTUALIZADO!" -ForegroundColor Green
+                Pause-Enter "`n   ENTER"
+                continue
+            }
             
-            # Añadir log de resumen
-            Write-Log "KIT" "InstallSummary Success=$successCount Errors=$errorCount Total=$($selection.Count)"
+            Write-Host "`n   📊 Se encontraron $($appsToUpdate.Count) actualizaciones:`n" -ForegroundColor Cyan
+            foreach ($app in $appsToUpdate) {
+                Write-Host "      • $($app.Nombre)" -ForegroundColor White
+                Write-Host "        📦 $($app.VersionActual) → $($app.VersionNueva)" -ForegroundColor Gray
+            }
             
-            Pause-Enter "`n PRESIONE ENTER PARA LIMPIAR Y CONTINUAR"
+            $confirm = Read-Host "`n   ❓ ¿Deseas actualizar todo? (S/N)"
+            if ($confirm -ne "S") {
+                Write-Host "   ❌ Actualización cancelada." -ForegroundColor $COLOR_DANGER
+                Pause-Enter "   ENTER"
+                continue
+            }
+            
+            $actualizados = 0
+            $fallidos = 0
+            
+            foreach ($app in $appsToUpdate) {
+                Write-Host "   📦 Actualizando $($app.Nombre)..." -ForegroundColor Yellow
+                winget upgrade --id $app.ID --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) { $actualizados++ } else { $fallidos++ }
+            }
+            
+            Write-Host "`n   ✅ Actualizados: $actualizados  |  ❌ Fallidos: $fallidos" -ForegroundColor Cyan
+            Write-Log "KIT" "UpdateSummary Success=$actualizados Errors=$fallidos Total=$($appsToUpdate.Count)"
+            Pause-Enter "`n   ENTER"
+            continue
+        }
+        
+        # Desinstalar programas (mismo código que antes)
+        if($opt -eq "R") {
+            while ($true) {
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n 🗑️ DESINSTALACIÓN DE PROGRAMAS" -ForegroundColor $COLOR_MENU
+                Write-Host " 🖥️ [1] PANEL DE CONTROL (appwiz.cpl) - Gráfico nativo" -ForegroundColor $COLOR_MENU
+                Write-Host " ⚡ [2] WINGET UNINSTALL - Código nativo (rápido)" -ForegroundColor $COLOR_MENU
+                Write-Host " 🔧 [3] REVO UNINSTALLER - App gráfica avanzada" -ForegroundColor $COLOR_MENU
+                Write-Host " 🧹 [4] BCUNINSTALLER - Bulk Crap Uninstaller" -ForegroundColor $COLOR_MENU
+                Write-Host "`n ❌ [X] VOLVER AL KIT" -ForegroundColor $COLOR_DANGER
+                
+                $subOpt = Read-Host "`n 🔽 > SELECCIONE"
+                
+                switch ($subOpt.ToUpper()) {
+                    "1" { Start-Process "appwiz.cpl"; Pause-Enter " ENTER después de cerrar"; continue }
+                    "2" { 
+                        Write-Host "`n [+] LISTA DE PROGRAMAS INSTALADOS:" -ForegroundColor $COLOR_PRIMARY
+                        winget list
+                        $app = Read-Host "`n NOMBRE EXACTO DEL PROGRAMA A DESINSTALAR"
+                        if ($app) {
+                            Write-Host " [+] Desinstalando $app..." -ForegroundColor Yellow
+                            winget uninstall "$app" --silent
+                            if ($LASTEXITCODE -eq 0) {
+                                Write-Host " [✔] Desinstalación completada" -ForegroundColor Green
+                            } else {
+                                Write-Host " [✘] Error. Prueba con la opción 1 o 3." -ForegroundColor Red
+                            }
+                        }
+                        Pause-Enter " ENTER"
+                        continue
+                    }
+                    "3" {
+                        $installed = Get-Command revo -ErrorAction SilentlyContinue
+                        if (-not $installed) {
+                            Write-Host "`n [+] Instalando Revo Uninstaller..." -ForegroundColor Yellow
+                            winget install RevoUninstaller.RevoUninstaller --silent
+                            Start-Sleep -Seconds 5
+                            Write-Host " [✔] Revo instalado." -ForegroundColor Green
+                        }
+                        Write-Host "`n [+] Abre Revo Uninstaller manualmente desde el menú inicio." -ForegroundColor Yellow
+                        Pause-Enter " ENTER después de cerrar Revo"
+                        continue
+                    }
+                    "4" {
+                        $installed = Get-Command bcuninstaller -ErrorAction SilentlyContinue
+                        if (-not $installed) {
+                            Write-Host "`n [+] Instalando Bulk Crap Uninstaller..." -ForegroundColor Yellow
+                            winget install Klocman.BulkCrapUninstaller --silent
+                            Start-Sleep -Seconds 5
+                            Write-Host " [✔] BCUninstaller instalado." -ForegroundColor Green
+                        }
+                        Write-Host "`n [+] Abre BCUninstaller manualmente desde el menú inicio." -ForegroundColor Yellow
+                        Pause-Enter " ENTER después de cerrar BCUninstaller"
+                        continue
+                    }
+                    "X" { break }
+                    default { Write-Host " Opción no válida" -ForegroundColor Red; Start-Sleep -Seconds 1 }
+                }
+                if ($subOpt.ToUpper() -eq "X") { break }
+            }
+            continue
+        }
+        
+        # Buscar app
+        if($opt -eq "B") {
+            $searchTerm = Read-Host "`n 🔍 INGRESE NOMBRE DE LA APP A BUSCAR"
+            if ($searchTerm) {
+                $selection = Search-AllApps -SearchTerm $searchTerm
+                if ($selection -and $selection.Count -gt 0) {
+                    $results = @()
+                    $successCount = 0
+                    $errorCount = 0
+                    
+                    foreach($item in $selection){
+                        $found = $false
+                        foreach($cat in $categorias.Values) {
+                            $app = $cat.Apps | Where-Object { $_.Num -eq [int]$item }
+                            if($app) {
+                                $res = Invoke-SmartInstall -AppID $app.ID -AppName $app.Nombre
+                                if($res -ne "OK" -and $res -notlike "MANUAL|*"){
+                                    $res = Invoke-SmartInstall -AppID $app.ID -AppName $app.Nombre
+                                }
+                                if ($res -like "MANUAL|*") {
+                                    $url = ($res -split "\|")[1]
+                                    $results += "[ ERROR ] $($app.Nombre)`n   → Descárgala manualmente desde: $url"
+                                    $errorCount++
+                                } elseif ($res -eq "OK") {
+                                    $results += "[ OK ] $($app.Nombre)"
+                                    $successCount++
+                                } else {
+                                    $results += "[ ERROR ] $($app.Nombre)"
+                                    $errorCount++
+                                }
+                                $found = $true
+                                break
+                            }
+                        }
+                        if(-not $found){
+                            $results += "[ ERROR ] App no encontrada: $item"
+                            $errorCount++
+                        }
+                    }
+                    
+                    Show-MainTitle
+                    Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+                    Write-Host " 📊 RESUMEN DE INSTALACIÓN" -ForegroundColor Cyan
+                    Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+                    $results | ForEach-Object { Write-Host " $_" }
+                    Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+                    Write-Host "   ✅ Exitosas: $successCount  |  ❌ Fallidas: $errorCount" -ForegroundColor Yellow
+                    Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+                    
+                    $wingetFinal = Get-Command winget -ErrorAction SilentlyContinue
+                    if ($wingetFinal) {
+                        $versionFinal = (winget --version 2>&1) -replace 'v', ''
+                        Write-Host "`n   🟢 Estado de winget: FUNCIONAL (v$versionFinal)" -ForegroundColor Green
+                    } else {
+                        Write-Host "`n   🔴 Estado de winget: NO DISPONIBLE" -ForegroundColor Red
+                    }
+                    
+                    Write-Log "KIT" "InstallSummary Success=$successCount Errors=$errorCount Total=$($selection.Count)"
+                    Pause-Enter "`n PRESIONE ENTER PARA CONTINUAR"
+                }
+            }
+            continue
+        }
+        
+        # Selección por categoría
+        if ($categorias.ContainsKey($opt)) {
+            $selection = Show-CategoryApps -CatId $opt
+            
+            if ($selection -eq "BUSCAR") {
+                $searchTerm = Read-Host "`n 🔍 INGRESE NOMBRE DE LA APP A BUSCAR"
+                if ($searchTerm) {
+                    $selection = Search-AllApps -SearchTerm $searchTerm
+                }
+            }
+            
+            if ($selection -and $selection.Count -gt 0) {
+                $results = @()
+                $successCount = 0
+                $errorCount = 0
+                
+                foreach($item in $selection){
+                    $found = $false
+                    foreach($cat in $categorias.Values) {
+                        $app = $cat.Apps | Where-Object { $_.Num -eq [int]$item }
+                        if($app) {
+                            Write-Host "`n [!] INSTALANDO: $($app.Nombre)..." -ForegroundColor $COLOR_MENU
+                            $res = Invoke-SmartInstall -AppID $app.ID -AppName $app.Nombre
+                            if($res -ne "OK" -and $res -notlike "MANUAL|*"){
+                                Write-Host " [!] Reintentando: $($app.Nombre)" -ForegroundColor $COLOR_ALERT
+                                $res = Invoke-SmartInstall -AppID $app.ID -AppName $app.Nombre
+                            }
+                            
+                            if ($res -like "MANUAL|*") {
+                                $url = ($res -split "\|")[1]
+                                $results += "[ ERROR ] $($app.Nombre)`n   → Descárgala manualmente desde: $url"
+                                $errorCount++
+                            } elseif ($res -eq "OK") {
+                                $results += "[ OK ] $($app.Nombre)"
+                                $successCount++
+                            } else {
+                                $results += "[ ERROR ] $($app.Nombre)"
+                                $errorCount++
+                            }
+                            $found = $true
+                            break
+                        }
+                    }
+                    if(-not $found){
+                        $results += "[ ERROR ] App no encontrada: $item"
+                        $errorCount++
+                    }
+                }
+                
+                Show-MainTitle
+                Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+                Write-Host " 📊 RESUMEN DE INSTALACIÓN" -ForegroundColor Cyan
+                Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+                $results | ForEach-Object { Write-Host " $_" }
+                Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+                Write-Host "   ✅ Exitosas: $successCount  |  ❌ Fallidas: $errorCount" -ForegroundColor Yellow
+                Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+                
+                $wingetFinal = Get-Command winget -ErrorAction SilentlyContinue
+                if ($wingetFinal) {
+                    $versionFinal = (winget --version 2>&1) -replace 'v', ''
+                    Write-Host "`n   🟢 Estado de winget: FUNCIONAL (v$versionFinal)" -ForegroundColor Green
+                } else {
+                    Write-Host "`n   🔴 Estado de winget: NO DISPONIBLE" -ForegroundColor Red
+                }
+                
+                Write-Log "KIT" "InstallSummary Success=$successCount Errors=$errorCount Total=$($selection.Count)"
+                Pause-Enter "`n PRESIONE ENTER PARA CONTINUAR"
+            }
         }
     }
 }
