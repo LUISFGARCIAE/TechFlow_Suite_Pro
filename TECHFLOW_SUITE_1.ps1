@@ -2808,23 +2808,24 @@ function Show-LiveMonitor {
 # ============================================================
 function Invoke-MassGraveIntegrated {
     Show-MainTitle
-    Write-Host "`n ACTIVACIÓN DE WINDOWS/OFFICE (MASSGRAVE)" -ForegroundColor $COLOR_MENU
-    Write-Host " Este proceso ejecutará MassGrave directamente desde la fuente oficial." -ForegroundColor $COLOR_PRIMARY
+    Write-Host "`n ACTIVACIÓN DE WINDOWS/OFFICE" -ForegroundColor $COLOR_MENU
+    Write-Host " Este proceso ejecutará directamente desde la fuente oficial." -ForegroundColor $COLOR_PRIMARY
     Write-Host " Se abrirá una nueva ventana de PowerShell con el proceso." -ForegroundColor $COLOR_ALERT
     
-    if (-not (Confirm-Critical "EJECUTAR MASSGRAVE" "ACTIVAR")) { return }
+    if (-not (Confirm-Critical "EJECUTAR" "ACTIVAR")) { return }
     
-    Write-Host "`n[+] Ejecutando MassGrave desde get.activated.win..." -ForegroundColor $COLOR_PRIMARY
+    Write-Host "`n[+] Ejecutando" -ForegroundColor $COLOR_PRIMARY
     
     # Ejecución directa sin guardar archivos
     $scriptBlock = {
-        irm https://get.activated.win | iex
+    #    irm https://get.activated.win | iex
+		irm "https://raw.githubusercontent.com/Hellowen6060/Office-AIO-FULL-1.0/refs/heads/main/MenuGIT.ps1" | iex	
     }
     
     # Lanzar en ventana nueva con permisos de admin
     Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$scriptBlock`"" -Verb RunAs
     
-    Write-Host "`n[✔] MassGrave ejecutado." -ForegroundColor Green
+    Write-Host "`n[✔]  Ejecutado Instalador." -ForegroundColor Green
     Write-Host "     Revisa la nueva ventana que se abrió y sigue las instrucciones." -ForegroundColor $COLOR_ALERT
     Pause-Enter "`n PRESIONE ENTER CUANDO TERMINE"
 }
@@ -4890,9 +4891,9 @@ while ($true) {
     if ($Global:MenuHorizontal) {
 		Write-Host "    💾 [A]  BACKUP TOTAL             🧹 [E]  OPTIMIZAR TEMP           📦 [I]  KIT POST FORMAT" 		-ForegroundColor Green
         Write-Host "    📀 [B]  RESTORE TOTAL            🛠️ [F]  WIN UTIL TITUS           👥 [J]  GESTION USUARIOS" 		-ForegroundColor Green
-        Write-Host "    🔧 [C]  GESTION DRIVERS          🔑 [G]  MASSGRAVE ACT            🛠️ [K]  SOPORTE TECNICO PRO" 	-ForegroundColor Green
-        Write-Host "    🧹 [D]  PURGA Y FORMATEO         📦 [H]  GESTION PAQUETES PRO     🚀 [L]  BYPASS WINDOWS 11" 	-ForegroundColor Green
-        Write-Host '    🌐 [M]  RED Y REPARACION         💾 [N]  MANTENIM DISCO           📊 [O]  MONITOR EN VIVO (PRO)' -ForegroundColor Green
+        Write-Host "    🔧 [C]  GESTION DRIVERS          🔑 [G]  Microsoft Office AIO     🛠️ [K]  SOPORTE TECNICO PRO" 	-ForegroundColor Green
+        Write-Host "    🧹 [D]  PURGA Y FORMATEO         📦 [H]  GESTION PAQUETES PRO     🚀 [L]  BYPASS WINDOWS 11" 	 	-ForegroundColor Green
+        Write-Host '    🌐 [M]  RED Y REPARACION         💾 [N]  MANTENIM DISCO           📊 [O]  MONITOR EN VIVO (PRO)'	 -ForegroundColor Green
         Write-Host '    🛡️ [P]  WINDOWS DEFENDER TOTAL   ⚡ [Q]  AUTO-FLOW (EXPRESS)      🛠️ [U]  SYSINTERNALS KIT' 		-ForegroundColor Green
 		Write-Host '    🖥️ [T]  ESCRITORIO REMOTO        🔐 [Y]  GENERADOR CONTRASEÑAS    🎵 [Z]  CENTRO DESCARGAS (yt-dlp)	 ' -ForegroundColor Green	
          } else {
@@ -4902,7 +4903,7 @@ while ($true) {
              Write-Host "    🧹 [D] PURGA Y FORMATEO"
              Write-Host "    🧹 [E] OPTIMIZAR TEMP"
              Write-Host "    🛠️ [F] WIN UTIL TITUS"
-             Write-Host "    🔑 [G] MASSGRAVE ACT"
+             Write-Host "    🔑 [G] Microsoft Office AIO"
              Write-Host "    📦 [H] GESTION PAQUETES PRO"
              Write-Host "    📦 [I] KIT POST FORMAT"
              Write-Host "    👥 [J] GESTION USUARIOS"
@@ -4915,8 +4916,8 @@ while ($true) {
              Write-Host "    ⚡ [Q] AUTO-FLOW (MANTENIMIENTO EXPRESS)"
              Write-Host "    🖥️ [T] ESCRITORIO REMOTO"
              Write-Host "    🛠️ [U] SYSINTERNALS KIT (11 herramientas)"
-             Write-Host "	 🔐 [Y]  GENERADOR CONTRASEÑAS"
-			 Write-Host "	 🎵 [Z]  CENTRO DESCARGAS (yt-dlp)"
+             Write-Host "	 🔐 [Y] GENERADOR CONTRASEÑAS"
+			 Write-Host "	 🎵 [Z] CENTRO DESCARGAS (yt-dlp)"
          }
 	Write-Host "`n ⚙️ CONFIGURACION Y VISTA" -ForegroundColor Gray
     Write-Host "  -----------------------------------------------------------------------------" -ForegroundColor $COLOR_MENU
