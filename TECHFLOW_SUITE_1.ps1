@@ -184,10 +184,10 @@ try {
     $latestRelease = Invoke-RestMethod -Uri $apiUrl -ErrorAction SilentlyContinue
     $latestVersion = $latestRelease.tag_name -replace 'v', ''
     
-    if ($latestVersion -and ($latestVersion -ne "5.9")) {
+    if ($latestVersion -and ($latestVersion -ne "6.0")) {
         Write-Host " $LINEA" -ForegroundColor Yellow
         Write-Host "   🚀 ¡NUEVA VERSIÓN DISPONIBLE!" -ForegroundColor Yellow
-        Write-Host "   📦 Actual: v5.9  ➜  Nueva: v$latestVersion" -ForegroundColor Cyan
+        Write-Host "   📦 Actual: v6.0  ➜  Nueva: v$latestVersion" -ForegroundColor Cyan
         Write-Host " $LINEA" -ForegroundColor Yellow
         
         $update = Read-Host "`n   ❓ ¿Deseas actualizar ahora? (S/N)"
@@ -234,7 +234,7 @@ exit
             }
         }
     } else {
-        Write-Host "   ✅ Versión al día (v5.9)." -ForegroundColor Green
+        Write-Host "   ✅ Versión al día (v6.0)." -ForegroundColor Green
     }
 } catch {
     Write-Host "   ⚠️ No se pudo conectar con el servidor de actualizaciones." -ForegroundColor Yellow
@@ -366,7 +366,7 @@ $Banner = @"
  ║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝   ║
  ║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝    ║
  ║                                                                               ║
- ║                                PRO EDITION v5.9                               ║
+ ║                                PRO EDITION v6.0                               ║
  ║                                                                               ║
  ║                    SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                ║
  ║                                                                               ║
@@ -405,7 +405,7 @@ Start-CleanupScheduler
 # ============================================================
 # 🔄 AUTO-ACTUALIZACIÓN - SIMPLE Y DIRECTA
 # ============================================================
-$currentVersion = "5.9"
+$currentVersion = "6.0"
 $repoOwner = "LUISFGARCIAE"
 $repoName = "TechFlow_Suite_Pro"
 
@@ -738,35 +738,126 @@ function Format-Bytes([Int64]$Bytes) {
 
 function Scan-DriveUnits {
     $units = @()
-    $disks = Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -in 2,3 } | Sort-Object DeviceID
     
-    $i = 1
-    foreach ($disk in $disks) {
-        $driveType = switch ($disk.DriveType) {
-            2 { "USB/Extraíble" }
-            3 { "Disco Fijo" }
-            default { "Desconocido" }
+    # Método 1: Usar Get-Volume (más moderno, funciona en Windows 10/11)
+    try {
+        $volumes = Get-Volume -ErrorAction SilentlyContinue | Where-Object { 
+            $_.DriveType -in 'Fixed', 'Removable' -and 
+            $_.DriveLetter -ne $null -and
+            $_.DriveLetter -ne "" 
         }
         
-        $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-        $totalGB = [math]::Round($disk.Size / 1GB, 2)
-        $usedGB = [math]::Round(($disk.Size - $disk.FreeSpace) / 1GB, 2)
-        $percentFree = [math]::Round(($disk.FreeSpace / $disk.Size) * 100, 1)
-        $label = if ($disk.VolumeName) { $disk.VolumeName } else { "Sin etiqueta" }
-        
-        $units += [PSCustomObject]@{
-            Index = $i
-            DeviceID = $disk.DeviceID
-            Label = $label
-            Type = $driveType
-            TotalGB = $totalGB
-            UsedGB = $usedGB
-            FreeGB = $freeGB
-            PercentFree = $percentFree
-            Path = $disk.DeviceID + "\"
+        if ($volumes -and $volumes.Count -gt 0) {
+            $i = 1
+            foreach ($vol in $volumes) {
+                $driveLetter = $vol.DriveLetter + ":"
+                $driveType = if ($vol.DriveType -eq 'Removable') { "USB/Extraíble" } else { "Disco Fijo" }
+                $totalGB = [math]::Round($vol.Size / 1GB, 2)
+                $freeGB = [math]::Round($vol.SizeRemaining / 1GB, 2)
+                $usedGB = [math]::Round(($vol.Size - $vol.SizeRemaining) / 1GB, 2)
+                $percentFree = if ($vol.Size -gt 0) { [math]::Round(($vol.SizeRemaining / $vol.Size) * 100, 1) } else { 0 }
+                $label = if ($vol.FileSystemLabel) { $vol.FileSystemLabel } else { "Sin etiqueta" }
+                
+                $units += [PSCustomObject]@{
+                    Index = $i
+                    DeviceID = $driveLetter
+                    Label = $label
+                    Type = $driveType
+                    TotalGB = $totalGB
+                    UsedGB = $usedGB
+                    FreeGB = $freeGB
+                    PercentFree = $percentFree
+                    Path = $driveLetter + "\"
+                }
+                $i++
+            }
+            return $units
         }
-        $i++
+    } catch {
+        # Si falla Get-Volume, usar método alternativo
     }
+    
+    # Método 2: Usar Win32_LogicalDisk (método tradicional)
+    try {
+        $disks = Get-CimInstance Win32_LogicalDisk -ErrorAction SilentlyContinue | 
+                 Where-Object { $_.DriveType -in 2,3 -and $_.DeviceID -ne $null } | 
+                 Sort-Object DeviceID
+        
+        if ($disks -and $disks.Count -gt 0) {
+            $i = 1
+            foreach ($disk in $disks) {
+                $driveType = switch ($disk.DriveType) {
+                    2 { "USB/Extraíble" }
+                    3 { "Disco Fijo" }
+                    default { "Desconocido" }
+                }
+                
+                $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+                $totalGB = [math]::Round($disk.Size / 1GB, 2)
+                $usedGB = [math]::Round(($disk.Size - $disk.FreeSpace) / 1GB, 2)
+                $percentFree = if ($disk.Size -gt 0) { [math]::Round(($disk.FreeSpace / $disk.Size) * 100, 1) } else { 0 }
+                $label = if ($disk.VolumeName) { $disk.VolumeName } else { "Sin etiqueta" }
+                
+                $units += [PSCustomObject]@{
+                    Index = $i
+                    DeviceID = $disk.DeviceID
+                    Label = $label
+                    Type = $driveType
+                    TotalGB = $totalGB
+                    UsedGB = $usedGB
+                    FreeGB = $freeGB
+                    PercentFree = $percentFree
+                    Path = $disk.DeviceID + "\"
+                }
+                $i++
+            }
+            return $units
+        }
+    } catch {
+        Write-Host "   ⚠️ Error al escanear unidades: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+    
+    # Método 3: Fallback usando Get-PSDrive (último recurso)
+    try {
+        $drives = Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue | 
+                  Where-Object { $_.Root -ne $null -and $_.Root -match "^[A-Z]:\\$" }
+        
+        if ($drives -and $drives.Count -gt 0) {
+            $i = 1
+            foreach ($drive in $drives) {
+                $driveLetter = $drive.Name + ":"
+                $path = $drive.Root
+                
+                try {
+                    $totalGB = [math]::Round((Get-PSDrive -Name $drive.Name).Used / 1GB + (Get-PSDrive -Name $drive.Name).Free / 1GB, 2)
+                    $freeGB = [math]::Round((Get-PSDrive -Name $drive.Name).Free / 1GB, 2)
+                    $usedGB = [math]::Round((Get-PSDrive -Name $drive.Name).Used / 1GB, 2)
+                    $percentFree = if ($totalGB -gt 0) { [math]::Round(($freeGB / $totalGB) * 100, 1) } else { 0 }
+                    $label = "Sin etiqueta"
+                    
+                    $units += [PSCustomObject]@{
+                        Index = $i
+                        DeviceID = $driveLetter
+                        Label = $label
+                        Type = "Disco"
+                        TotalGB = $totalGB
+                        UsedGB = $usedGB
+                        FreeGB = $freeGB
+                        PercentFree = $percentFree
+                        Path = $path
+                    }
+                    $i++
+                } catch {
+                    # Si no se puede obtener el tamaño, omitir
+                }
+            }
+            return $units
+        }
+    } catch {
+        # Si todo falla, devolver vacío
+    }
+    
+    # Si no se detectó ninguna unidad, devolver array vacío
     return $units
 }
 
@@ -787,7 +878,7 @@ function Show-DriveSelector {
     
     Write-Host "`n 📂 $Title" -ForegroundColor $COLOR_MENU
     Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
-    Write-Host "   #   UNIDAD   ETIQUETA         TIPO        TOTAL    LIBRE    USADO"
+    Write-Host "   UNIDAD   ETIQUETA         TIPO        TOTAL    LIBRE    USADO"
     Write-Host " ───────────────────────────────────────────────────────────────────" -ForegroundColor Gray
     
     foreach ($unit in $units) {
@@ -798,8 +889,7 @@ function Show-DriveSelector {
         $labelDisplay = $unit.Label.PadRight(15)
         if ($labelDisplay.Length -gt 15) { $labelDisplay = $labelDisplay.Substring(0,12) + "..." }
         
-        Write-Host ("   [{0}]  {1}    {2}  {3,-12}  {4,8}GB  {5,8}GB  {6,7}GB" -f 
-            $unit.Index.ToString().PadRight(2),
+        Write-Host ("   [{0}]  {1}  {2,-12}  {3,8}GB  {4,8}GB  {5,7}GB" -f 
             $unit.DeviceID.PadRight(2),
             $labelDisplay,
             $unit.Type,
@@ -818,15 +908,40 @@ function Show-DriveSelector {
     Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
     Write-Host " [X] CANCELAR" -ForegroundColor $COLOR_DANGER
     
-    $sel = Read-Host "`n > SELECCIONE UNA UNIDAD (NÚMERO)"
-    if ($sel -eq "X" -or $sel -eq "x") { return $null }
-    
-    if ($sel -match "^\d+$" -and [int]$sel -ge 1 -and [int]$sel -le $units.Count) {
-        return $units[[int]$sel - 1]
-    } else {
-        Write-Host "`n ❌ Selección inválida." -ForegroundColor $COLOR_DANGER
-        Start-Sleep -Seconds 1.5
-        return Show-DriveSelector -Title $Title
+    # ====== SELECCIÓN POR LETRA ======
+    while ($true) {
+        $sel = Read-Host "`n > SELECCIONE UNA UNIDAD (LETRA: C, D, E, etc.)"
+        
+        # Verificar si es X (cancelar)
+        if ($sel -eq "X" -or $sel -eq "x") { 
+            return $null 
+        }
+        
+        # Limpiar entrada (quitar espacios, dos puntos, etc.)
+        $sel = $sel.Trim().ToUpper().Replace(":", "")
+        
+        # Buscar la unidad por letra
+        $found = $null
+        foreach ($unit in $units) {
+            $unitLetter = $unit.DeviceID.Replace(":", "").Trim()
+            if ($unitLetter -eq $sel) {
+                $found = $unit
+                break
+            }
+        }
+        
+        if ($found) {
+            Write-Host "`n ✅ UNIDAD SELECCIONADA: $($found.DeviceID) ($($found.Label))" -ForegroundColor Green
+            Start-Sleep -Seconds 1
+            return $found
+        }
+        
+        # Si no se encontró, mostrar error y las opciones válidas
+        $validLetters = ($units | ForEach-Object { $_.DeviceID.Replace(":", "") }) -join ", "
+        Write-Host "`n ❌ Unidad '$sel' no válida." -ForegroundColor $COLOR_DANGER
+        Write-Host "    Unidades disponibles: $validLetters" -ForegroundColor $COLOR_ALERT
+        Write-Host "    Escribe la LETRA de la unidad (ej: C, D, E) o X para cancelar." -ForegroundColor $COLOR_ALERT
+        Start-Sleep -Seconds 2
     }
 }
 
@@ -1202,7 +1317,7 @@ function Show-MainTitle {
  ║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝      ║
  ║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝       ║
  ║                                                                                  ║
- ║                                 PRO EDITION v5.9                                 ║
+ ║                                 PRO EDITION v6.0                                 ║
  ║                                                                                  ║
  ║                    SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                   ║
  ║                                                                                  ║
@@ -1419,7 +1534,7 @@ function Invoke-KitPostFormat {
                 @{Num=8; Nombre="Tor Browser"; ID="TorProject.TorBrowser"}
                 @{Num=9; Nombre="Firefox Developer"; ID="Mozilla.Firefox.DeveloperEdition"}
                 @{Num=10; Nombre="Chromium"; ID="Chromium.Chromium"}
-                @{Num=11; Nombre="Brave Beta"; ID="Brave.Brave.Beta"}
+                @{Num=11; Nombre="DuckDuckGO"; ID="DuckDuckGo.DesktopBrowser"}
                 @{Num=12; Nombre="Opera GX"; ID="Opera.OperaGX"}
                 @{Num=13; Nombre="Pale Moon"; ID="PaleMoon.PaleMoon"}
                 @{Num=14; Nombre="Waterfox"; ID="Waterfox.Waterfox"}
@@ -2138,10 +2253,7 @@ function Invoke-KitPostFormat {
 				if (($i + $j) -lt $catList.Count) {
 					$catId = $catList[$i + $j]
 					$cat = $categorias[$catId]
-					# 👇 CORREGIDO: usa PadLeft en lugar de PadRight
 					$row += "[$($catId.ToString().PadLeft(2))]`t$($cat.Nombre.PadRight(32))"
-					#                                       ↑↑
-					#                        DOS espacios después del corchete
 				}
 			}
 			Write-Host " $row" -ForegroundColor $COLOR_MENU
@@ -2154,12 +2266,13 @@ function Invoke-KitPostFormat {
         Write-Host " 🗑️ [R] DESINSTALAR PROGRAMAS" -ForegroundColor Red
         Write-Host " 🧹 [0] LIMPIEZA DE BLOATWARE" -ForegroundColor Magenta
         Write-Host " 🔍 [B] BUSCAR APP (por nombre)" -ForegroundColor Green
+        Write-Host " 🚀 [M] INSTALACIÓN AUTOMÁTICA (por nombre)" -ForegroundColor Magenta
         Write-Host ""
         Write-Host " ⌨️ CONTROL" -ForegroundColor Gray
         Write-Host " -------------------" -ForegroundColor $COLOR_DANGER
         Write-Host " ❌ [X] VOLVER AL MENÚ PRINCIPAL" -ForegroundColor $COLOR_DANGER
         
-        $opt = Read-MenuOption "`n ``> SELECCIONE (número de categoría, P, U, R, 0, B, X)" -Valid @("0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","P","U","R","B","X")
+        $opt = Read-MenuOption "`n ``> SELECCIONE (número de categoría, P, U, R, 0, B, M, X)" -Valid @("0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","P","U","R","B","M","X")
         if($opt -eq "X"){break}
         
         # Limpieza de Bloatware
@@ -2194,19 +2307,18 @@ function Invoke-KitPostFormat {
             
             $selection = @()
             switch ($perfil) {
-                "1" { $selection = "141","21","99","41","142" }  # Steam, Discord, OBS, 7Zip, Epic
-                "2" { $selection = "1","41","87","127","25","27" }  # Chrome, 7Zip, VLC, AnyDesk, Teams, WhatsApp
-                "3" { $selection = "341","342","345","348","343" }  # IA Profile
-                "4" { $selection = "361","362","201","121" }  # Security
-                "5" { $selection = "381","384","78","387" }  # Data Science
-                "6" { $selection = "401","404","405","402","268" }  # Media Server
-                "7" { $selection = "61","62","64","66","67","75" }  # Developer
-                "8" { $selection = "101","106","103","104" }  # Office
-                "9" { $selection = "121","122","127","129","126" }  # Networking
-                "10" { $selection = "321","322","324","304" }  # Personalization
+                "1" { $selection = "141","21","99","41","142" }
+                "2" { $selection = "1","41","87","127","25","27" }
+                "3" { $selection = "341","342","345","348","343" }
+                "4" { $selection = "361","362","201","121" }
+                "5" { $selection = "381","384","78","387" }
+                "6" { $selection = "401","404","405","402","268" }
+                "7" { $selection = "61","62","64","66","67","75" }
+                "8" { $selection = "101","106","103","104" }
+                "9" { $selection = "121","122","127","129","126" }
+                "10" { $selection = "321","322","324","304" }
             }
             
-            # Instalar selección
             $results = @()
             $successCount = 0
             $errorCount = 0
@@ -2253,32 +2365,91 @@ function Invoke-KitPostFormat {
             continue
         }
         
-        # Actualizar software (mismo código que antes)
+        # ============================================================
+        # 🔄 ACTUALIZAR SOFTWARE (CORREGIDO)
+        # ============================================================
         if($opt -eq "U") {
             Clear-Host
             Show-MainTitle
             Write-Host "`n 🔄 ACTUALIZACIÓN INTELIGENTE DE SOFTWARE" -ForegroundColor $COLOR_MENU
             Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
             
-            $appsToUpdate = @()
             $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
             
-            if ($wingetAvailable) {
-                Write-Host "`n 📡 Escaneando actualizaciones disponibles..." -ForegroundColor $COLOR_ALERT
-                $upgradeList = winget upgrade --accept-source-agreements 2>$null | Where-Object { $_ -match "^\S" -and $_ -notmatch "Nombre|Versión|Disponible|ID" -and $_ -notmatch "^-" } | Select-Object -Skip 1
+            if (-not $wingetAvailable) {
+                Write-Host "`n   ❌ WINGET NO ESTÁ DISPONIBLE" -ForegroundColor $COLOR_DANGER
+                Write-Host "   Ejecuta la opción de reparación de winget en el menú de paquetes." -ForegroundColor $COLOR_ALERT
+                Pause-Enter "`n   ENTER"
+                continue
+            }
+            
+            Write-Host "`n 📡 Escaneando actualizaciones disponibles..." -ForegroundColor $COLOR_ALERT
+            
+            try {
+                $output = winget upgrade --accept-source-agreements 2>&1
+                $outputString = $output -join "`n"
                 
-                if ($upgradeList -and $upgradeList.Count -gt 0) {
-                    foreach ($line in $upgradeList) {
-                        if ($line -match "^\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)") {
-                            $appsToUpdate += [PSCustomObject]@{
-                                ID = $matches[1]
-                                VersionActual = $matches[2]
-                                VersionNueva = $matches[3]
-                                Nombre = $matches[4] -replace "\s+", " "
+                if ($outputString -match "No hay actualizaciones disponibles" -or $outputString -match "No packages found") {
+                    Write-Host "`n   ✅ ¡TODO ESTÁ ACTUALIZADO!" -ForegroundColor Green
+                    Pause-Enter "`n   ENTER"
+                    continue
+                }
+                
+                $appsToUpdate = @()
+                $lines = $outputString -split "`n"
+                $headerFound = $false
+                
+                foreach ($line in $lines) {
+                    $line = $line.Trim()
+                    
+                    if ($line -match "Nombre\s+Id\s+Versión") {
+                        $headerFound = $true
+                        continue
+                    }
+                    
+                    if ($headerFound -and $line -match "^\S" -and $line -notmatch "^-" -and $line -ne "") {
+                        $idMatch = [regex]::Match($line, '\S+\.\S+')
+                        if ($idMatch.Success) {
+                            $id = $idMatch.Value
+                            $beforeId = $line.Substring(0, $idMatch.Index).Trim()
+                            $afterId = $line.Substring($idMatch.Index + $id.Length).Trim()
+                            $nombre = $beforeId
+                            $versionParts = $afterId -split '\s+'
+                            if ($versionParts.Count -ge 2) {
+                                $versionActual = $versionParts[0]
+                                $versionNueva = $versionParts[1]
+                                $appsToUpdate += [PSCustomObject]@{
+                                    ID = $id
+                                    Nombre = $nombre
+                                    VersionActual = $versionActual
+                                    VersionNueva = $versionNueva
+                                }
                             }
                         }
                     }
                 }
+                
+                if ($appsToUpdate.Count -eq 0) {
+                    $dryRun = winget upgrade --all --accept-source-agreements --dry-run 2>&1
+                    $dryRunString = $dryRun -join "`n"
+                    $pattern = '^\s*([^\s].*?)\s+([^\s]+\.[^\s]+)\s+([^\s]+)\s+([^\s]+)'
+                    $matches = [regex]::Matches($dryRunString, $pattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+                    foreach ($match in $matches) {
+                        if ($match.Groups.Count -ge 5) {
+                            $appsToUpdate += [PSCustomObject]@{
+                                ID = $match.Groups[2].Value
+                                Nombre = $match.Groups[1].Value.Trim()
+                                VersionActual = $match.Groups[3].Value
+                                VersionNueva = $match.Groups[4].Value
+                            }
+                        }
+                    }
+                }
+                
+            } catch {
+                Write-Host "`n   ⚠️ Error al escanear actualizaciones: $($_.Exception.Message)" -ForegroundColor $COLOR_WARNING
+                Pause-Enter "`n   ENTER"
+                continue
             }
             
             if ($appsToUpdate.Count -eq 0) {
@@ -2291,10 +2462,11 @@ function Invoke-KitPostFormat {
             foreach ($app in $appsToUpdate) {
                 Write-Host "      • $($app.Nombre)" -ForegroundColor White
                 Write-Host "        📦 $($app.VersionActual) → $($app.VersionNueva)" -ForegroundColor Gray
+                Write-Host "        🆔 ID: $($app.ID)" -ForegroundColor DarkGray
             }
             
             $confirm = Read-Host "`n   ❓ ¿Deseas actualizar todo? (S/N)"
-            if ($confirm -ne "S") {
+            if ($confirm -ne "S" -and $confirm -ne "s") {
                 Write-Host "   ❌ Actualización cancelada." -ForegroundColor $COLOR_DANGER
                 Pause-Enter "   ENTER"
                 continue
@@ -2303,19 +2475,62 @@ function Invoke-KitPostFormat {
             $actualizados = 0
             $fallidos = 0
             
+            Write-Host "`n   ⏳ Actualizando programas..." -ForegroundColor Yellow
+            Write-Host "   ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+            
             foreach ($app in $appsToUpdate) {
-                Write-Host "   📦 Actualizando $($app.Nombre)..." -ForegroundColor Yellow
-                winget upgrade --id $app.ID --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0) { $actualizados++ } else { $fallidos++ }
+                Write-Host "`n   📦 $($app.Nombre) - $($app.VersionActual) → $($app.VersionNueva)" -ForegroundColor Cyan
+                Write-Host "      🆔 ID: $($app.ID)" -ForegroundColor DarkGray
+                
+                Write-Host "      ⏳ Intentando actualizar..." -ForegroundColor Yellow
+                $result = winget upgrade --id $app.ID --force --accept-package-agreements --accept-source-agreements 2>&1
+                
+                if ($LASTEXITCODE -eq 0) {
+                    $actualizados++
+                    Write-Host "      ✅ ACTUALIZADO CON ÉXITO" -ForegroundColor Green
+                } else {
+                    Write-Host "      🔄 Reintentando sin --force..." -ForegroundColor DarkGray
+                    $result2 = winget upgrade --id $app.ID --accept-package-agreements --accept-source-agreements 2>&1
+                    
+                    if ($LASTEXITCODE -eq 0) {
+                        $actualizados++
+                        Write-Host "      ✅ ACTUALIZADO (segundo intento)" -ForegroundColor Green
+                    } else {
+                        Write-Host "      🔄 Último intento con --silent..." -ForegroundColor DarkGray
+                        winget upgrade --id $app.ID --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
+                        
+                        if ($LASTEXITCODE -eq 0) {
+                            $actualizados++
+                            Write-Host "      ✅ ACTUALIZADO (modo silencioso)" -ForegroundColor Green
+                        } else {
+                            $fallidos++
+                            Write-Host "      ❌ FALLÓ" -ForegroundColor Red
+                            Write-Host "      📝 Error: $($result -join ' ')" -ForegroundColor DarkGray
+                        }
+                    }
+                }
             }
             
-            Write-Host "`n   ✅ Actualizados: $actualizados  |  ❌ Fallidos: $fallidos" -ForegroundColor Cyan
+            Write-Host "`n   ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+            Write-Host "`n   📊 RESUMEN DE ACTUALIZACIÓN" -ForegroundColor Cyan
+            Write-Host "      ✅ Actualizados: $actualizados" -ForegroundColor Green
+            Write-Host "      ❌ Fallidos:     $fallidos" -ForegroundColor Red
+            Write-Host "      📦 Total:       $($appsToUpdate.Count)" -ForegroundColor Gray
+            
+            if ($fallidos -gt 0) {
+                Write-Host "`n   ⚠️ Algunas actualizaciones fallaron." -ForegroundColor Yellow
+                Write-Host "      Puedes intentar actualizar manualmente con:" -ForegroundColor Gray
+                Write-Host "      winget upgrade --all --force" -ForegroundColor Cyan
+            }
+            
             Write-Log "KIT" "UpdateSummary Success=$actualizados Errors=$fallidos Total=$($appsToUpdate.Count)"
             Pause-Enter "`n   ENTER"
             continue
         }
         
-        # Desinstalar programas (mismo código que antes)
+        # ============================================================
+        # 🗑️ DESINSTALAR PROGRAMAS
+        # ============================================================
         if($opt -eq "R") {
             while ($true) {
                 Clear-Host
@@ -2379,7 +2594,9 @@ function Invoke-KitPostFormat {
             continue
         }
         
-        # Buscar app
+        # ============================================================
+        # 🔍 BUSCAR APP
+        # ============================================================
         if($opt -eq "B") {
             $searchTerm = Read-Host "`n 🔍 INGRESE NOMBRE DE LA APP A BUSCAR"
             if ($searchTerm) {
@@ -2443,7 +2660,50 @@ function Invoke-KitPostFormat {
             continue
         }
         
-        # Selección por categoría
+        # ============================================================
+        # 🚀 INSTALACIÓN AUTOMÁTICA (NUEVO)
+        # ============================================================
+        if($opt -eq "M") {
+            Clear-Host
+            Show-MainTitle
+            Write-Host "`n 🚀 INSTALACIÓN AUTOMÁTICA" -ForegroundColor $COLOR_MENU
+            Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "   💡 ESCRIBE EL NOMBRE DEL PROGRAMA (ej: mipony, discord, rufus)" -ForegroundColor $COLOR_ALERT
+            Write-Host "   📋 PROGRAMAS DISPONIBLES:" -ForegroundColor $COLOR_PRIMARY
+            Write-Host "   ─────────────────────────────────────────────────────────" -ForegroundColor Gray
+            
+            $apps = $Global:KnownApps.Keys | Sort-Object
+            $cols = 3
+            $itemsPerCol = [math]::Ceiling($apps.Count / $cols)
+            for ($i = 0; $i -lt $itemsPerCol; $i++) {
+                $line = "   "
+                for ($j = 0; $j -lt $cols; $j++) {
+                    $index = $i + ($j * $itemsPerCol)
+                    if ($index -lt $apps.Count) {
+                        $appName = $apps[$index]
+                        $line += $appName.PadRight(20)
+                    }
+                }
+                Write-Host $line -ForegroundColor $COLOR_MENU
+            }
+            Write-Host "   ─────────────────────────────────────────────────────────" -ForegroundColor Gray
+            Write-Host ""
+            
+            $appName = Read-Host "   📝 NOMBRE DEL PROGRAMA"
+            if (-not $appName) { 
+                Write-Host "`n   ❌ Cancelado" -ForegroundColor $COLOR_DANGER
+                Pause-Enter "`n ENTER"
+                continue
+            }
+            
+            Install-AutoApp -AppName $appName
+            continue
+        }
+        
+        # ============================================================
+        # 📂 SELECCIÓN POR CATEGORÍA
+        # ============================================================
         if ($categorias.ContainsKey($opt)) {
             $selection = Show-CategoryApps -CatId $opt
             
@@ -2458,16 +2718,35 @@ function Invoke-KitPostFormat {
                 $results = @()
                 $successCount = 0
                 $errorCount = 0
+                $totalApps = $selection.Count
+                $currentApp = 0
+                
+                Write-Host "`n ═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+                Write-Host " 📦 INSTALANDO $totalApps APLICACIONES..." -ForegroundColor Cyan
+                Write-Host " ═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+                Write-Host ""
                 
                 foreach($item in $selection){
+                    $currentApp++
                     $found = $false
+                    
                     foreach($cat in $categorias.Values) {
                         $app = $cat.Apps | Where-Object { $_.Num -eq [int]$item }
                         if($app) {
-                            Write-Host "`n [!] INSTALANDO: $($app.Nombre)..." -ForegroundColor $COLOR_MENU
+                            $found = $true
+                            
+                            $progressPercent = [math]::Round(($currentApp / $totalApps) * 100)
+                            $barLength = 40
+                            $filled = [math]::Round($barLength * $progressPercent / 100)
+                            $bar = "█" * $filled + "░" * ($barLength - $filled)
+                            
+                            Write-Host " ┌─────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+                            Write-Host " │ 📱 [$currentApp/$totalApps] $($app.Nombre)" -ForegroundColor Yellow
+                            Write-Host " │ 📊 PROGRESO: [$bar] $progressPercent%" -ForegroundColor Cyan
+                            
                             $res = Invoke-SmartInstall -AppID $app.ID -AppName $app.Nombre
                             if($res -ne "OK" -and $res -notlike "MANUAL|*"){
-                                Write-Host " [!] Reintentando: $($app.Nombre)" -ForegroundColor $COLOR_ALERT
+                                Write-Host " │ 🔄 Reintentando..." -ForegroundColor Yellow
                                 $res = Invoke-SmartInstall -AppID $app.ID -AppName $app.Nombre
                             }
                             
@@ -2475,14 +2754,18 @@ function Invoke-KitPostFormat {
                                 $url = ($res -split "\|")[1]
                                 $results += "[ ERROR ] $($app.Nombre)`n   → Descárgala manualmente desde: $url"
                                 $errorCount++
+                                Write-Host " │ ❌ ERROR - Descarga manual requerida" -ForegroundColor Red
                             } elseif ($res -eq "OK") {
                                 $results += "[ OK ] $($app.Nombre)"
                                 $successCount++
+                                Write-Host " │ ✅ INSTALADO CORRECTAMENTE" -ForegroundColor Green
                             } else {
                                 $results += "[ ERROR ] $($app.Nombre)"
                                 $errorCount++
+                                Write-Host " │ ❌ FALLO EN LA INSTALACIÓN" -ForegroundColor Red
                             }
-                            $found = $true
+                            Write-Host " └─────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+                            Write-Host ""
                             break
                         }
                     }
@@ -2496,9 +2779,18 @@ function Invoke-KitPostFormat {
                 Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
                 Write-Host " 📊 RESUMEN DE INSTALACIÓN" -ForegroundColor Cyan
                 Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+                
+                $finalPercent = [math]::Round(($successCount / $totalApps) * 100)
+                $barLength = 50
+                $filled = [math]::Round($barLength * $finalPercent / 100)
+                $bar = "█" * $filled + "░" * ($barLength - $filled)
+                Write-Host ""
+                Write-Host " 📊 PROGRESO TOTAL: [$bar] $finalPercent%" -ForegroundColor Cyan
+                Write-Host ""
+                
                 $results | ForEach-Object { Write-Host " $_" }
                 Write-Host "`n═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-                Write-Host "   ✅ Exitosas: $successCount  |  ❌ Fallidas: $errorCount" -ForegroundColor Yellow
+                Write-Host "   ✅ Exitosas: $successCount  |  ❌ Fallidas: $errorCount  |  📦 Total: $totalApps" -ForegroundColor Yellow
                 Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
                 
                 $wingetFinal = Get-Command winget -ErrorAction SilentlyContinue
@@ -2509,7 +2801,7 @@ function Invoke-KitPostFormat {
                     Write-Host "`n   🔴 Estado de winget: NO DISPONIBLE" -ForegroundColor Red
                 }
                 
-                Write-Log "KIT" "InstallSummary Success=$successCount Errors=$errorCount Total=$($selection.Count)"
+                Write-Log "KIT" "InstallSummary Success=$successCount Errors=$errorCount Total=$totalApps"
                 Pause-Enter "`n PRESIONE ENTER PARA CONTINUAR"
             }
         }
@@ -3029,7 +3321,7 @@ function Invoke-TempOptimizer {
 }
 
 # ============================================================
-# GESTION DE PAQUETES (WINGET/CHOCO)
+# GESTION DE PAQUETES (WINGET/CHOCO) CON BARRA DE PROGRESO
 # ============================================================
 function Invoke-WingetMenu {
     Clear-Host
@@ -3076,7 +3368,7 @@ function Invoke-WingetMenu {
             Pause-Enter "`n ENTER"
         }
         
-        # ========== S - WINGET: BUSCAR PAQUETE (DUAL) ==========
+        # ========== S - WINGET: BUSCAR PAQUETE (CON BARRA DE PROGRESO) ==========
         if($o -eq "S"){
             if(-not $hasWinget -and -not $hasChoco){ 
                 Write-Host "`n [!] Ni winget ni chocolatey están disponibles." -ForegroundColor $COLOR_DANGER
@@ -3122,25 +3414,49 @@ function Invoke-WingetMenu {
                     Write-Host "`n 💡 COPIA EL 'ID' EXACTO DEL PROGRAMA (ej: Google.Chrome, 9NKSQGP7F2NH)" -ForegroundColor $COLOR_ALERT
                     $appToInstall = (Read-Host "`n ``> PEGA AQUÍ EL ID EXACTO DEL PROGRAMA").Trim()
                     if ($appToInstall) {
-                        $res = Invoke-SmartInstall -AppID $appToInstall -AppName $appToInstall
-                        Write-Log "PKG" "SmartInstall from search app=$appToInstall result=$res"
+                        # --- INSTALACIÓN CON BARRA DE PROGRESO ---
+                        Write-Host "`n ═══════════════════════════════════════════════════════" -ForegroundColor Cyan
+                        Write-Host " 📦 INSTALANDO: $appToInstall" -ForegroundColor Cyan
+                        Write-Host " ═══════════════════════════════════════════════════════" -ForegroundColor Cyan
                         
-                        # Si falló, sugerir alternativa
-                        if ($res -ne "OK" -and $res -notlike "MANUAL|*") {
-                            Write-Host "`n ⚠️ LA INSTALACIÓN FALLÓ." -ForegroundColor $COLOR_DANGER
-                            Write-Host " 💡 CONSEJOS:" -ForegroundColor $COLOR_ALERT
-                            Write-Host "    • Revisa que el ID esté escrito correctamente"
-                            Write-Host "    • Prueba con chocolatey en la opción [F] o [H]"
-                            Write-Host "    • Busca alternativas similares con la opción [S]"
-                            Write-Host "    • Descarga manual desde la web oficial del programa"
+                        # Barra de progreso para la instalación
+                        $barLength = 40
+                        $progressSteps = @("█", "██", "███", "████", "█████", "██████", "███████", "████████", "█████████", "██████████")
+                        
+                        Write-Host ""
+                        for ($i = 0; $i -lt $progressSteps.Count; $i++) {
+                            $filled = $progressSteps[$i]
+                            $empty = "░" * ($barLength - $filled.Length)
+                            Write-Host " 📊 PROGRESO: [$filled$empty] $([math]::Round(($i+1) * 10))%" -ForegroundColor Cyan
+                            Start-Sleep -Milliseconds 300
                         }
+                        
+                        # Ejecutar la instalación
+                        $res = Invoke-SmartInstall -AppID $appToInstall -AppName $appToInstall
+                        
+                        # Mostrar resultado final
+                        if ($res -eq "OK") {
+                            Write-Host "`n ✅ INSTALADO CORRECTAMENTE" -ForegroundColor Green
+                            Write-Host " ═══════════════════════════════════════════════════════" -ForegroundColor Green
+                        } elseif ($res -like "MANUAL|*") {
+                            $url = ($res -split "\|")[1]
+                            Write-Host "`n ⚠️ INSTALACIÓN MANUAL REQUERIDA" -ForegroundColor Yellow
+                            Write-Host "    Descárgala desde: $url" -ForegroundColor Cyan
+                            Write-Host " ═══════════════════════════════════════════════════════" -ForegroundColor Yellow
+                        } else {
+                            Write-Host "`n ❌ FALLO EN LA INSTALACIÓN" -ForegroundColor Red
+                            Write-Host "    Revisa que el ID sea correcto." -ForegroundColor Yellow
+                            Write-Host " ═══════════════════════════════════════════════════════" -ForegroundColor Red
+                        }
+                        
+                        Write-Log "PKG" "SmartInstall from search app=$appToInstall result=$res"
                     }
                 }
             }
             Pause-Enter "`n ENTER PARA VOLVER"
         }
 
-        # ========== G - WINGET: INSTALAR POR ID EXACTO ==========
+        # ========== G - WINGET: INSTALAR POR ID EXACTO (CON BARRA DE PROGRESO) ==========
         if($o -eq "G"){
             if(-not $hasWinget){ Write-Host "`n [!] winget no está disponible." -ForegroundColor $COLOR_DANGER; Pause-Enter " ENTER"; continue }
             
@@ -3152,11 +3468,49 @@ function Invoke-WingetMenu {
                 $appName = Read-Host " ``> NOMBRE DESCRIPTIVO (ej: Google Chrome) - ENTER para usar el ID"
                 if (-not $appName) { $appName = $appID }
                 
-                Write-Host "`n [+] INSTALANDO: $appName (ID: $appID)..." -ForegroundColor $COLOR_PRIMARY
+                # --- INSTALACIÓN CON BARRA DE PROGRESO ---
+                Clear-Host
+                Show-MainTitle
+                Write-Host "`n ═══════════════════════════════════════════════════════" -ForegroundColor Cyan
+                Write-Host " 📦 INSTALANDO: $appName" -ForegroundColor Cyan
+                Write-Host " 🆔 ID: $appID" -ForegroundColor DarkGray
+                Write-Host " ═══════════════════════════════════════════════════════" -ForegroundColor Cyan
+                
+                # Barra de progreso animada
+                $barLength = 40
+                $progressSteps = @("█", "██", "███", "████", "█████", "██████", "███████", "████████", "█████████", "██████████")
+                
+                Write-Host ""
+                for ($i = 0; $i -lt $progressSteps.Count; $i++) {
+                    $filled = $progressSteps[$i]
+                    $empty = "░" * ($barLength - $filled.Length)
+                    Write-Host " 📊 PROGRESO: [$filled$empty] $([math]::Round(($i+1) * 10))%" -ForegroundColor Cyan
+                    Start-Sleep -Milliseconds 250
+                }
+                
+                # Ejecutar la instalación
                 $res = Invoke-SmartInstall -AppID $appID -AppName $appName
+                
+                # Mostrar resultado final con barra completa
+                if ($res -eq "OK") {
+                    Write-Host "`n 📊 PROGRESO: [████████████████████████████████████████] 100%" -ForegroundColor Green
+                    Write-Host " ✅ INSTALADO CORRECTAMENTE" -ForegroundColor Green
+                    Write-Host " ═══════════════════════════════════════════════════════" -ForegroundColor Green
+                } elseif ($res -like "MANUAL|*") {
+                    $url = ($res -split "\|")[1]
+                    Write-Host "`n ⚠️ INSTALACIÓN MANUAL REQUERIDA" -ForegroundColor Yellow
+                    Write-Host "    Descárgala desde: $url" -ForegroundColor Cyan
+                    Write-Host " ═══════════════════════════════════════════════════════" -ForegroundColor Yellow
+                } else {
+                    Write-Host "`n 📊 PROGRESO: [████████████████████████████████████████] 100%" -ForegroundColor Red
+                    Write-Host " ❌ FALLO EN LA INSTALACIÓN" -ForegroundColor Red
+                    Write-Host "    Revisa que el ID sea correcto o prueba con Chocolatey." -ForegroundColor Yellow
+                    Write-Host " ═══════════════════════════════════════════════════════" -ForegroundColor Red
+                }
+                
                 Write-Log "PKG" "SmartInstall app=$appName id=$appID result=$res"
+                Pause-Enter "`n ENTER PARA VOLVER"
             }
-            Pause-Enter "`n PROCESO TERMINADO. ENTER"
         }
         
         # ========== D - CHOCO: ACTUALIZAR TODO ==========
@@ -3212,6 +3566,7 @@ function Invoke-WingetMenu {
         }
     }
 }
+
 # ============================================================
 # MONITOR DE SISTEMA PRO
 # ============================================================
@@ -4869,6 +5224,262 @@ function Invoke-SimpleDiskPart {
 }
 
 # ============================================================
+# 🎬 FUNCIÓN AUXILIAR: DESCARGA YT-DLP CON BARRA ELEGANTE
+# ============================================================
+function Invoke-YtdlpDownload {
+    param(
+        [Parameter(Mandatory = $true)][string]$YtdlpPath,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [string]$Titulo = "Descargando..."
+    )
+
+    # ── Plantilla de progreso ──
+    $progressTemplate = "download:PROGRESS|%(progress._percent_str)s|%(progress._eta_str)s|%(progress._downloaded_bytes_str)s|%(progress._total_bytes_str)s|%(progress._speed_str)s"
+
+    # ── Argumentos finales ──
+    $fullArgs = @(
+        "--quiet",
+        "--no-warnings",
+        "--no-color",
+        "--newline",
+        "--no-simulate",
+        "--progress-template", $progressTemplate,
+        "--print", "after_move:FILE:%(filepath)s",
+        "--print", "before_dl:BEFOREDL:%(playlist_index)s|%(playlist_count)s|%(title)s"
+    ) + $Arguments
+
+    # ── Estado compartido ──
+    $script:ytdlpLastDrawTop = $null
+    $script:ytdlpProgressStarted = $false
+    $lastFile = $null
+    $script:ytdlpErrorMsg = $null
+    $playlistInfo = ""
+
+    # ── Función: cuadro con progreso real ──
+    $drawRealProgress = {
+        param($pct, $etaStr, $dlStr, $totalStr, $spdStr, $tituloStr, $playlistStr)
+
+        $barLength = 30
+        $filled = [math]::Round($barLength * ($pct / 100))
+        if ($filled -gt $barLength) { $filled = $barLength }
+        if ($filled -lt 0) { $filled = 0 }
+        $bar = ("█" * $filled) + ("░" * ($barLength - $filled))
+
+        $tituloDisplay = $tituloStr
+        if ($tituloDisplay.Length -gt 44) { $tituloDisplay = $tituloDisplay.Substring(0, 41) + "..." }
+
+        # Línea 1: playlist (si aplica) + título
+        if ($playlistStr) {
+            $line1 = "║  📦 " + $playlistStr.PadRight(45) + " ║"
+            $line2 = "║  🎬 " + $tituloDisplay.PadRight(45) + " ║"
+            $line3 = "║  [$bar] " + $pct.ToString().PadLeft(3) + "%       ║"
+        } else {
+            $line1 = "║  🎬 " + $tituloDisplay.PadRight(45) + " ║"
+            $line2 = "║  [$bar] " + $pct.ToString().PadLeft(3) + "%       ║"
+            $line3 = $null
+        }
+
+        $infoStr = "  ⏱️  ETA: $etaStr  |  💾 $dlStr / $totalStr"
+        if ($spdStr -and $spdStr -ne "N/A" -and $spdStr -ne "Unknown") { $infoStr += "  🚀 $spdStr" }
+        $visibleLen = ($infoStr -replace '[⏱️💾🚀🎬📦]', 'XX').Length
+        while ($visibleLen -lt 48) { $infoStr += " "; $visibleLen++ }
+        $infoLine = "║" + $infoStr + "  ║"
+
+        if ($script:ytdlpLastDrawTop -eq $null) {
+            $script:ytdlpLastDrawTop = [Console]::CursorTop
+        } else {
+            try { [Console]::SetCursorPosition(0, $script:ytdlpLastDrawTop) } catch {}
+        }
+
+        Write-Host "╔══════════════════════════════════════════════════╗" -ForegroundColor Cyan
+        Write-Host $line1 -ForegroundColor Cyan
+        if ($playlistStr) {
+            Write-Host $line2 -ForegroundColor White
+            Write-Host $line3 -ForegroundColor Yellow
+        } else {
+            Write-Host $line2 -ForegroundColor Yellow
+        }
+        Write-Host $infoLine -ForegroundColor Gray
+        Write-Host "╚══════════════════════════════════════════════════╝" -ForegroundColor Cyan
+    }
+
+    # ── Función: cuadro spinner (indeterminado) ──
+    $drawSpinner = {
+        param($segundos, $frame, $tituloStr, $statusTxt, $playlistStr)
+
+        $framesChar = @('◐','◓','◑','◒')
+        $spinnerChar = $framesChar[$frame % 4]
+
+        $barLength = 30
+        $pos = $frame % ($barLength * 2)
+        if ($pos -ge $barLength) { $pos = ($barLength * 2) - 1 - $pos }
+        $bloque = "▓" * 5
+
+        # ── FIX: Evitar índice fuera de rango ──
+        $tail = $barLength - $pos - 5
+        if ($tail -lt 0) { $tail = 0 }
+        $bar = ("░" * $pos) + $bloque + ("░" * $tail)
+        if ($bar.Length -gt $barLength) { $bar = $bar.Substring(0, $barLength) }
+        if ($bar.Length -lt $barLength) { $bar += "░" * ($barLength - $bar.Length) }
+
+        $tituloDisplay = $tituloStr
+        if ($tituloDisplay.Length -gt 44) { $tituloDisplay = $tituloDisplay.Substring(0, 41) + "..." }
+
+        if ($playlistStr) {
+            $line1 = "║  📦 " + $playlistStr.PadRight(45) + " ║"
+            $line2 = "║  🎬 " + $tituloDisplay.PadRight(45) + " ║"
+            $line3 = "║  [$bar]  $spinnerChar      ║"
+        } else {
+            $line1 = "║  🎬 " + $tituloDisplay.PadRight(45) + " ║"
+            $line2 = "║  [$bar]  $spinnerChar      ║"
+            $line3 = $null
+        }
+
+        $infoStr = "  $statusTxt | ⏱️  ${segundos}s"
+        $visibleLen = ($infoStr -replace '[⏱️💾🚀🎬📦◐◓◑◒▓░]', 'XX').Length
+        while ($visibleLen -lt 48) { $infoStr += " "; $visibleLen++ }
+        $infoLine = "║" + $infoStr + "  ║"
+
+        if ($script:ytdlpLastDrawTop -eq $null) {
+            $script:ytdlpLastDrawTop = [Console]::CursorTop
+        } else {
+            try { [Console]::SetCursorPosition(0, $script:ytdlpLastDrawTop) } catch {}
+        }
+
+        Write-Host "╔══════════════════════════════════════════════════╗" -ForegroundColor Cyan
+        Write-Host $line1 -ForegroundColor Cyan
+        if ($playlistStr) {
+            Write-Host $line2 -ForegroundColor White
+            Write-Host $line3 -ForegroundColor Magenta
+        } else {
+            Write-Host $line2 -ForegroundColor Magenta
+        }
+        Write-Host $infoLine -ForegroundColor DarkYellow
+        Write-Host "╚══════════════════════════════════════════════════╝" -ForegroundColor Cyan
+    }
+
+    # ── Preparar proceso ──
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $YtdlpPath
+    $psi.Arguments = ($fullArgs | ForEach-Object {
+        if ($_ -match '\s') { "`"$_`"" } else { $_ }
+    }) -join " "
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError  = $true
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.WorkingDirectory = Split-Path $YtdlpPath -Parent
+
+    # ── Dibujar spinner inicial ──
+    & $drawSpinner 0 0 $Titulo "Iniciando proceso" $playlistInfo
+
+    # ── Iniciar proceso ──
+    $process = [System.Diagnostics.Process]::Start($psi)
+    $startTime = Get-Date
+    $frameIdx = 0
+    $videoActual = $Titulo
+
+    # ── Leer stdout asíncrono ──
+    $readTask = $process.StandardOutput.ReadLineAsync()
+
+    while (-not $process.HasExited -or -not $readTask.IsCompleted) {
+
+        # Refrescar spinner si NO ha empezado la descarga real
+        if (-not $script:ytdlpProgressStarted) {
+            $segundos = [int]((Get-Date) - $startTime).TotalSeconds
+            & $drawSpinner $segundos $frameIdx $videoActual "Procesando" $playlistInfo
+            $frameIdx++
+        }
+
+        if ($readTask.IsCompleted) {
+            $line = $readTask.Result
+
+            if ($null -ne $line) {
+                # ── Playlist: inicio de video ──
+                if ($line -match '^BEFOREDL:(\d+)\|(\d+)\|(.+)$') {
+                    $idx = $matches[1]
+                    $total = $matches[2]
+                    $title = $matches[3]
+                    $playlistInfo = "Playlist: $idx / $total videos"
+                    $videoActual = $title
+
+                    # Resetear progreso para el nuevo video
+                    $script:ytdlpProgressStarted = $false
+                    $frameIdx = 0
+                }
+                # ── Progreso real ──
+                elseif ($line -match '^PROGRESS\|(.+?)\|(.+?)\|(.+?)\|(.+?)\|(.+?)$') {
+                    $script:ytdlpProgressStarted = $true
+                    $percent    = [double](($matches[1] -replace '[^\d\.]', ''))
+                    $eta        = $matches[2].Trim()
+                    $downloaded = $matches[3].Trim()
+                    $total      = $matches[4].Trim()
+                    $speed      = $matches[5].Trim()
+                    & $drawRealProgress $percent $eta $downloaded $total $speed $videoActual $playlistInfo
+                }
+                # ── Archivo final ──
+                elseif ($line -match '^FILE:(.+)$') {
+                    $lastFile = $matches[1]
+                }
+                # ── Error ──
+                elseif ($line -match '^ERROR:\s*(.+)$') {
+                    $script:ytdlpErrorMsg = $matches[1]
+                }
+
+                # Siguiente línea
+                if (-not $process.HasExited) {
+                    $readTask = $process.StandardOutput.ReadLineAsync()
+                } else {
+                    break
+                }
+            } else {
+                break
+            }
+        }
+
+        Start-Sleep -Milliseconds 250
+    }
+
+    # ── Leer stderr ──
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+
+    # ── Resultado final ──
+    if ($process.ExitCode -eq 0) {
+        if ($script:ytdlpProgressStarted) {
+            & $drawRealProgress 100 "00:00" $total $total "0 B/s" $videoActual $playlistInfo
+        } else {
+            & $drawRealProgress 100 "00:00" "OK" "OK" "0 B/s" $videoActual $playlistInfo
+        }
+        $script:ytdlpLastDrawTop = $null
+        $script:ytdlpProgressStarted = $false
+        Write-Host ""
+        Write-Host "   ✅ DESCARGA COMPLETADA" -ForegroundColor Green
+        if ($lastFile) {
+            Write-Host "   📁 $lastFile" -ForegroundColor DarkGray
+        }
+        if ($playlistInfo) {
+            Write-Host "   📦 $playlistInfo" -ForegroundColor Cyan
+        }
+        return @{ Success = $true; File = $lastFile; PlaylistInfo = $playlistInfo }
+    } else {
+        $script:ytdlpLastDrawTop = $null
+        $script:ytdlpProgressStarted = $false
+        Write-Host ""
+        Write-Host "   ❌ ERROR EN LA DESCARGA (código $($process.ExitCode))" -ForegroundColor Red
+        if ($script:ytdlpErrorMsg) {
+            Write-Host "      $($script:ytdlpErrorMsg)" -ForegroundColor DarkGray
+        } elseif ($stderr) {
+            $stderrLines = $stderr -split "`n" | Where-Object { $_ -match "ERROR" } | Select-Object -First 3
+            foreach ($errLine in $stderrLines) {
+                Write-Host "      $($errLine.Trim())" -ForegroundColor DarkGray
+            }
+        }
+        return @{ Success = $false; Error = $stderr }
+    }
+}
+
+# ============================================================
 # 🎵 CENTRO DE DESCARGAS INTELIGENTE (yt-dlp)
 # ============================================================
 function Invoke-DownloadCenter {
@@ -4877,20 +5488,21 @@ function Invoke-DownloadCenter {
     $ProgressPreference = "SilentlyContinue"
     $OutputEncoding = [System.Text.Encoding]::UTF8
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    
+
     # Definir rutas
     $Escritorio = [System.IO.Path]::Combine([Environment]::GetFolderPath("Desktop"))
     $Herramientas = [System.IO.Path]::Combine($Escritorio, "Herramientas_Descarga")
     $DescargasPredeterminada = [System.IO.Path]::Combine($Escritorio, "Descargas_YTDLP")
     $HistorialPath = [System.IO.Path]::Combine($Herramientas, "historial_descargas.txt")
+    $YtdlpExe = "$Herramientas\yt-dlp.exe"
     $script:DescargasExitosas = 0
     $script:LimiteDescarga = 50
-    
+
     # Crear carpetas
     if (-not (Test-Path $Herramientas)) { New-Item -ItemType Directory -Path $Herramientas -Force | Out-Null }
     if (-not (Test-Path $DescargasPredeterminada)) { New-Item -ItemType Directory -Path $DescargasPredeterminada -Force | Out-Null }
     Set-Location $Herramientas
-    
+
     function Descargar-FFmpeg {
         Write-Host "   🔧 FFmpeg no encontrado. Descargando..." -ForegroundColor $COLOR_ALERT
         $url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
@@ -4915,7 +5527,7 @@ function Invoke-DownloadCenter {
             return $false
         }
     }
-    
+
     function Verificar-Herramientas {
         if (-not (Test-Path "$Herramientas\yt-dlp.exe")) {
             Write-Host "   📥 Descargando yt-dlp..." -ForegroundColor $COLOR_ALERT
@@ -4942,7 +5554,7 @@ function Invoke-DownloadCenter {
         }
         return $true
     }
-    
+
     function Guardar-Historial {
         param([string]$Titulo, [string]$Plataforma, [string]$URL, [string]$Destino)
         $fecha = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -4950,7 +5562,7 @@ function Invoke-DownloadCenter {
         Add-Content -Path $HistorialPath -Value $linea -Encoding UTF8
         Write-Log "DOWN" "Downloaded: $Titulo from $Plataforma"
     }
-    
+
     function Mostrar-Historial {
         Clear-Host
         Show-MainTitle
@@ -4974,18 +5586,18 @@ function Invoke-DownloadCenter {
         }
         Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
     }
-    
+
     function Detectar-USB {
         try {
             $drives = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DriveType -eq 2 -and $_.Size -gt 0 }
             if ($drives) { return $drives[0].DeviceID.Replace(":", "") }
-        } catch { 
+        } catch {
             $vol = Get-Volume | Where-Object { $_.DriveType -eq 'Removable' -and $_.DriveLetter } | Select-Object -First 1
             if ($vol) { return $vol.DriveLetter }
         }
         return $null
     }
-    
+
     function Evaluar-Apagado {
         if ($Global:ModoNocturno) {
             Write-Host "`n   🔥 MODO NOCTURNO ACTIVO. Apagando PC en 60 segundos..." -ForegroundColor $COLOR_DANGER
@@ -4995,14 +5607,14 @@ function Invoke-DownloadCenter {
             exit
         }
     }
-    
+
     function Limpiar-Nombre {
         param([string]$Nombre)
         $invalidChars = [System.IO.Path]::GetInvalidFileNameChars()
         foreach ($char in $invalidChars) { $Nombre = $Nombre.Replace($char, '_') }
         return $Nombre.Trim()
     }
-    
+
     function Mostrar-Notas {
         Clear-Host
         Show-MainTitle
@@ -5013,9 +5625,10 @@ function Invoke-DownloadCenter {
         Write-Host "   2. DESCARGA POR LOTES: Crea archivo lista_descargas.txt"
         Write-Host "   3. SOLO CONTENIDO PÚBLICO"
         Write-Host "   4. Presiona Ctrl+C para cancelar"
+        Write-Host "   5. Si ves el spinner girando, ESPERA — está trabajando"
         Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
     }
-    
+
     function Descargar-DesdeArchivo {
         param([string]$RutaDestino)
         Clear-Host
@@ -5045,32 +5658,35 @@ function Invoke-DownloadCenter {
             return
         }
         $contador = 0
+        $exitosas = 0
         foreach ($url in $urls) {
             $contador++
             Write-Host "   [$contador/$($urls.Count)] $url" -ForegroundColor Cyan
-            & .\yt-dlp.exe --no-playlist -o "$RutaDestino/%(title)s.%(ext)s" $url 2>$null
-            if ($LASTEXITCODE -eq 0) {
+            $resultado = Invoke-YtdlpDownload -YtdlpPath $YtdlpExe -Arguments @(
+                "--no-playlist",
+                "-o", "$RutaDestino/%(title)s.%(ext)s",
+                $url
+            ) -Titulo "[$contador/$($urls.Count)] Descargando..."
+            if ($resultado.Success) {
                 $script:DescargasExitosas++
-                Write-Host "      ✅ Éxito!" -ForegroundColor Green
-            } else {
-                Write-Host "      ❌ Fallo" -ForegroundColor Red
+                $exitosas++
             }
         }
-        Write-Host "`n   📊 RESUMEN: Exitosas: $contador" -ForegroundColor Cyan
+        Write-Host "`n   📊 RESUMEN: Exitosas: $exitosas de $contador" -ForegroundColor Cyan
         Read-Host "   Presiona Enter para continuar"
     }
-    
+
     # Inicializar
     if (-not (Verificar-Herramientas)) { return }
-    
+
     # Variables de estado
     if ($null -eq $Global:CalidadAudio) { $Global:CalidadAudio = "5" }
-    if ($null -eq $Global:CalidadVideo) { $Global:CalidadVideo = "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]" }
+    if ($null -eq $Global:CalidadVideo) { $Global:CalidadVideo = "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b" }
     if ($null -eq $Global:TextoCalidad) { $Global:TextoCalidad = "Media (192kbps / 720p)" }
     if ($null -eq $Global:ModoNocturno) { $Global:ModoNocturno = $false }
     if ($null -eq $Global:ModoSilencioso) { $Global:ModoSilencioso = $false }
     $Global:RutaDestinoActual = $DescargasPredeterminada
-    
+
     # MENU PRINCIPAL DEL CENTRO
     do {
         $USBDrive = Detectar-USB
@@ -5084,7 +5700,7 @@ function Invoke-DownloadCenter {
         $EstadoNocturno = if ($Global:ModoNocturno) { "ACTIVO" } else { "DESACTIVADO" }
         $EstadoSilencioso = if ($Global:ModoSilencioso) { "SI" } else { "NO" }
         $ColorNocturno = if ($Global:ModoNocturno) { "Red" } else { "Gray" }
-        
+
         Clear-Host
         Show-MainTitle
         Write-Host "`n 🎵 CENTRO DE DESCARGAS INTELIGENTE v4.0" -ForegroundColor $COLOR_MENU
@@ -5125,15 +5741,15 @@ function Invoke-DownloadCenter {
         Write-Host "   ⌨️ CONTROL" -ForegroundColor Gray
         Write-Host "   ═══════════════════════════════════════════════════════════════════" -ForegroundColor $COLOR_DANGER
         Write-Host "   [X] SALIR DEL CENTRO DE DESCARGAS" -ForegroundColor $COLOR_DANGER
-        
+
         $opcion = Read-Host "`n   > SELECCIONE"
-        
+
         if ($Global:ModoSilencioso) {
-            $argsBase = @("--restrict-filenames", "--no-mtime", "--quiet", "--no-warnings")
+            $argsBase = @("--no-mtime")
         } else {
             $argsBase = @("--restrict-filenames", "--no-mtime")
         }
-        
+
         switch -Wildcard ($opcion) {
             "1" {
                 Clear-Host
@@ -5142,11 +5758,16 @@ function Invoke-DownloadCenter {
                 Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
                 $album = Read-Host "   Artista y nombre del Álbum"
                 $nombreLimpio = Limpiar-Nombre -Nombre $album
-                Write-Host "   ⏳ Descargando (máx $script:LimiteDescarga)..." -ForegroundColor Yellow
-                & .\yt-dlp.exe -x --audio-format mp3 --audio-quality $Global:CalidadAudio --yes-playlist --playlist-end $script:LimiteDescarga $argsBase "ytsearchplaylist$script:LimiteDescarga:$album" -o "$Global:RutaDestinoActual/$nombreLimpio/%(playlist_index)s - %(title)s.%(ext)s" 2>$null
-                if ($LASTEXITCODE -eq 0) { 
+                $resultado = Invoke-YtdlpDownload -YtdlpPath $YtdlpExe -Arguments (@(
+                    "-x", "--audio-format", "mp3", "--audio-quality", $Global:CalidadAudio,
+                    "--yes-playlist", "--playlist-end", "$script:LimiteDescarga"
+                ) + $argsBase + @(
+                    "ytsearchplaylist$script:LimiteDescarga:$album",
+                    "-o", "$Global:RutaDestinoActual/$nombreLimpio/%(playlist_index)s - %(title)s.%(ext)s"
+                )) -Titulo "Descargando album: $album"
+
+                if ($resultado.Success) {
                     $script:DescargasExitosas++
-                    Write-Host "   ✅ Disco descargado!" -ForegroundColor $COLOR_PRIMARY 
                     Guardar-Historial -Titulo $album -Plataforma "YouTube" -URL "Búsqueda: $album" -Destino $Global:RutaDestinoActual
                 } else {
                     Write-Host "   ❌ No se encontró" -ForegroundColor $COLOR_DANGER
@@ -5160,11 +5781,16 @@ function Invoke-DownloadCenter {
                 Write-Host "`n 🎵 DESCARGAR CANCIÓN SOLA" -ForegroundColor Magenta
                 Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
                 $busqueda = Read-Host "   Nombre del tema"
-                Write-Host "   ⏳ Descargando..." -ForegroundColor Yellow
-                & .\yt-dlp.exe -x --audio-format mp3 --audio-quality $Global:CalidadAudio --no-playlist $argsBase "ytsearch1:$busqueda" -o "$Global:RutaDestinoActual/%(title)s.%(ext)s" 2>$null
-                if ($LASTEXITCODE -eq 0) { 
+                $resultado = Invoke-YtdlpDownload -YtdlpPath $YtdlpExe -Arguments (@(
+                    "-x", "--audio-format", "mp3", "--audio-quality", $Global:CalidadAudio,
+                    "--no-playlist"
+                ) + $argsBase + @(
+                    "ytsearch1:$busqueda",
+                    "-o", "$Global:RutaDestinoActual/%(title)s - %(description)s.%(ext)s"
+                )) -Titulo "Descargando: $busqueda"
+
+                if ($resultado.Success) {
                     $script:DescargasExitosas++
-                    Write-Host "   ✅ Canción guardada!" -ForegroundColor $COLOR_PRIMARY 
                     Guardar-Historial -Titulo $busqueda -Plataforma "YouTube" -URL "Búsqueda: $busqueda" -Destino $Global:RutaDestinoActual
                 } else {
                     Write-Host "   ❌ No se encontró" -ForegroundColor $COLOR_DANGER
@@ -5179,15 +5805,24 @@ function Invoke-DownloadCenter {
                 Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
                 $link = Read-Host "   Pega la URL"
                 $tipo = Read-Host "   Música [M] o Video [V]?"
-                Write-Host "   ⏳ Descargando..." -ForegroundColor Yellow
                 if ($tipo -eq "v" -or $tipo -eq "V") {
-                    & .\yt-dlp.exe -f $Global:CalidadVideo --no-playlist $argsBase -o "$Global:RutaDestinoActual/%(title)s.%(ext)s" $link 2>$null
+                    $resultado = Invoke-YtdlpDownload -YtdlpPath $YtdlpExe -Arguments (@(
+                        "-f", $Global:CalidadVideo, "--no-playlist"
+                    ) + $argsBase + @(
+                        "-o", "$Global:RutaDestinoActual/%(title)s - %(description)s.%(ext)s",
+                        $link
+                    )) -Titulo "Descargando video..."
                 } else {
-                    & .\yt-dlp.exe -x --audio-format mp3 --audio-quality $Global:CalidadAudio --no-playlist $argsBase -o "$Global:RutaDestinoActual/%(title)s.%(ext)s" $link 2>$null
+                    $resultado = Invoke-YtdlpDownload -YtdlpPath $YtdlpExe -Arguments (@(
+                        "-x", "--audio-format", "mp3", "--audio-quality", $Global:CalidadAudio,
+                        "--no-playlist"
+                    ) + $argsBase + @(
+                        "-o", "$Global:RutaDestinoActual/%(title)s - %(description)s.%(ext)s",
+                        $link
+                    )) -Titulo "Descargando audio..."
                 }
-                if ($LASTEXITCODE -eq 0) { 
+                if ($resultado.Success) {
                     $script:DescargasExitosas++
-                    Write-Host "   ✅ Descargado!" -ForegroundColor $COLOR_PRIMARY 
                     Guardar-Historial -Titulo "URL" -Plataforma "YouTube" -URL $link -Destino $Global:RutaDestinoActual
                 } else {
                     Write-Host "   ❌ URL inválida" -ForegroundColor $COLOR_DANGER
@@ -5201,17 +5836,36 @@ function Invoke-DownloadCenter {
                 Write-Host "`n 📱 REDES SOCIALES" -ForegroundColor Cyan
                 Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
                 Write-Host "   ⚠️ ATENCIÓN: Solo videos PÚBLICOS" -ForegroundColor $COLOR_ALERT
+                Write-Host "   💡 Para PERFILES usa '--yes-playlist' (se aplica automáticamente)" -ForegroundColor DarkGray
                 $url = Read-Host "   Pega la URL"
                 $tipo = Read-Host "   Solo audio [S] o Video [N]?"
-                Write-Host "   ⏳ Descargando..." -ForegroundColor Yellow
-                if ($tipo -eq "s" -or $tipo -eq "S") {
-                    & .\yt-dlp.exe -x --audio-format mp3 --audio-quality $Global:CalidadAudio --no-playlist $argsBase -o "$Global:RutaDestinoActual/%(title)s.%(ext)s" $url 2>$null
-                } else {
-                    & .\yt-dlp.exe --no-playlist $argsBase -o "$Global:RutaDestinoActual/%(title)s.%(ext)s" $url 2>$null
+
+                # Detectar si es perfil
+                $esPerfil = $url -notmatch '/video/' -and $url -notmatch '/status/' -and $url -notmatch 'watch\?v=' -and $url -notmatch '/p/'
+                $playlistArgs = if ($esPerfil) { @("--yes-playlist", "--playlist-end", "150") } else { @("--no-playlist") }
+
+                if ($esPerfil) {
+                    Write-Host "`n   🔍 URL de perfil detectada. Se descargarán hasta 20 videos." -ForegroundColor Yellow
                 }
-                if ($LASTEXITCODE -eq 0) { 
+
+                if ($tipo -eq "s" -or $tipo -eq "S") {
+                    $resultado = Invoke-YtdlpDownload -YtdlpPath $YtdlpExe -Arguments (@(
+                        "-x", "--audio-format", "mp3", "--audio-quality", $Global:CalidadAudio
+                    ) + $playlistArgs + $argsBase + @(
+                        "-o", "$Global:RutaDestinoActual/%(title)s - %(description)s.%(ext)s",
+                        $url
+                    )) -Titulo "Descargando audio..."
+                } else {
+                    $resultado = Invoke-YtdlpDownload -YtdlpPath $YtdlpExe -Arguments (@(
+                        "-f", $Global:CalidadVideo
+                    ) + $playlistArgs + $argsBase + @(
+                        "-o", "$Global:RutaDestinoActual/%(title)s - %(description)s.%(ext)s",
+                        $url
+                    )) -Titulo "Descargando video..."
+                }
+
+                if ($resultado.Success) {
                     $script:DescargasExitosas++
-                    Write-Host "   ✅ Descargado!" -ForegroundColor $COLOR_PRIMARY
                 } else {
                     Write-Host "   ❌ Fallo - video privado o URL incorrecta" -ForegroundColor $COLOR_DANGER
                 }
@@ -5232,11 +5886,18 @@ function Invoke-DownloadCenter {
                 $busqueda = Read-Host "   Nombre de la canción"
                 $inicio = Read-Host "   Inicio (00:00:00)"
                 $fin = Read-Host "   Fin (00:00:00)"
-                Write-Host "   ⏳ Procesando..." -ForegroundColor Yellow
-                & .\yt-dlp.exe -x --audio-format mp3 --audio-quality $Global:CalidadAudio --no-playlist $argsBase --download-sections "*$inicio-$fin" --force-keyframes-at-cuts "ytsearch1:$busqueda" -o "$Global:RutaDestinoActual/%(title)s_recortado.%(ext)s" 2>$null
-                if ($LASTEXITCODE -eq 0) { 
+                $resultado = Invoke-YtdlpDownload -YtdlpPath $YtdlpExe -Arguments (@(
+                    "-x", "--audio-format", "mp3", "--audio-quality", $Global:CalidadAudio,
+                    "--no-playlist"
+                ) + $argsBase + @(
+                    "--download-sections", "*$inicio-$fin",
+                    "--force-keyframes-at-cuts",
+                    "ytsearch1:$busqueda",
+                    "-o", "$Global:RutaDestinoActual/%(title)s_recortado.%(ext)s"
+                )) -Titulo "Recortando audio..."
+
+                if ($resultado.Success) {
                     $script:DescargasExitosas++
-                    Write-Host "   ✅ Fragmento guardado!" -ForegroundColor $COLOR_PRIMARY 
                 } else {
                     Write-Host "   ❌ No se pudo recortar" -ForegroundColor $COLOR_DANGER
                 }
@@ -5253,19 +5914,19 @@ function Invoke-DownloadCenter {
                 Write-Host "   [3] Baja (128kbps / 480p)"
                 $setCalidad = Read-Host "`n   Opción"
                 switch ($setCalidad) {
-                    "1" { 
+                    "1" {
                         $Global:CalidadAudio = "0"
-                        $Global:CalidadVideo = "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]"
+                        $Global:CalidadVideo = "bv*+ba/b"
                         $Global:TextoCalidad = "Alta (320kbps / 1080p)"
                     }
-                    "3" { 
+                    "3" {
                         $Global:CalidadAudio = "9"
-                        $Global:CalidadVideo = "bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[height<=480][ext=mp4]"
+                        $Global:CalidadVideo = "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b"
                         $Global:TextoCalidad = "Baja (128kbps / 480p)"
                     }
-                    default { 
+                    default {
                         $Global:CalidadAudio = "5"
-                        $Global:CalidadVideo = "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]"
+                        $Global:CalidadVideo = "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b"
                         $Global:TextoCalidad = "Media (192kbps / 720p)"
                     }
                 }
@@ -5311,7 +5972,7 @@ function Invoke-DownloadCenter {
                 }
                 Start-Sleep -Seconds 2
             }
-            "c" { 
+            "c" {
                 Clear-Host
                 Show-MainTitle
                 Write-Host "`n 📂 SELECCIONAR CARPETA" -ForegroundColor Cyan
@@ -5331,7 +5992,7 @@ function Invoke-DownloadCenter {
                 Write-Log "DOWN" "Download folder changed to: $Global:RutaDestinoActual"
                 Start-Sleep -Seconds 2
             }
-            "C" { 
+            "C" {
                 Clear-Host
                 Show-MainTitle
                 Write-Host "`n 📂 SELECCIONAR CARPETA" -ForegroundColor Cyan
@@ -5363,7 +6024,7 @@ function Invoke-DownloadCenter {
                 Write-Host "`n 🔄 ACTUALIZANDO YT-DLP" -ForegroundColor Cyan
                 Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
                 Write-Host "   ⏳ Descargando última versión..." -ForegroundColor Yellow
-                & .\yt-dlp.exe -U 2>$null
+                & $YtdlpExe -U 2>$null
                 Write-Host "`n   ✅ yt-dlp actualizado!" -ForegroundColor $COLOR_PRIMARY
                 Write-Log "DOWN" "yt-dlp updated"
                 Read-Host "`n   Presiona Enter"
@@ -5374,7 +6035,7 @@ function Invoke-DownloadCenter {
                 Write-Host "`n 🔄 ACTUALIZANDO YT-DLP" -ForegroundColor Cyan
                 Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
                 Write-Host "   ⏳ Descargando última versión..." -ForegroundColor Yellow
-                & .\yt-dlp.exe -U 2>$null
+                & $YtdlpExe -U 2>$null
                 Write-Host "`n   ✅ yt-dlp actualizado!" -ForegroundColor $COLOR_PRIMARY
                 Write-Log "DOWN" "yt-dlp updated"
                 Read-Host "`n   Presiona Enter"
@@ -5382,7 +6043,7 @@ function Invoke-DownloadCenter {
             "x" { break }
         }
     } while ($opcion -ne "x")
-    
+
     Clear-Host
     Show-MainTitle
     Write-Host "`n ═══════════════════════════════════════════════════════════════════" -ForegroundColor Green
@@ -5391,6 +6052,578 @@ function Invoke-DownloadCenter {
     Write-Host "   🎵 Gracias por usar el centro de descargas!" -ForegroundColor Magenta
     Write-Log "DOWN" "Download center closed. Total downloads: $script:DescargasExitosas"
     Start-Sleep -Seconds 2
+}
+
+# ============================================================
+# 📦 BASE DE DATOS DE URLs PARA INSTALACIÓN AUTOMÁTICA
+# ============================================================
+
+$Global:KnownApps = @{
+    # ============================================================
+    # 📥 GESTORES DE DESCARGA
+    # ============================================================
+    "mipony" = @{
+        Url = "https://www.mipony.net/downloads/MiPony_Installer.exe"
+        Args = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+        FileName = "MiPony_Installer.exe"
+    }
+    "jdownloader" = @{
+        Url = "http://installer.jdownloader.org/JD2Setup.exe"
+        Args = "/S"
+        FileName = "JD2Setup.exe"
+    }
+    "idm" = @{
+        Url = "https://mirror2.internetdownloadmanager.com/idman642build25.exe"
+        Args = "/silent /norestart"
+        FileName = "idman.exe"
+    }
+    "fdm" = @{
+        Url = "https://web.archive.org/web/20260404211342/https://files2.freedownloadmanager.org/6/latest/fdm_x64_setup.exe"
+        Args = "/S"
+        FileName = "FDM.exe"
+    }
+
+    # ============================================================
+    # 🌐 NAVEGADORES
+    # ============================================================
+    "brave" = @{
+        Url = "https://referrals.brave.com/latest/BraveBrowserSetup.exe"
+        Args = "/silent /install"
+        FileName = "BraveSetup.exe"
+    }
+    "opera" = @{
+        Url = "https://download.opera.com/download/get/?partner=www&opsys=Windows&product=Opera&os=windows"
+        Args = "/silent"
+        FileName = "OperaSetup.exe"
+    }
+    "thorium" = @{
+        Url = "https://github.com/Alex313031/Thorium-Win/releases/download/M138.0.7204.303/thorium_SSE4_mini_installer.exe"
+        Args = "/S"
+        FileName = "thorium_SSE4_mini_installer.exe"
+    }
+    "optichromium" = @{
+        Url = "https://web.archive.org/web/20251214035701/https://download2267.mediafire.com/tlkp1arhg5rgjizzzrn4LWBEAW8DF7OevEORrGYyXM_b8flLvHxieRXodkUwcKzshLuNIOfjLpoogm_ucrhIaNLw9PUp9e8ku9T-_5oWsbIsS5eDWVK_H9NY-I1c8_3sBnPCHGGLqlvqark32R5oWjUlWUGJahcvkbvWixYDIiB7OQ/lc6hskmnsd98lmp/OptiChromium+V6.zip"
+        Args = ""
+        FileName = "OptiChromium.7z"
+        IsZip = $true
+    }
+    "chrome87" = @{
+        Url = "https://web.archive.org/web/20240325002543/https://download1654.mediafire.com/7lraot2efkdgBS4DYgJbfgSnb-_bGT8TNIFi3i4rNjYZPA3eK9MadHsu5lxhH_7VnireWQFor0hamy84G0GNRRNlFWS3jGj-vcIpZ_KI-SFT5WhEJGxkrrDbVLvjanuhJ2k_7rwmxFBH1Er4oACUnIavHfHkM6uQzamuB_Fs9z_5lc8/l1fub61m4ltwx5u/Chrome+87+Flash+34+Portable.7z"
+        Args = ""
+        FileName = "Chrome87Portable.7z"
+        IsZip = $true
+    }
+    "vivaldi" = @{
+        Url = "https://web.archive.org/web/20260412224337/https://downloads.vivaldi.com/stable/Vivaldi.7.9.3970.50.x64.exe"
+        Args = "/S"
+        FileName = "Vivaldi.exe"
+    }
+    "vivaldi5" = @{
+        Url = "https://web.archive.org/web/20230320084539/https://downloads.vivaldi.com/stable/Vivaldi.5.6.2867.62.exe"
+        Args = "/S"
+        FileName = "Vivaldi5.exe"
+    }
+    "supermium" = @{
+        Url = "https://web.archive.org/web/20251214043203/https://download1531.mediafire.com/odagfe0d9xlgkTF5MiPftFnaZjENrwcaxFagPJkRFP3YzqExrNUQlm9DoXkjVwp3gFZrrpzTuy4p3wMaWans8Bah9k6ftXL1eptlHQhKdXLnb57cAdeaHKRCcB6vPmhuLchMtiQK2mlKBrNRhCxymCBhCwtgg4u2152fNj9E2mZViOY/brxu2kq3znp8483/supermium_138_64_setup.exe"
+        Args = "/S"
+        FileName = "supermium_138_64_setup.exe"
+    }
+    "supermium32" = @{
+        Url = "https://web.archive.org/web/20251214043008/https://download1323.mediafire.com/lgfww7f3pdvggYVGhj9hSsmn5-4sIF8E-ypMe913--J0gS6tznkuCMYadlBHtqHyBXGJabQkWmdtkH7r80T-14LJmCbPK7KaVTiCWi44Sx0M2coBFuga7Z7dk_CNjbxwq5f5K3OAKDaFnDyO3FM_BlkoUkGBZnp-g763DzGuBT1t/zr89s1jf643qjej/supermium_138_32_setup.exe"
+        Args = "/S"
+        FileName = "supermium_138_32_setup.exe"
+    }
+    "helium" = @{
+        Url = "https://github.com/imputnet/helium-windows/releases/download/0.10.9.1/helium_0.10.9.1_x64-installer.exe"
+        Args = "/S"
+        FileName = "helium_0.10.9.1_x64-installer.exe"
+    }
+    "firefox115" = @{
+        Url = "https://web.archive.org/web/20251214040515/https://ftp.mozilla.org/pub/firefox/releases/115.0esr/win64/es-ES/Firefox Setup 115.0esr.exe"
+        Args = "/S"
+        FileName = "Firefox_115_64.exe"
+    }
+    "firefox11532" = @{
+        Url = "https://web.archive.org/web/20251214040515/https://ftp.mozilla.org/pub/firefox/releases/115.0esr/win32/es-ES/Firefox Setup 115.0esr.exe"
+        Args = "/S"
+        FileName = "Firefox_115_32.exe"
+    }
+    "brave108" = @{
+        Url = "https://web.archive.org/web/20251214042222/https://download1347.mediafire.com/plgpnzi5qtvg_aO-mwYnsrYRNfD5uIaUaQLqlj9T14G1EiCFyRqbMN8JVEWHPYP4-dBdK5kDsf8QiNPw3PLBeSAX0bWLAc_1kHSeilmYW4EC9bTCDJRjJRV4I0fRUXstHpMe82ysdHhKrrdW7o97kBvCoBzkY1VY81lGt15Xkx1iNw/774w5ul5vuco5r4/BraveBrowserStandaloneSetup.exe"
+        Args = "/S"
+        FileName = "Brave108_64.exe"
+    }
+    "brave10832" = @{
+        Url = "https://web.archive.org/web/20251214042556/https://download1320.mediafire.com/pzsgwcvnimdgZf7c3SDw9MgtxqTUOhxK1v_cZX5ASP-_1Q1UdD1p3vjOqXmjIL_ZTWEzQPP4gZ-FHt1Mh3hofAjA4hNmDFyJKetKZ5OpT5TaYJXCQ9em5_iPTdNtpdmJzC4yz3hWk8LpOh_xJMHLKVfQhIYRfMACyPLcXTwEyPfWSg/zg6bsx49hdnx7b4/BraveBrowserStandaloneSetup32.exe"
+        Args = "/S"
+        FileName = "Brave108_32.exe"
+    }
+    "centbrowser" = @{
+        Url = "https://web.archive.org/web/20251112054341/https://static.centbrowser.com/win_stable/5.2.1168.83/centbrowser_5.2.1168.83_x64_portable.exe"
+        Args = ""
+        FileName = "CentBrowser.zip"
+        IsZip = $true
+    }
+    "centbrowser32" = @{
+        Url = "https://web.archive.org/web/20251127200705/https://static.centbrowser.com/win_stable/5.2.1168.83/centbrowser_5.2.1168.83_portable.exe"
+        Args = ""
+        FileName = "CentBrowser32.zip"
+        IsZip = $true
+    }
+
+    # ============================================================
+    # 🎬 EDICIÓN DE VIDEO Y AUDIO
+    # ============================================================
+    "filmora" = @{
+        Url = "https://web.archive.org/web/20260413052259/https://download2264.mediafire.com/37gqnsr4c47goss47w7nURN9yZfA1IofJdWtZ7ZmX8dZ2dF865Haz7g4mVCZH0aenvncdSZ8qIt6egUVhwoideK6STrLemBeUkxWaPOElFdAFQEoL9uurzjNnBXxSDyhVWjJgkqIlk9a-OOXNyYqBsCdteOdmP-PMFH05DzsvkKLowg/7l97whv5gos05qg/Wondershare+Filmora+14.7z"
+        Args = ""
+        FileName = "Filmora14.7z"
+        IsZip = $true
+    }
+    "premiere" = @{
+        Url = "https://web.archive.org/web/20260413042216/https://download2271.mediafire.com/ii9qsgo65lvgsKOaBTpA_BfZCFivlo4QJvsxD07kyFkJRqIRsWedB2ULoA5MzbgZm_mqFlLelizVzbrPjTYtUcoE02vv5xV55UUGqTABipYlVRAUVlgAonW9EJ00M8eUBolp2hZTtTCvONKkl7DOwm4mNOMruqzA4tWOuPHnGBFhQg/g2typnpiw3il2a8/Adobe+Premiere+Pro+CC+2017+Portable.7z"
+        Args = ""
+        FileName = "Premiere2017.7z"
+        IsZip = $true
+    }
+    "sonyvegas" = @{
+        Url = "https://web.archive.org/web/20260413035949/https://download2298.mediafire.com/wcvwa85mhprgyVfujrjlfYCiZ4DnPELTr68uxxfzkAwBKQ45Fq9DHHPLBV0KLgXRdnS8U37607HOo2XW-4HblhFtXeemdJrZ8PvV39RLZKBTCHMvFmZo9oTxueqYHVPDNNBvUapFwG0oplBUbQL-bdJHamo__AsjnbEPU2p6MwQRXQ/tjb4sfcn73rqpag/Magix+Vegas+17.7z"
+        Args = ""
+        FileName = "Vegas17.7z"
+        IsZip = $true
+    }
+    "capcut" = @{
+        Url = "https://web.archive.org/web/20260413040828/https://download2393.mediafire.com/gpdfvy3exjzgcXNE4sCqv_FycBTNaQr2fVF7ILrDzvn4P-iivg5_o2GL7AJ2vB9ySk9MTNP0DpSBajQ6cSCvydpG1xn8oZ5fsJ1YyNw-OjnMJ4ZRpd8bgoK3fR3KOPSslHdTh6hIJn8G3Nc0nmQ9Yqf1aEMzNZkPhRinJXiUqwl7/jwi0n4my5kab9cr/CapCut+3.8.0+Opti.7z"
+        Args = ""
+        FileName = "CapCut3.8.7z"
+        IsZip = $true
+    }
+    "ffsplit" = @{
+        Url = "https://web.archive.org/web/20260413035549/https://download1523.mediafire.com/kx0kmkix6ivgQIgH6C_2J6G4Jy3xhcp2LFmrdirElTOYpXHQEbQLdMIsSIrFoFHolxrXS0-xfB7zoOiKH_diU-3m7qoyu08btLEYuUJ4Cnn9BejYS_Kl8U15ESMQjwcuTwFx6PksbzUH3et4AvoMdiAP7FkjV4_Dt9N5JI07lbeMOPA/ypokh4loz0mzwbs/FFSplit.7z"
+        Args = ""
+        FileName = "FFSplit.7z"
+        IsZip = $true
+    }
+    "obs" = @{
+        Url = "https://web.archive.org/web/20260413034421/https://download2279.mediafire.com/uin8wjucbwsgVM-XgfbqKBhgQ6XDI2_fEcqQwE17680viuwv7xI53FAvawWbpGvSvrs1T9Vti8U4bK6UhkCMhfOMRY2IHb52Boo2YDFQOESGc0Us82GTqmOlY-RvtKxMMb7XTUgsGnr366WbgMZCaYwBg_JdpxhDAbZJTeZE17evPA/q5e3fh2rhsfp5de/LighterOBS+V2+By+OptiJuegos.7z"
+        Args = ""
+        FileName = "OBS25.7z"
+        IsZip = $true
+    }
+    "bandicam" = @{
+        Url = "https://web.archive.org/web/20250604083218if_/https://download2303.mediafire.com/84zya99egywg6MQ59sKAy_I8mtGShIsRyv8Dje5_jisx_znLWh_V8Qsc4iFCZG0PHyuPnhVKWlFHDJ67h-O4H-Ma5JNegcXaaghBp1BgVPINqkbwV52g9j-DKsAaLrMc4VpujFN-R_lY8FA_15P3aqXjWBlj_i6dnqRon-Rf4X3mtQ/qteigczejthm81g/Bandicam+Portable+4.14.7z"
+        Args = ""
+        FileName = "Bandicam.7z"
+        IsZip = $true
+    }
+
+    # ============================================================
+    # 📸 EDICIÓN DE IMAGEN
+    # ============================================================
+    "photoshop" = @{
+        Url = "https://web.archive.org/web/20240325004539/https://download2390.mediafire.com/r2f51m86gzygrVa8Ai00uR6C7XSk8dwFCNpOF4VrvowDX34LvAZK0elRq8_lZTCuVOzT70lSgw29LFxFNNPx1JHielU0UPPr2QzDttB6FxgZrlKh0XmvNyXlRHnaYyK0xhlItIcVihWGXp869v4X-9CLt8cq7oMPPfNfC5wv8T7rcA/wpysvclp68cq6p3/Photoshop+CS6.rar"
+        Args = ""
+        FileName = "PhotoshopCS6.7z"
+        IsZip = $true
+    }
+
+    # ============================================================
+    # 📄 OFIMÁTICA
+    # ============================================================
+    "office" = @{
+        Url = "https://web.archive.org/web/20260413001802/https://download2445.mediafire.com/p7l3iqn220agfCPalOg-_DGhIBFvvOgt6GZcZHvnrgMmaA9G0WFSzoP5JlSGL82rS7lGI1UnWyrqeYaRn6jVdfEmgGltBnk5OZHtVM3yKITEh-hVM1BXsS2qlfpvbwnzsxEqrpFBuY5TmdEAEUhQPJHClNkcp1rsGRTcDZnoTTwQTg/jcqeb11nhj4hs31/Office+Professional+2016.7z"
+        Args = ""
+        FileName = "Office2016.7z"
+        IsZip = $true
+    }
+    "libreoffice" = @{
+        Url = "https://web.archive.org/web/20260407151842/https://download.documentfoundation.org/libreoffice/stable/26.2.2/win/x86_64/LibreOffice_26.2.2_Win_x86-64.msi"
+        Args = "/quiet /norestart"
+        FileName = "LibreOffice.msi"
+    }
+
+    # ============================================================
+    # 🎬 REPRODUCTORES MULTIMEDIA
+    # ============================================================
+    "vlc" = @{
+        Url = "https://web.archive.org/web/20260413053801/https://mirror.fcix.net/videolan-ftp/vlc/3.0.23/win32/vlc-3.0.23-win32.exe"
+        Args = "/S"
+        FileName = "VLC.exe"
+    }
+
+    # ============================================================
+    # 🛡️ SEGURIDAD Y ANTIVIRUS
+    # ============================================================
+    "malwarebytes" = @{
+        Url = "https://web.archive.org/web/20260228032019/https://data-cdn.mbamupdates.com/web/mb5-setup-consumer/MBSetup.exe"
+        Args = "/S"
+        FileName = "MalwareBytes.exe"
+    }
+    "eset" = @{
+        Url = "https://web.archive.org/web/20260413171533/https://dw.uptodown.net/dwn/3jecuB41fskXBmiJLcqd2C3Jh3gxl6wX5H7otS3qccI42wGvHKf7N4XLZqG-NBNjLp7G1eNr1aGe70GWUNDOQWOs6FOXuqKg7_L54O0RDpjno_AsQsNkYn15YBNeBzWd/mQl2RqD0uRpx9NvbiYZD_r_W7BpBHRABkpHwWbzyZuAHZhyyoMmvewGZbGbCt5L6ZippOK6x4rLFfvilql-9cEiNWETSsRE2I9QgH28C1GxKK3CDyxqyMGGHKUT16gtW/VN88ziEQ_U-8cCvjtw-I5YL7pGi9lwzlcJqnQjp6RGe4Ep_7NxR6BciDTpoNj5O9uF-K90TdYJp7pqH_MmxMXw==/nod32-antivirus-19-1-12-0.exe"
+        Args = "/S"
+        FileName = "ESET.exe"
+    }
+    "kaspersky" = @{
+        Url = "https://web.archive.org/web/20260413171230/https://dw.uptodown.net/dwn/3jecuB41fskXBmiJLcqd2C3Jh3gxl6wX5H7otS3qccIla4c9SWtGyLuBQtp05HKLkH1XgRgsbRDMODBj1Sgz7AS-qwwRg-0Rd1bfACq046VqTHUYSbhI2l4sQbhNX30f/ce0tE_PD0tlfdhrV5NTg1Xq1dLZZgg2bWm57e3_r5EC-nIzujBgPp9llh3uMJTlVDh07vt9Ze_SdgRJ0W0zQ6a63HADmdsS2UiRLkbapYDUp7jDMJgoL0hX-i_7hJZx_/2PPrB9-0om7PpHdFqyRGgwWNWcJ_Ouupe_hq4Zl7nqFDyhWgDIDcEvpSbEjHuQma_O3VTVP50R_C7ghBfEWMPk7QDng9e88RI-ZFWW43h_E=/kaspersky-free-21-21-7-384.exe"
+        Args = "/S"
+        FileName = "Kaspersky.exe"
+    }
+
+    # ============================================================
+    # 🛠️ HERRAMIENTAS DE SISTEMA
+    # ============================================================
+    "rufus" = @{
+        Url = "https://github.com/pbatard/rufus/releases/download/v4.6/rufus-4.6.exe"
+        Args = ""
+        FileName = "rufus.exe"
+    }
+    "ventoy" = @{
+        Url = "https://github.com/ventoy/Ventoy/releases/download/v1.0.99/ventoy-1.0.99-windows.zip"
+        Args = ""
+        FileName = "ventoy.zip"
+        IsZip = $true
+    }
+    "wireshark" = @{
+        Url = "https://www.wireshark.org/download/Wireshark-win64-4.2.6.exe"
+        Args = "/S"
+        FileName = "Wireshark.exe"
+    }
+    "ccleaner" = @{
+        Url = "https://download.ccleaner.com/ccsetup661.exe"
+        Args = "/S"
+        FileName = "ccsetup.exe"
+    }
+    "bleachbit" = @{
+        Url = "https://download.bleachbit.org/BleachBit-4.6.0-setup.exe"
+        Args = "/S"
+        FileName = "BleachBit.exe"
+    }
+    "foldersizes" = @{
+        Url = "https://web.archive.org/web/20260413060302/https://download1479.mediafire.com/r1cp86k5rfdg_SAbqDb5ZdFGRM9wedMkVVBOPGEahN500uz6dlCrnAWULhRNd4BK6-XNz_8mIxBLAHxAEJhL607vpwTOJfPojLotNQ5b20cgmDPB1_9MKmptgHkl6yzLO4-lyJq5F5k826i62V7ah-VAg_losU8hXGlBvE-gDWFJPQ/er7y3agl1ygg6ph/FolderSizes.7z"
+        Args = ""
+        FileName = "FolderSizes.7z"
+        IsZip = $true
+    }
+    "minitool" = @{
+        Url = "https://web.archive.org/web/20260413055632/https://download2300.mediafire.com/f3lo423g978g2mr8bLRFa2dReb7JLHCWL85_J9jp-2WiNukhHYOIjVwBm-UT48YOeA6F2-rCXziNvRaLFh-XJds29hw0ZFF4pFRAGqFIEDH-wTJpD3Ul8txap-iEVuXh364zPlI2YG_AneagnIKqMmmnJoJ8Nr1VFyCUjqz0CLgbPg/lpw6rfgkim1d98m/MiniToolPartitionWizard.7z"
+        Args = ""
+        FileName = "MiniToolPartitionWizard.7z"
+        IsZip = $true
+    }
+    "limpiar" = @{
+        Url = "https://web.archive.org/web/20260413060015/https://download2284.mediafire.com/eqrv6k7smzag0CQfgBRvl6aovfsIskGrT1cYQSwLXzuxkllX1y9jFzRDlrt_cyXNIOogA5f8rvapq9PsvMNoOe1q5mNgq8Lxa9Fher-4uzKvRGHXos9zz2nnXOISdv2tRFh-q-q-jfop3C-sWi8v957XB0ZkqTRGrXSjoWHBC0O4YkE/h8w0ismnrpwm8oe/Limpiar+Espacio.zip"
+        Args = ""
+        FileName = "LimpiarEspacio.zip"
+        IsZip = $true
+    }
+    "hwinfo" = @{
+        Url = "https://web.archive.org/web/20260331165920if_/https://www.hwinfo.com/files/hwi_844.zip"
+        Args = ""
+        FileName = "HWInfo.zip"
+        IsZip = $true
+    }
+    "crystaldiskmark" = @{
+        Url = "https://web.archive.org/web/20260412231725/https://download1325.mediafire.com/vwq2djj7zdugAMVzmR6sgOAJAYU2zHoBFbbWCqvFQc_TisnnBVX-NC7s1yR8a30-XnMUuC3Q7WPcNh9Rh9qg0RS81X8-jOMH-zHuV4jM8KKNLudlnmixScSBF5GIuujOBdDZfGv-Arac-QNboi_sJ4GXhr4UKUf1YJFX2KTwnZlC/condsvby2tda9zb/CrystalDiskMark9_0_2.zip"
+        Args = ""
+        FileName = "CrystalDiskMark.zip"
+        IsZip = $true
+    }
+    "crystaldiskinfo" = @{
+        Url = "https://web.archive.org/web/20260412231413/https://download946.mediafire.com/kot16wrlgk6gUv4J9-Qe83nbmCsWkws0z2rwz0zTWZulEw3GO9_znwBR8Qhy4EvTqh-KZyj2jI0gbFJRCkYorI0Jpn_tRuEUPQX_0BhpcNdAuECjrbhuEcmaWq66gX8rNNDKPTe0_06pUpVovt94xTl-TZrCLEKH245Pi-8l-mUk2g/uhmhcl9whgu3f83/CrystalDiskInfo9_8_0.zip"
+        Args = ""
+        FileName = "CrystalDiskInfo.zip"
+        IsZip = $true
+    }
+    "cinebench" = @{
+        Url = "https://archive.org/download/cinebench_201907/CINEBENCH%20R15.zip"
+        Args = ""
+        FileName = "CinebenchR15.zip"
+        IsZip = $true
+    }
+    "aida64" = @{
+        Url = "https://web.archive.org/web/20260412235123/https://download1652.mediafire.com/666xh6qo7aog6JD51Q-_5ZHm2hjB-RnMQzt8E6jOgO6aee9uH7AHJoA1FlY9cSjjYt1UpuvTyBJVY3oj7TNPoOsSJTNuiLDIJxkFTwP9WVrwtM2l5EAae1KRP_ObJpaaXUSI4zguzqDPTvYvrsKP9QTh7EqL6MZRY36Wu3yRS1FL/qj98zobiriprvbm/AIDA64Portable.7z"
+        Args = ""
+        FileName = "AIDA64.7z"
+        IsZip = $true
+    }
+    "msiafterburner" = @{
+        Url = "https://web.archive.org/web/20240325004413if_/https://download1338.mediafire.com/kk8vbap5l3lgQy2_bnN9JIVbx82DTKor_PvCEAMD9NOK_B7S0ru5zC0y2VMAyi5cIPKYQTIza_LkqNlLTlZHDmYZrJ7Mqr-hSXXMqEIYf0vFXSyWwkdA_zUwkvR70Lmvrte8vJHS3D3xYu2EZ8n963O96GMjd23WYwCcGRhRwpWD4g/k8eqyj99bwlao4o/MSI+Afterburner+Portable.7z"
+        Args = ""
+        FileName = "MSIAfterburner.7z"
+        IsZip = $true
+    }
+    "nvclean" = @{
+        Url = "https://web.archive.org/web/20260413013343/https://download1587.mediafire.com/95suraodgkagHlwLgk7_QpEhY2p30VjuEVttl9lpISm2or0sEfPBtdkxlZMLfhmKhHYAJgCeyz_LCxjBPIW1OmaL3_GmDR27vECgcimHrt_afmqmvTRdZbL2NvNKWHWn8-CNZFhWFLBUIW3yPtk7rzncS6_q8H_I9D1FXvloPkUp/h6bh09iykhw98oj/NVCleanstall_1.19.0.exe"
+        Args = "/S"
+        FileName = "NVCleanInstall.exe"
+    }
+    "store" = @{
+        Url = "https://web.archive.org/web/20240623175744/https://huggingface.co/spaces/lozanogamer/lozanogamers/resolve/main/Store.exe?download=true"
+        Args = "/S"
+        FileName = "MicrosoftStore.exe"
+    }
+
+    # ============================================================
+    # 🎮 JUEGOS
+    # ============================================================
+    "gtasa" = @{
+        Url = "https://web.archive.org/web/20260413030332/https://download2340.mediafire.com/t3ju4zhngkrgnGKwGQ3HRrY4as2Yz1CbFb__bAxSnjIGvP9Lc5D_y2eN58WPRBqsAYJ52a3toM71-yJ79P3qpEevLvQ5LHElfMnIajCIiXMUwbDWkpLN5WCu8uJlBC5VAA-NOwKuzRhvDPMZNt9CwdbZiCyjaw49jIBd0BbGYQXF3A/bxhtk77nslso4oq/GTA+San+Andreas+CANAIMA+Mod.7z"
+        Args = ""
+        FileName = "GTASA.7z"
+        IsZip = $true
+    }
+    "cs16" = @{
+        Url = "https://web.archive.org/web/20260413025540/https://download2291.mediafire.com/n7x022f9127g6iEQMf3RJg2rvc6qBLo175VJmRcsUTmHJhGbVU3jkxREHWtpTf8TJjTy3o1hzBNaNd_ldgsWhM6sSHHJDaVOuCbmEB-WvnPtMu-Ubmkmr_eSt1MeslBcS5OSLXh2E2bjJlQ_j-dpzriScwW4viTDgBmt_tpVxtO13g/ag28b7eumf10go2/Counter+Strike+1.6+Opti-Client+V2.7z"
+        Args = ""
+        FileName = "CS16.7z"
+        IsZip = $true
+    }
+    "pes6" = @{
+        Url = "https://web.archive.org/web/20260413022030/https://download2302.mediafire.com/bd1ai6d71tbgiZL6h4CxEBcNbxkNlfPITBGxG7AHgWGEvWQgzK2AcbKy86Ot0yg-zjqW808Rx0XqeYx9aNea3kNsDso8GC2gp0TDcKYr-dHS0aIXIRQR5_8Qe4eDP5tllSLRcGSNRvONHT3OwFCkfOShavgFBhxVJIzVPbn7vnoE8VY/hv7tv04yu3dkb3f/PES+6+PORTABLE+RIP+OptiJuegos.7z"
+        Args = ""
+        FileName = "PES6.7z"
+        IsZip = $true
+    }
+    "pvz" = @{
+        Url = "https://web.archive.org/web/20260413021646/https://download2354.mediafire.com/bl2h9mx7yclgtRzBnjJSY4fG7CIPMIr9cu3__jh1bumZbyHuKCxu6LIsbJ8CXjJXZVYoHb67e5ddtK76UpXpJBEnqOgwFBthxNZqbTYLJGnC0V3T8zoU5HcraUyG3jgH6u3VAEGOt1ZyZ616c_EKmuEy6k3e_qj9rcIW2sIECkrU2aA/yswh4afgrs0jo9f/Plantas+VS+Zombies+GOTY.7z"
+        Args = ""
+        FileName = "PVZ.7z"
+        IsZip = $true
+    }
+    "minecraftlite" = @{
+        Url = "https://web.archive.org/web/20260413020712/https://download2263.mediafire.com/p8mpsawfosfgYGs5EerR67BM53Pkqo4NPTuM1CYUG0JVCmxBXsi2czRhFJ3koXdKM0I8YzOiEGSUZPN3-pD8rj5l2re6-77uVklwi56lbxxHx7XIlCxGkiJD1i-zF8a6qEwZaM_rM2II389DE-QzTyz-nFaeDOkJSXMIkv7bd2NcEQ/eldp4t0omiizs1t/Minecraft+1.8.9+Canaima+MOD+V2.7z"
+        Args = ""
+        FileName = "MinecraftLite.7z"
+        IsZip = $true
+    }
+    "stumble" = @{
+        Url = "https://web.archive.org/web/20260413015714/https://download2270.mediafire.com/uwnbueh5neqgtEwx89gwBtwAzucfo9sC1fbBBHQoyNJpRZ1NNGZFdb7RQUyLX8WYcsDoxOFdSKBKIiRNW6i-V0vlXU5yVnkZ-YMSbHODtedXfGghR3lKQLhJfc7r5TYKrj9quQ2kImn7FZ08Nlsrwn5Eoc0MT6rkjvm2F34SHJGT_3g/muoaqo0g6at4ctl/Stumble Guys Offline OPTI V1.1.7z"
+        Args = ""
+        FileName = "Stumble.7z"
+        IsZip = $true
+    }
+    "pepsiman" = @{
+        Url = "https://web.archive.org/web/20260413024157/https://download2266.mediafire.com/lss27iss1p4gmp_1ekHvJpXvN7AuI1AbY7qaJALBI3hPmvgZV1izomSNUo6sWJVl35cago8ldUo0UCxaFDq7y7JKpjizSnwBaOsAdl-VXOkEZk-v9IGGyAejt519XjgxImEG5MO9w5omkScAdzHb_MQ9OJYDaWLAfqyXfdhXDtXe8ac/5xise7cloytk80s/Pepsiman.7z"
+        Args = ""
+        FileName = "Pepsiman.7z"
+        IsZip = $true
+    }
+    "litecraft" = @{
+        Url = "https://web.archive.org/web/20260422061133/https://download1523.mediafire.com/9sqe5yzdlksg3JPBJsCwi61Z327Q2N-nEEknXGBWlNQo7wzaYMeQxbre19D-se_B1gAklXHe5vCJYSFP7VJRcm_b27elf8lFQIgffee513AkUBd90C3FoLzOXFfKbwEy0g1B8Bqrw1zfc-iNBxw4buvt8HkeOUCTxlAMLXgenZw7tsw/9ith69mi5mlsd84/LiteCraft+1.18+-+V1.3.zip"
+        Args = ""
+        FileName = "LiteCraft.zip"
+        IsZip = $true
+    }
+
+    # ============================================================
+    # 🎮 OPTIMIZADORES DE JUEGOS
+    # ============================================================
+    "razercortex" = @{
+        Url = "https://web.archive.org/web/20260211151955/https://dl.razerzone.com/drivers/GameBooster/RazerCortexInstaller.exe"
+        Args = "/S"
+        FileName = "RazerCortex.exe"
+    }
+    "dlss" = @{
+        Url = "https://web.archive.org/web/20260413044855/https://download1592.mediafire.com/xcr3lordfkxg2yiUdJs7B6fmdnMxeCSXsk8wyZNysVZADPHiNqCbMaPsBLFfggQ2347jQbMNC5L8gUIKiqA_QjBhIL1MAlJqmQqGtMk8HLHLCg8VNLy2wnDhUSrZlj1qSZH4gnKrFzB5or6DEKY827Ek9GN7ZacKhGl4eHqvotsQ_pY/7ovu39g8byubnhd/dlss-enabler-setup_0.9.0-final.20260401._AF.exe"
+        Args = "/S"
+        FileName = "DLSSEnabler.exe"
+    }
+    "lowspecs" = @{
+        Url = "https://web.archive.org/web/20260413044209/https://download1589.mediafire.com/lvqtggljsp9gG2oFtfTAcyMOt_GF7lRo8skFqD-8frTcbiuQsqDYQKc-906tM565w0jM5ii95F6U1PxKV-4phZp1J2J5GyPCapRF4jKnG9zs8b6TtAJxnPqhWxiyLY2yMAArN0ITLPyQL-x1Fqvsb1W8Rw4GY1oax0aaYO6gkDT7DQ/tk5uazo08ltisub/Low+Specs+Experience+PRO.7z"
+        Args = ""
+        FileName = "LowSpecs.7z"
+        IsZip = $true
+    }
+    "lossless" = @{
+        Url = "https://web.archive.org/web/20260413043748/https://download2390.mediafire.com/0olma9d1jhegSR61uWnOHrLRa6L2y5IHAyBTQhG-g7obnBn38lm2nnZqA1npziad3KNGHCals6hma3sNqXCL8fRpWZonqXI5lDfCISLASc6GRpUGfD6TkUQl6c_DRhUdXox0Y0U1xBRWvzdddsPPzFX8GQwAvBK0Sbo0GlAKzckcLWA/bwtwsz4gtlh37af/Lossless+Scaling.7z"
+        Args = ""
+        FileName = "Lossless.7z"
+        IsZip = $true
+    }
+    "epic" = @{
+        Url = "https://web.archive.org/web/20260413032617/https://download941.mediafire.com/h6mhto8nccigwR6wwIJlFYG_Q4Z2J7GkVfBppihEI3u2r0BgosVbeDK7wOP0zsT2255oW0fsXrLDVvFiAX_gH5I5bZdlopPH7oGap1ahp3L4ZSfRe6Mq5wvnnpbUdslY7LuVzNH2h5OExIPNjKdheJfY9LU6rp_GkMJ5nKvM49TdkuI/c4r6640h3z5epm9/EpicInstaller-19.2.3.msi"
+        Args = "/quiet /norestart"
+        FileName = "EpicInstaller.msi"
+    }
+
+    # ============================================================
+    # 🔒 VPN
+    # ============================================================
+    "mullvad" = @{
+        Url = "https://mullvad.net/download/vpn/windows"
+        Args = "/S"
+        FileName = "MullvadVPN_installer.exe"
+    }
+    "protonvpn" = @{
+        Url = "https://protonvpn.com/download/ProtonVPN_v3.3.0.exe"
+        Args = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+        FileName = "ProtonVPN.exe"
+    }
+    "windscribe" = @{
+        Url = "https://windscribe.com/install/desktop/windows"
+        Args = "/S"
+        FileName = "Windscribe.exe"
+    }
+
+    # ============================================================
+    # 🎬 EDICIÓN (INSTALACIÓN MANUAL)
+    # ============================================================
+    "davinci" = @{
+        Url = "https://www.blackmagicdesign.com/products/davinciresolve"
+        Args = ""
+        FileName = "DaVinci_Resolve.exe"
+        IsManual = $true
+    }
+}
+
+
+# ============================================================
+# 🚀 INSTALACIÓN AUTOMÁTICA CON BUSQUEDA DE URL
+# ============================================================
+function Install-AutoApp {
+    param([string]$AppName)
+    
+    Clear-Host
+    Show-MainTitle
+    Write-Host "`n 🚀 INSTALACIÓN AUTOMÁTICA: $AppName" -ForegroundColor $COLOR_MENU
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    Write-Host ""
+    
+    # Buscar en la base de datos
+    $appKey = $AppName.ToLower().Trim()
+    $found = $false
+    $appData = $null
+    
+    # Buscar por coincidencia exacta o parcial
+    foreach ($key in $Global:KnownApps.Keys) {
+        if ($appKey -eq $key -or $appKey -like "*$key*" -or $key -like "*$appKey*") {
+            $found = $true
+            $appData = $Global:KnownApps[$key]
+            Write-Host "   ✅ Encontrado en la base de datos: '$key'" -ForegroundColor Green
+            break
+        }
+    }
+    
+    if (-not $found) {
+        Write-Host "   ❌ No se encontró '$AppName' en la base de datos." -ForegroundColor $COLOR_DANGER
+        Write-Host ""
+        Write-Host "   📋 PROGRAMAS DISPONIBLES:" -ForegroundColor $COLOR_ALERT
+        Write-Host "   ─────────────────────────────────────────────────────────" -ForegroundColor Gray
+        foreach ($key in $Global:KnownApps.Keys | Sort-Object) {
+            Write-Host "      • $key" -ForegroundColor $COLOR_MENU
+        }
+        Write-Host "   ─────────────────────────────────────────────────────────" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "   💡 Escribe el nombre exacto como aparece en la lista" -ForegroundColor $COLOR_ALERT
+        Pause-Enter "`n ENTER"
+        return $false
+    }
+    
+    # Verificar si requiere descarga manual
+    if ($appData.IsManual) {
+        Write-Host "   ⚠️ Este programa requiere descarga manual desde:" -ForegroundColor Yellow
+        Write-Host "      $($appData.Url)" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "   Abriendo el navegador automáticamente..." -ForegroundColor DarkGray
+        Start-Process $appData.Url
+        Pause-Enter "`n ENTER después de descargar e instalar manualmente"
+        return $true
+    }
+    
+    # Verificar si es ZIP
+    if ($appData.IsZip) {
+        Write-Host "   📦 Es un archivo ZIP (requiere extracción manual)" -ForegroundColor Yellow
+        Write-Host "      Descargando y extrayendo automáticamente..." -ForegroundColor DarkGray
+    }
+    
+    # Descargar el instalador
+    $tempPath = "$env:TEMP\$($appData.FileName)"
+    Write-Host "   ⏳ Descargando desde: $($appData.Url)" -ForegroundColor Yellow
+    Write-Host "   📁 Guardando en: $tempPath" -ForegroundColor DarkGray
+    
+    try {
+        Invoke-WebRequest -Uri $appData.Url -OutFile $tempPath -UseBasicParsing -ErrorAction Stop
+        Write-Host "   ✅ Descarga completada" -ForegroundColor Green
+    } catch {
+        Write-Host "   ❌ ERROR: No se pudo descargar el instalador" -ForegroundColor Red
+        Write-Host "      $($_.Exception.Message)" -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "   💡 Puedes descargarlo manualmente desde:" -ForegroundColor Yellow
+        Write-Host "      $($appData.Url)" -ForegroundColor Cyan
+        Pause-Enter "`n ENTER"
+        return $false
+    }
+    
+    # Verificar que se descargó
+    if (-not (Test-Path $tempPath)) {
+        Write-Host "   ❌ ERROR: El archivo no existe después de la descarga" -ForegroundColor Red
+        Pause-Enter "`n ENTER"
+        return $false
+    }
+    
+    # Mostrar tamaño
+    $size = (Get-Item $tempPath).Length
+    Write-Host "   📊 Tamaño: $(Format-Bytes $size)" -ForegroundColor Cyan
+    
+    # Si es ZIP, extraer
+    if ($appData.IsZip) {
+        Write-Host "   📦 Extrayendo ZIP..." -ForegroundColor Yellow
+        $extractPath = "$env:TEMP\$($AppName)_extracted"
+        if (-not (Test-Path $extractPath)) { New-Item -ItemType Directory -Path $extractPath -Force | Out-Null }
+        Expand-Archive -Path $tempPath -DestinationPath $extractPath -Force
+        Write-Host "   ✅ Extracción completada en: $extractPath" -ForegroundColor Green
+        Write-Host "   💡 Ejecuta el programa desde esa carpeta" -ForegroundColor Yellow
+        Start-Process "explorer.exe" $extractPath
+        Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
+        Pause-Enter "`n ENTER"
+        return $true
+    }
+    
+    # Preguntar si instalar
+    Write-Host ""
+    $confirm = Read-Host "   ❓ ¿Instalar $AppName ahora? (S/N)"
+    if ($confirm -ne "S" -and $confirm -ne "s") {
+        Write-Host "   ❌ Instalación cancelada" -ForegroundColor $COLOR_DANGER
+        Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
+        Pause-Enter "`n ENTER"
+        return $false
+    }
+    
+    # Ejecutar instalador con barra de progreso
+    Write-Host "   ⏳ Ejecutando instalador..." -ForegroundColor Yellow
+    
+    # Barra de progreso animada
+    $barLength = 40
+    for ($i = 0; $i -lt 10; $i++) {
+        $filled = "█" * ($i + 1)
+        $empty = "░" * (10 - $i - 1)
+        Write-Host "   📊 PROGRESO: [$filled$empty] $([math]::Round(($i+1) * 10))%" -ForegroundColor Cyan
+        Start-Sleep -Milliseconds 150
+    }
+    
+    try {
+        $process = Start-Process -FilePath $tempPath -ArgumentList $appData.Args -Wait -PassThru -ErrorAction Stop
+        
+        if ($process.ExitCode -eq 0) {
+            Write-Host "`n   ✅ $AppName INSTALADO CORRECTAMENTE" -ForegroundColor Green
+            Write-Log "MANUAL" "Auto-install success: $AppName from $($appData.Url)"
+        } else {
+            Write-Host "`n   ⚠️ INSTALACIÓN COMPLETADA CON CÓDIGO: $($process.ExitCode)" -ForegroundColor Yellow
+            Write-Host "      Puede que requiera configuración manual." -ForegroundColor DarkGray
+            Write-Log "MANUAL" "Auto-install exit $($process.ExitCode): $AppName"
+        }
+    } catch {
+        Write-Host "`n   ❌ ERROR AL EJECUTAR EL INSTALADOR" -ForegroundColor Red
+        Write-Host "      $($_.Exception.Message)" -ForegroundColor DarkGray
+        Write-Log "ERROR" "Auto-install failed: $AppName - $($_.Exception.Message)"
+    }
+    
+    # Limpiar archivo temporal
+    Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
+    
+    Pause-Enter "`n ENTER"
+    return $true
 }
 
 # ============================================================
@@ -5950,3 +7183,6 @@ while ($true) {
         "X" { exit }
     }
 }
+
+
+
