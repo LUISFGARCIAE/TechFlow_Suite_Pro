@@ -84,30 +84,93 @@ if (-not $PSScriptRoot -or $PSScriptRoot -eq "") {
 # ============================================================
 # 🛠️ [AUTO-REPARADOR] - WINGET & CHOCOLATEY
 # ============================================================
-
 function Repair-Winget {
     $wingetOk = $false
+    
+    # ── 1. Verificar si ya funciona ──
     try {
         $test = winget --version 2>&1
         if ($LASTEXITCODE -eq 0 -and $test -match "\d+\.\d+") {
-            $wingetOk = $true
-        } else {
-            throw "Winget no responde"
+            return $true
+        }
+    } catch { }
+    
+    Write-Host "   🔧 Reparando motor WINGET 🧊..." -ForegroundColor Yellow
+    
+    # Silenciar barra de progreso (evita cuelgues y acelera descargas)
+    $oldProgress = $ProgressPreference
+    $ProgressPreference = 'SilentlyContinue'
+    
+    # ── 2. Método OFICIAL (funciona en LTSC, Win10/11, Server) ──
+    try {
+        Write-Host "   → Método oficial (Microsoft.WinGet.Client)..." -ForegroundColor DarkGray
+        
+        # Asegurar proveedor NuGet
+        if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction Stop | Out-Null
+        }
+        
+        # Instalar módulo oficial si no está
+        if (-not (Get-Module -ListAvailable Microsoft.WinGet.Client)) {
+            Install-Module -Name Microsoft.WinGet.Client -Force -Repository PSGallery -ErrorAction Stop | Out-Null
+        }
+        
+        # Importar y ejecutar reparación oficial
+        Import-Module Microsoft.WinGet.Client -ErrorAction Stop
+        Repair-WinGetPackageManager -AllUsers -ErrorAction Stop | Out-Null
+        
+        # Refrescar PATH (por si Winget quedó registrado pero no visible)
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+        
+        # Verificar que ahora sí funciona
+        $test2 = winget --version 2>&1
+        if ($LASTEXITCODE -eq 0 -and $test2 -match "\d+\.\d+") {
+            $ProgressPreference = $oldProgress
+            Write-Host "   ✅ Winget reparado (método oficial): v$test2" -ForegroundColor Green
+            return $true
         }
     } catch {
-        Write-Host "   🔧 Reparando motor WINGET 🧊..." -ForegroundColor Yellow
-        $wingetUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
-        $wingetBundle = "$env:TEMP\winget_latest.msixbundle"
-        try {
-            Invoke-WebRequest -Uri $wingetUrl -OutFile $wingetBundle -UseBasicParsing -ErrorAction Stop
-            Add-AppxPackage -Path $wingetBundle -ErrorAction Stop
-            Remove-Item $wingetBundle -Force -ErrorAction SilentlyContinue
-            $wingetOk = $true
-        } catch {
-            Write-Host "   ❌ ERROR: No se pudo reparar Winget automáticamente" -ForegroundColor Red
-        }
+        Write-Host "   ⚠️ Método oficial falló: $($_.Exception.Message)" -ForegroundColor DarkGray
     }
-    return $wingetOk
+    
+    # ── 3. Fallback: método manual con dependencias (para LTSC sin Store) ──
+    try {
+        Write-Host "   → Fallback: instalación manual con dependencias..." -ForegroundColor DarkGray
+        
+        $deps = @(
+            @{ Name="VCLibs";  Url="https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx" },
+            @{ Name="UI.Xaml"; Url="https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx" },
+            @{ Name="WinGet";  Url="https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" }
+        )
+        
+        foreach ($dep in $deps) {
+            $ext = if ($dep.Url -like "*.msixbundle") { ".msixbundle" } else { ".appx" }
+            $dest = "$env:TEMP\winget_dep_$($dep.Name)$ext"
+            try {
+                Invoke-WebRequest -Uri $dep.Url -OutFile $dest -UseBasicParsing -ErrorAction Stop
+                Add-AppxPackage -Path $dest -ErrorAction Stop
+                Remove-Item $dest -Force -ErrorAction SilentlyContinue
+                Write-Host "      ✓ $($dep.Name) instalado" -ForegroundColor DarkGray
+            } catch {
+                Write-Host "      ⚠️ $($dep.Name): $($_.Exception.Message)" -ForegroundColor DarkGray
+            }
+        }
+        
+        # Refrescar PATH y verificar
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+        $test3 = winget --version 2>&1
+        if ($LASTEXITCODE -eq 0 -and $test3 -match "\d+\.\d+") {
+            $ProgressPreference = $oldProgress
+            Write-Host "   ✅ Winget reparado (fallback manual): v$test3" -ForegroundColor Green
+            return $true
+        }
+    } catch {
+        Write-Host "   ❌ Fallback manual también falló" -ForegroundColor Red
+    }
+    
+    # Restaurar preferencia de progreso
+    $ProgressPreference = $oldProgress
+    return $false
 }
 
 function Repair-Chocolatey {
