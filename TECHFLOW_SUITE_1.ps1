@@ -84,6 +84,7 @@ if (-not $PSScriptRoot -or $PSScriptRoot -eq "") {
 # ============================================================
 # 🛠️ [AUTO-REPARADOR] - WINGET & CHOCOLATEY
 # ============================================================
+
 function Repair-Winget {
     $wingetOk = $false
     
@@ -172,6 +173,7 @@ function Repair-Winget {
     $ProgressPreference = $oldProgress
     return $false
 }
+
 
 function Repair-Chocolatey {
     $chocoOk = $false
@@ -3748,32 +3750,26 @@ function Show-LiveMonitor {
 # ============================================================
 function Invoke-MassGraveIntegrated {
     Show-MainTitle
-    Write-Host "`n ACTIVACIÓN DE WINDOWS/OFFICE" -ForegroundColor $COLOR_MENU
-    Write-Host " Este proceso ejecutará directamente desde la fuente oficial." -ForegroundColor $COLOR_PRIMARY
+    Write-Host "`n 🔑 ACTIVACIÓN DE WINDOWS / OFFICE (MASSGRAVE)" -ForegroundColor $COLOR_MENU
+    Write-Host " Este proceso ejecutará el script oficial de MassGrave (get.activated.win)." -ForegroundColor $COLOR_PRIMARY
     Write-Host " Se abrirá una nueva ventana de PowerShell con el proceso." -ForegroundColor $COLOR_ALERT
     
-    if (-not (Confirm-Critical "EJECUTAR" "ACTIVAR")) { return }
+    if (-not (Confirm-Critical "EJECUTAR MASSGRAVE" "ACTIVAR")) { return }
     
-    Write-Host "`n[+] Ejecutando" -ForegroundColor $COLOR_PRIMARY
+    Write-Host "`n[+] Ejecutando script de activación..." -ForegroundColor $COLOR_PRIMARY
     
-    # Ejecución directa sin guardar archivos
-    $scriptBlock = {
-    #    irm https://get.activated.win | iex
-		irm "https://raw.githubusercontent.com/Hellowen6060/Office-AIO-FULL-1.0/refs/heads/main/MenuGIT.ps1" | iex	
-    }
+    # Ejecución directa desde la fuente oficial de MassGrave
+    $command = "irm https://get.activated.win | iex"
     
     # Lanzar en ventana nueva con permisos de admin
-    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$scriptBlock`"" -Verb RunAs
+    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$command`"" -Verb RunAs
     
-    Write-Host "`n[✔]  Ejecutado Instalador." -ForegroundColor Green
-	Write-Host "`n[✔]  Autor Diego Garcia." -ForegroundColor Green
+    Write-Host "`n[✔] Instalador de activación ejecutado." -ForegroundColor Green
     Write-Host "     Revisa la nueva ventana que se abrió y sigue las instrucciones." -ForegroundColor $COLOR_ALERT
+    Write-Log "ACTIVATION" "MassGrave activation script executed."
     Pause-Enter "`n PRESIONE ENTER CUANDO TERMINE"
 }
 
-# ============================================================
-# CONTROL DE DEFENDER
-# ============================================================
 # ============================================================
 # 🛡️ [REPAIR-DEFENDER] - REHABILITACIÓN COMPLETA
 # ============================================================
