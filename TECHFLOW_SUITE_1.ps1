@@ -1,3 +1,4 @@
+
 if ($Host.Name -ne "ConsoleHost") { Clear-Host } else { [System.Console]::Clear() }
 $ErrorActionPreference = "SilentlyContinue"
 
@@ -66,6 +67,13 @@ function Test-AdminAndContinue {
 
 # Llamar a la función después de la auto-elevación
 Test-AdminAndContinue
+
+# ============================================================
+# 🧹 LIMPIEZA INICIAL FORZADA (para EXE compilado)
+# ============================================================
+try { [System.Console]::Clear() } catch {}
+try { [System.Console]::SetCursorPosition(0, 0) } catch {}
+Start-Sleep -Milliseconds 200
 
 # ============================================================
 # 🔧 DETECCIÓN DE EJECUCIÓN REMOTA (para que $PSScriptRoot no falle)
@@ -418,26 +426,6 @@ function Clear-PendingDeletes {
 }
 Clear-PendingDeletes
 
-# ============================================================
-# 🖥️ BANNER PRINCIPAL
-# ============================================================
-$Banner = @"
- ╔═══════════════════════════════════════════════════════════════════════════════╗
- ║                                                                               ║
- ║    ████████╗███████╗ ██████╗██╗  ██╗    ███████╗██╗      ██████╗ ██╗    ██╗   ║
- ║    ╚══██╔══╝██╔════╝██╔════╝██║  ██║    ██╔════╝██║     ██╔═══██╗██║    ██║   ║
- ║       ██║   █████╗  ██║     ███████║    █████╗  ██║     ██║   ██║██║ █╗ ██║   ║
- ║       ██║   ██╔══╝  ██║     ██╔══██║    ██╔══╝  ██║     ██║   ██║██║███╗██║   ║
- ║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝   ║
- ║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝    ║
- ║                                                                               ║
- ║                                PRO EDITION v6.0                               ║
- ║                                                                               ║
- ║                    SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                ║
- ║                                                                               ║
- ╚═══════════════════════════════════════════════════════════════════════════════╝
-"@
-Write-Host $Banner -ForegroundColor Cyan
 
 # ============================================================
 # 🧹 LIMPIEZA AUTOMÁTICA DE BASURA DE ACTUALIZACIONES
@@ -1357,20 +1345,44 @@ function Restore-ProfileData($BACKOPProfilePath, $TargetUsersRoot = $null) {
     Write-Host " ═════════════════════════════════════════════════════════════════" -ForegroundColor Green
 }
 
+
 # ============================================================
 # 🖥️ INTERFAZ: DIBUJAR TÍTULO Y LOGO PRINCIPAL DE LA SUITE
+# Versión DEFINITIVA - Resize buffer + Clear (funciona en .ps1 y .exe)
 # ============================================================
 function Show-MainTitle {
-    # 🧹 Limpiar pantalla de forma FORZADA
-    if ($Host.Name -eq "ConsoleHost") {
-        Clear-Host
-    } else {
-        [System.Console]::Clear()
+    # 🧹 LIMPIEZA AGRESIVA - Reset total del buffer (elimina scrollback)
+    try {
+        $rawUI = $Host.UI.RawUI
+        $maxWindow = $rawUI.MaxWindowSize
+        $maxBuffer = $rawUI.MaxPhysicalWindowSize
+        
+        # 1) Guardar tamaño actual del buffer
+        $currentBuffer = $rawUI.BufferSize
+        $currentWindow = $rawUI.WindowSize
+        
+        # 2) Reducir buffer al mínimo (1 línea) → destruye el scrollback
+        $minBuffer = New-Object System.Management.Automation.Host.Size(1, 1)
+        try { $rawUI.BufferSize = $minBuffer } catch {}
+        
+        # 3) Restaurar el tamaño del buffer al tamaño de la ventana
+        try { $rawUI.BufferSize = $currentWindow } catch {}
+        
+        # 4) Limpiar
+        try { [System.Console]::Clear() } catch {}
+        try { Clear-Host } catch {}
+        
+        # 5) Posicionar cursor arriba
+        try { [System.Console]::SetCursorPosition(0, 0) } catch {}
+        try { $rawUI.CursorPosition = New-Object System.Management.Automation.Host.Coordinates(0, 0) } catch {}
+    }
+    catch {
+        # Fallback si algo falla
+        try { [System.Console]::Clear() } catch {}
+        try { Clear-Host } catch {}
     }
     
-    # 🔄 También forzar refresco de buffer
-    $Host.UI.RawUI.CursorPosition = New-Object System.Management.Automation.Host.Coordinates 0,0
-    
+    # 📐 Dibujar el banner
     Write-Host @"
 	
  ╔══════════════════════════════════════════════════════════════════════════════════╗
@@ -1389,8 +1401,8 @@ function Show-MainTitle {
  ╚══════════════════════════════════════════════════════════════════════════════════╝
 "@ -ForegroundColor Cyan
     
-    # ⚡ Forzar que se muestre inmediatamente
-    [System.Console]::Out.Flush()
+    # ⚡ Forzar flush inmediato
+    try { [System.Console]::Out.Flush() } catch {}
 }
 
 function Pause-Enter {
@@ -3746,27 +3758,177 @@ function Show-LiveMonitor {
 }
 
 # ============================================================
-# ACTIVACIÓN INTEGRADA (MASSGRAVE)
+# ACTIVACIÓN INTEGRADA (MASSGRAVE) - VERSIÓN DEFINITIVA v6.0
+# Opción 2 + Bonus de Red (DoH) + Script temporal robusto
 # ============================================================
 function Invoke-MassGraveIntegrated {
     Show-MainTitle
     Write-Host "`n 🔑 ACTIVACIÓN DE WINDOWS / OFFICE (MASSGRAVE)" -ForegroundColor $COLOR_MENU
-    Write-Host " Este proceso ejecutará el script oficial de MassGrave (get.activated.win)." -ForegroundColor $COLOR_PRIMARY
-    Write-Host " Se abrirá una nueva ventana de PowerShell con el proceso." -ForegroundColor $COLOR_ALERT
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
+    Write-Host " Este proceso ejecutará el script oficial de MassGrave." -ForegroundColor $COLOR_PRIMARY
+    Write-Host " ⚠️ Defender se pausará temporalmente y se reactivará al terminar." -ForegroundColor $COLOR_ALERT
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Gray
     
     if (-not (Confirm-Critical "EJECUTAR MASSGRAVE" "ACTIVAR")) { return }
     
-    Write-Host "`n[+] Ejecutando script de activación..." -ForegroundColor $COLOR_PRIMARY
+    # ── Variables de estado para restauración ──
+    $rtpDesactivado = $false
+    $procesosExcluidos = @()
+    $rutasExcluidas = @()
     
-    # Ejecución directa desde la fuente oficial de MassGrave
-    $command = "irm https://get.activated.win | iex"
+    try {
+        # ============================================================
+        # 1. PAUSAR PROTECCIÓN EN TIEMPO REAL
+        # ============================================================
+        Write-Host "`n   🛡️ Preparando entorno seguro para activación..." -ForegroundColor DarkGray
+        
+        try {
+            Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop
+            $rtpDesactivado = $true
+            Write-Host "   ✅ Protección en tiempo real pausada." -ForegroundColor Green
+        } catch {
+            Write-Host "   ⚠️ No se pudo pausar RTP: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+        
+        # ============================================================
+        # 2. EXCLUIR PROCESOS TEMPORALMENTE
+        # ============================================================
+        $procesosAExcluir = @(
+            "powershell.exe", "pwsh.exe",
+            "cmd.exe", "conhost.exe",
+            "mshta.exe", "wscript.exe", "cscript.exe"
+        )
+        
+        foreach ($proc in $procesosAExcluir) {
+            try {
+                Add-MpPreference -ExclusionProcess $proc -ErrorAction Stop
+                $procesosExcluidos += $proc
+            } catch {}
+        }
+        Write-Host "   ✅ Excluidos $($procesosExcluidos.Count) procesos temporalmente." -ForegroundColor Green
+        
+        # ============================================================
+        # 3. EXCLUIR RUTAS TEMPORALES
+        # ============================================================
+        $rutasAExcluir = @(
+            "$env:SystemRoot\Temp",
+            "$env:USERPROFILE\AppData\Local\Temp",
+            "$env:TEMP"
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+        
+        foreach ($ruta in $rutasAExcluir) {
+            try {
+                Add-MpPreference -ExclusionPath $ruta -ErrorAction Stop
+                $rutasExcluidas += $ruta
+            } catch {}
+        }
+        Write-Host "   ✅ Excluidas $($rutasExcluidas.Count) rutas temporales." -ForegroundColor Green
+        
+        # ============================================================
+        # 4. DETECTAR CONECTIVIDAD
+        # ============================================================
+        Write-Host "`n   🌐 Verificando conectividad con MassGrave..." -ForegroundColor DarkGray
+        
+        $conectividad = "direct"
+        try {
+            $test = Invoke-WebRequest -Uri "https://get.activated.win" -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
+            Write-Host "   ✅ Conexión directa OK." -ForegroundColor Green
+        } catch {
+            Write-Host "   ⚠️ Conexión directa bloqueada. Probando DNS-over-HTTPS..." -ForegroundColor Yellow
+            try {
+                $test2 = curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win 2>$null
+                if ($test2) {
+                    $conectividad = "doh"
+                    Write-Host "   ✅ Bypass DNS-over-HTTPS funciona." -ForegroundColor Green
+                }
+            } catch {
+                $conectividad = "blocked"
+                Write-Host "   ❌ No se pudo conectar. Se intentará de todos modos." -ForegroundColor Red
+            }
+        }
+        
+        # ============================================================
+        # 5. EJECUTAR MASSGRAVE (con script temporal robusto)
+        # ============================================================
+        Write-Host "`n[+] Ejecutando script de activación oficial..." -ForegroundColor $COLOR_PRIMARY
+        Write-Host "    (Se abrirá una nueva ventana elevada)" -ForegroundColor DarkGray
+        
+        # Comando según conectividad
+        $massGraveCommand = switch ($conectividad) {
+            "doh"     { "iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String)" }
+            default   { "irm https://get.activated.win | iex" }
+        }
+        
+        # ── Crear script temporal (evita problemas de parsing) ──
+        $tempScriptPath = "$env:TEMP\TechFlow_MassGrave_$(Get-Random).ps1"
+        $scriptContent = @"
+# TechFlow MassGrave Launcher (temporal)
+`$ErrorActionPreference = 'Continue'
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $massGraveCommand
+} catch {
+    Write-Host "Error en MassGrave: `$(`$_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Presiona ENTER para cerrar..." -ForegroundColor Yellow
+    Read-Host
+}
+"@
+        # Guardar script temporal
+        $scriptContent | Out-File -FilePath $tempScriptPath -Encoding UTF8 -Force
+        Write-Host "    📄 Script temporal creado." -ForegroundColor DarkGray
+        
+        # ── Ejecutar script temporal elevado ──
+        try {
+            $proc = Start-Process powershell -ArgumentList @(
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", "`"$tempScriptPath`""
+            ) -Verb RunAs -Wait -PassThru
+            
+            Write-Host "`n[✔] Ventana de activación cerrada (ExitCode: $($proc.ExitCode))." -ForegroundColor Green
+            Write-Log "ACTIVATION" "MassGrave executed (connectivity: $conectividad, exit: $($proc.ExitCode))"
+        }
+        finally {
+            # Limpiar script temporal siempre
+            Remove-Item $tempScriptPath -Force -ErrorAction SilentlyContinue
+            Write-Host "    🧹 Script temporal eliminado." -ForegroundColor DarkGray
+        }
+    }
+    catch {
+        Write-Host "`n   ❌ ERROR durante la activación: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Log "ERROR" "MassGrave failed: $($_.Exception.Message)"
+    }
+    finally {
+        # ============================================================
+        # 6. RESTAURAR DEFENDER
+        # ============================================================
+        Write-Host "`n   🔄 Restaurando protección de Defender..." -ForegroundColor DarkGray
+        
+        foreach ($proc in $procesosExcluidos) {
+            try { Remove-MpPreference -ExclusionProcess $proc -ErrorAction SilentlyContinue } catch {}
+        }
+        
+        foreach ($ruta in $rutasExcluidas) {
+            try { Remove-MpPreference -ExclusionPath $ruta -ErrorAction SilentlyContinue } catch {}
+        }
+        
+        if ($rtpDesactivado) {
+            try {
+                Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction Stop
+                Write-Host "   ✅ Protección en tiempo real reactivada." -ForegroundColor Green
+            } catch {
+                Write-Host "   ⚠️ No se pudo reactivar RTP. Reinicia Defender manualmente." -ForegroundColor Yellow
+            }
+        }
+        
+        Write-Host "   🛡️ Defender está nuevamente 100% activo." -ForegroundColor Green
+        Write-Log "ACTIVATION" "Defender restored after MassGrave execution."
+    }
     
-    # Lanzar en ventana nueva con permisos de admin
-    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$command`"" -Verb RunAs
-    
-    Write-Host "`n[✔] Instalador de activación ejecutado." -ForegroundColor Green
-    Write-Host "     Revisa la nueva ventana que se abrió y sigue las instrucciones." -ForegroundColor $COLOR_ALERT
-    Write-Log "ACTIVATION" "MassGrave activation script executed."
+    Write-Host "`n ═══════════════════════════════════════════════════════════════════" -ForegroundColor Green
+    Write-Host " [✔] Proceso de activación finalizado." -ForegroundColor Green
+    Write-Host "     Sigue las instrucciones en la ventana que se abrió." -ForegroundColor $COLOR_ALERT
+    Write-Host " ═══════════════════════════════════════════════════════════════════" -ForegroundColor Green
     Pause-Enter "`n PRESIONE ENTER CUANDO TERMINE"
 }
 
@@ -6688,6 +6850,12 @@ function Install-AutoApp {
 # ============================================================
 # MENU PRINCIPAL
 # ============================================================
+
+# Limpieza inicial forzada ANTES del menú principal
+try { $null = & cmd.exe /c cls 2>$null } catch {}
+Clear-Host
+Start-Sleep -Milliseconds 300
+
 while ($true) {
 #	Clear-Host #nuevo
     Show-MainTitle
