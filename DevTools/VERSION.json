@@ -1,9 +1,0 @@
-﻿{
-    "version":  "7.0.3",
-    "project":  "TechFlow Suite Pro",
-    "edition":  "Modular",
-    "architecture":  "PowerShell 5.1 / Core",
-    "author":  "Luis Fernando García Enciso",
-    "environment":  "C:\\TechFlow_Suite_Pro_v6",
-    "changelog":  "Mejora"
-}
