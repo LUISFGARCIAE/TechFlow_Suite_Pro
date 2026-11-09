@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 $installDir = "C:\TechFlow_Suite_Pro_v6"
-$repoZipUrl = "https://github.com/LuisFernandoGarcia/TechFlowSuite/archive/refs/heads/main.zip"
+$repoZipUrl = "https://github.com/LuisFernandoGarcia/TechFlow_Suite_Pro/archive/refs/heads/main.zip"
 
 Write-Host "╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
 Write-Host "║              TECHFLOW SUITE PRO - INSTALADOR WEB                 ║" -ForegroundColor Cyan
@@ -15,7 +15,7 @@ Write-Host "╚═════════════════════�
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     Write-Host "`n[!] Elevando permisos de administrador requeridos..." -ForegroundColor Yellow
-    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm https://raw.githubusercontent.com/LuisFernandoGarcia/TechFlowSuite/main/install.ps1 | iex`"" -Verb RunAs
+    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm https://raw.githubusercontent.com/LuisFernandoGarcia/TechFlow_Suite_Pro/main/install.ps1 | iex`"" -Verb RunAs
     exit
 }
 
@@ -60,3 +60,4 @@ Write-Host "🚀 Iniciando TechFlow Suite Pro..." -ForegroundColor Cyan
 Start-Sleep -Seconds 1
 
 Start-Process "$installDir\lanzador.bat"
+

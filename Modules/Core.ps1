@@ -155,9 +155,9 @@ function Invoke-StartupChecks {
     Write-Host " │ 🌐 Sincronización GitHub    : " -NoNewline -ForegroundColor Gray
     
     $repoUrls = @(
-        "https://raw.githubusercontent.com/LuisFernandoGarcia/TechFlowSuite/main/DevTools/VERSION.json",
-        "https://raw.githubusercontent.com/LuisFernandoGarcia/TechFlowSuite/main/VERSION.json",
-        "https://raw.githubusercontent.com/LuisFernandoGarcia/TechFlowSuite/main/version.json"
+        "https://raw.githubusercontent.com/LuisFernandoGarcia/TechFlow_Suite_Pro/main/DevTools/VERSION.json",
+        "https://raw.githubusercontent.com/LuisFernandoGarcia/TechFlow_Suite_Pro/main/VERSION.json",
+        "https://raw.githubusercontent.com/LuisFernandoGarcia/TechFlow_Suite_Pro/main/version.json"
     )
     
     $remoteVersion = $null
@@ -213,7 +213,7 @@ function Invoke-StartupChecks {
             $updOpt = Read-MenuOption "`n > SELECCIONE" -Valid @("1","2")
             if ($updOpt -eq "1") {
                 Write-Host "`n [+] Abriendo repositorio oficial..." -ForegroundColor Cyan
-                Start-Process "https://github.com/LuisFernandoGarcia/TechFlowSuite"
+                Start-Process "https://github.com/LuisFernandoGarcia/TechFlow_Suite_Pro"
                 Start-Sleep -Seconds 1
             }
         } else {
@@ -229,5 +229,6 @@ function Invoke-StartupChecks {
         Start-Sleep -Milliseconds 700
     }
 }
+
 
 
