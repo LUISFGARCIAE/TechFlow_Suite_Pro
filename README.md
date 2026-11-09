@@ -23,7 +23,7 @@ Desarrollada en PowerShell con soporte nativo tanto para consolas interactivas c
 
 No necesitas descargar archivos ZIP manualmente ni clonar el repositorio. Abre **PowerShell como Administrador** y ejecuta:
 
-```powershell
+``powershell
 irm [https://raw.githubusercontent.com/LUISFGARCIAE/TechFlow_Suite_Pro/main/install.ps1](https://raw.githubusercontent.com/LUISFGARCIAE/TechFlow_Suite_Pro/main/install.ps1) | iex
 
 ¿Qué hace el instalador web automático?Elevación UAC Transparente: Verifica privilegios de Administrador y reabre la sesión elevada de forma automática si es necesario.Auto-Exclusión en Defender: Agrega automáticamente C:\TechFlow_Suite_Pro_v6 a la lista de exclusiones de Windows Defender para evitar falsos positivos durante la ejecución de herramientas de diagnóstico o utilidades portables.Despliegue Limpio: Descarga la versión más reciente desde la rama main de GitHub, verifica la integridad de los paquetes y extrae la estructura modular en disco.Acceso Directo: Crea el acceso directo oficial en el Escritorio apuntando a lanzador.bat.Arranque Inmediato: Inicializa el orquestador principal listo para usarse.🏗️ Arquitectura Modular (v7.0)La suite adopta una estructura modular desacoplada con carga bajo demanda:PlaintextC:\TechFlow_Suite_Pro_v6\
