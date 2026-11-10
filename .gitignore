@@ -1,4 +1,5 @@
-﻿DevTools/
-DevTools/*
-*.log
-*.tmp
+DevTools/
+dist/
+*.exe
+*.syso
+TechFlow_Pro.exe
