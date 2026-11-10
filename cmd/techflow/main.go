@@ -1,8 +1,7 @@
 ﻿package main
 
 import (
-	"techflow/pkg/office"
-"fmt"
+	"fmt"
 "os"
 "os/user"
 "strings"
@@ -165,7 +164,7 @@ maintenance.InvokeTempOptimizer()
 case "F":
 maintenance.InvokeWinUtilTitus()
 case "G":
-maintenance.InvokeMassGraveIntegrated()
+maintenance.ShowOfficeActivationHub()
 case "H":
 apps.InvokeWingetMenu()
 case "I":
@@ -194,8 +193,7 @@ case "Y":
 hardware.InvokePasswordGenerator()
 case "Z":
 media.InvokeDownloadCenter()
-case "W":
-		office.ShowOfficeMenu()
+
 	case "X":
 os.Exit(0)
 }
