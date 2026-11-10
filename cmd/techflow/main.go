@@ -1,6 +1,7 @@
 ﻿package main
 
 import (
+	"techflow/pkg/office"
 "fmt"
 "os"
 "os/user"
@@ -193,7 +194,9 @@ case "Y":
 hardware.InvokePasswordGenerator()
 case "Z":
 media.InvokeDownloadCenter()
-case "X":
+case "W":
+		office.ShowOfficeMenu()
+	case "X":
 os.Exit(0)
 }
 }
