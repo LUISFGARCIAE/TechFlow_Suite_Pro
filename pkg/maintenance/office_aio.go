@@ -11,19 +11,28 @@ import (
 "techflow/pkg/office"
 )
 
-// clearScreen limpia la consola usando comandos nativos
+// clearScreen limpia la consola nativamente
 func clearScreen() {
 cmd := exec.Command("cmd", "/c", "cls")
 cmd.Stdout = os.Stdout
 _ = cmd.Run()
 }
 
-// printOfficeBanner dibuja el encabezado superior alineado al diseño de TechFlow
+// printOfficeBanner imprime el banner principal de TechFlow adaptado al módulo de Office
 func printOfficeBanner() {
 clearScreen()
 fmt.Println("\033[36m╔══════════════════════════════════════════════════════════════════════════════════╗")
+fmt.Println("║                                                                                  ║")
+fmt.Println("║    ████████╗███████╗ ██████╗██╗  ██╗    ███████╗██╗     ██████╗ ██╗    ██╗       ║")
+fmt.Println("║    ╚══██╔══╝██╔════╝██╔════╝██║  ██║    ██╔════╝██║     ██╔═══██╗██║    ██║       ║")
+fmt.Println("║       ██║   █████╗  ██║     ███████║    █████╗  ██║     ██║   ██║██║ █╗ ██║       ║")
+fmt.Println("║       ██║   ██╔══╝  ██║     ██╔══██║    ██╔══╝  ██║     ██║   ██║██║███╗██║       ║")
+fmt.Println("║       ██║   ███████╗╚██████╗██║  ██║    ██║     ███████╗╚██████╔╝╚███╔███╔╝       ║")
+fmt.Println("║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝    ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝        ║")
+fmt.Println("║                                                                                  ║")
 fmt.Println("║                   📦 CENTRO DE DESPLIEGUE Y ACTIVACIÓN OFFICE                    ║")
 fmt.Println("║                   SOLUCIONES IT - LUIS FERNANDO GARCIA ENCISO                    ║")
+fmt.Println("║                                                                                  ║")
 fmt.Println("╚══════════════════════════════════════════════════════════════════════════════════╝\033[0m")
 fmt.Println("")
 }
