@@ -3,81 +3,70 @@
 import (
 "fmt"
 "os"
+"os/exec"
 "path/filepath"
+"strings"
 "techflow/pkg/core"
 )
 
-// InvokeDriverManagement replica [C] GESTION DRIVERS
+func ExportDrivers(destinationDir string) error {
+if destinationDir == "" {
+destinationDir = "C:\\Drivers_Backup"
+}
+_ = os.MkdirAll(destinationDir, 0755)
+fmt.Printf("\n  \033[36m[*] Exportando drivers OEM instalados hacia %s...\033[0m\n", destinationDir)
+cmd := exec.Command("dism", "/online", "/export-driver", fmt.Sprintf("/destination:%s", destinationDir))
+cmd.Stdout = os.Stdout
+cmd.Stderr = os.Stderr
+return cmd.Run()
+}
+
+func RestoreDrivers(sourceDir string) error {
+absPath, err := filepath.Abs(sourceDir)
+if err != nil {
+return err
+}
+fmt.Printf("\n  \033[36m[*] Inyectando controladores recursivamente desde %s...\033[0m\n", absPath)
+cmd := exec.Command("pnputil", "/add-driver", filepath.Join(absPath, "*.inf"), "/subdirs", "/install")
+cmd.Stdout = os.Stdout
+cmd.Stderr = os.Stderr
+return cmd.Run()
+}
+
 func InvokeDriverManagement() {
 for {
+core.ClearScreen()
 core.ShowBanner()
-fmt.Println("\n \033[36m🔧 GESTION DE DRIVERS PRO\033[0m")
-fmt.Println(" -----------------------------------------------------------------------------")
-fmt.Println(" 💾 [A] EXPORTAR DRIVERS (BACKUP LOCAL EN CARPETA)")
-fmt.Println(" 🔄 [B] RE-INSTALAR DRIVERS (DESDE BACKUP)")
-fmt.Println(" 🔍 [C] BUSCAR EN SERVIDORES OFICIALES (WINDOWS UPDATE)")
-fmt.Println(" 🆔 [D] VER IDENTIFICADORES DE HARDWARE (SIN DRIVER)")
-fmt.Println("\n \033[90m⌨️ CONTROL\033[0m")
-fmt.Println(" \033[31m-------------------\033[0m")
-fmt.Println(" \033[31m❌ [X] VOLVER\033[0m")
+fmt.Println("\n\033[32m💾 GESTIÓN AVANZADA DE CONTROLADORES / DRIVERS\033[0m")
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
+fmt.Println("  \033[36m[1]\033[0m 💾 RESPALDAR DRIVERS INSTALADOS (Exportar a C:\\Drivers_Backup)")
+fmt.Println("  \033[36m[2]\033[0m 📥 RESTAURAR DRIVERS DESDE CARPETA (Inyección recursiva vía pnputil)")
+fmt.Println("")
+fmt.Println("  \033[90m---------------------------------------------------------------------------\033[0m")
+fmt.Println("  \033[31m[X]\033[0m ❌ VOLVER AL MENÚ PRINCIPAL")
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
+fmt.Print("  \033[32m>\033[0m SELECCIONE UNA OPCIÓN: ")
 
-opt := core.ReadMenuOption("\n > SELECCIONE:", []string{"A", "B", "C", "D", "X"}, "")
-if opt == "X" {
-break
-}
-
-backupDir := filepath.Join(os.Getenv("SystemDrive")+`\`, "Drivers_"+os.Getenv("COMPUTERNAME"))
+var opt string
+fmt.Scanln(&opt)
+opt = strings.ToUpper(strings.TrimSpace(opt))
 
 switch opt {
-case "A":
-fmt.Printf("\n\033[33m[+] Exportando controladores a %s...\033[0m\n", backupDir)
-_ = os.MkdirAll(backupDir, 0755)
-psCmd := fmt.Sprintf(`Export-WindowsDriver -Online -Destination "%s"`, backupDir)
-core.RunPowerShellCmd(psCmd)
-fmt.Printf(" \033[32m[✔] Drivers exportados en: %s\033[0m\n", backupDir)
+case "1":
+_ = ExportDrivers("C:\\Drivers_Backup")
 core.PauseEnter("")
-
-case "B":
-if _, err := os.Stat(backupDir); os.IsNotExist(err) {
-fmt.Println(" \033[31m[✘] No se encontro la carpeta de backup de drivers.\033[0m")
-core.PauseEnter("")
-continue
+case "2":
+fmt.Print("\n  Ruta del directorio de drivers [Default: C:\\Drivers_Backup]: ")
+var path string
+fmt.Scanln(&path)
+path = strings.TrimSpace(path)
+if path == "" {
+path = "C:\\Drivers_Backup"
 }
-fmt.Println("\n\033[32m[+] Reinstalando drivers mediante pnputil...\033[0m")
-psCmd := fmt.Sprintf(`Get-ChildItem "%s\*.inf" -Recurse | ForEach-Object { pnputil /add-driver $_.FullName /install }`, backupDir)
-core.RunPowerShellCmd(psCmd)
-fmt.Println(" \033[32m[✔] Proceso de reinstalacion finalizado.\033[0m")
+_ = RestoreDrivers(path)
 core.PauseEnter("")
-
-case "C":
-fmt.Println("\n\033[33m[+] Conectando con Microsoft Update para buscar drivers...\033[0m")
-psCmd := `
-Set-ExecutionPolicy Bypass -Scope Process -Force
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-if (!(Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
-Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false | Out-Null
-}
-if (!(Get-Module -ListAvailable PSWindowsUpdate)) {
-Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope CurrentUser | Out-Null
-}
-Import-Module PSWindowsUpdate
-Get-WindowsUpdate -Category "Drivers" -Install -AcceptAll -IgnoreReboot
-`
-core.RunPowerShellCmd(psCmd)
-fmt.Println(" \033[32m[✔] Busqueda y carga de drivers finalizada.\033[0m")
-core.PauseEnter("")
-
-case "D":
-core.ShowBanner()
-fmt.Println("\n\033[33m[!] DISPOSITIVOS CON ERROR O SIN CONTROLADOR:\033[0m")
-psCmd := `Get-CimInstance Win32_PnPEntity | Where-Object { $_.ConfigManagerErrorCode -ne 0 } | Format-Table -AutoSize Name, Status, DeviceID`
-out, _ := core.RunPowerShellCmd(psCmd)
-if out == "" {
-fmt.Println(" \033[32m[✔] No se detectaron problemas de hardware (Todo OK).\033[0m")
-} else {
-fmt.Println(out)
-}
-core.PauseEnter("")
+case "X":
+return
 }
 }
 }

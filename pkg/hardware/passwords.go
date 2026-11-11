@@ -4,53 +4,60 @@ import (
 "crypto/rand"
 "fmt"
 "math/big"
-"os/exec"
-"strconv"
+"strings"
 "techflow/pkg/core"
 )
 
-const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*()_+-=[]{}|;:,.<>?"
+const (
+charsetUpper   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+charsetLower   = "abcdefghijklmnopqrstuvwxyz"
+charsetDigits  = "0123456789"
+charsetSpecial = "!@#$%&*_-+="
+)
 
-func GeneratePassword(length int) string {
-b := make([]byte, length)
-maxIdx := big.NewInt(int64(len(charset)))
-for i := range b {
-idx, _ := rand.Int(rand.Reader, maxIdx)
-b[i] = charset[idx.Int64()]
+func GenerateSecurePassword(length int) (string, error) {
+if length < 8 {
+length = 16
 }
-return string(b)
-}
+allChars := charsetUpper + charsetLower + charsetDigits + charsetSpecial
+res := make([]byte, length)
 
-func CopyToClipboard(text string) {
-cmd := exec.Command("powershell", "-NoProfile", "-Command", fmt.Sprintf("Set-Clipboard -Value '%s'", text))
-_ = cmd.Run()
+for i := 0; i < length; i++ {
+num, err := rand.Int(rand.Reader, big.NewInt(int64(len(allChars))))
+if err != nil {
+return "", err
+}
+res[i] = allChars[num.Int64()]
+}
+return string(res), nil
 }
 
 func InvokePasswordGenerator() {
-fmt.Println("\n \033[36m[+] GENERADOR DE CONTRASEÑAS SEGURAS (Go Native)\033[0m")
-fmt.Println(" ===================================================================")
-fmt.Println(" Longitudes recomendadas: 16 (Estandar), 24 (Alta seguridad), 32 (Critica)")
+for {
+core.ClearScreen()
+core.ShowBanner()
+fmt.Println("\n\033[32m🔑 GENERADOR CRIPTOGRÁFICO DE CONTRASEÑAS SEGURAS\033[0m")
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
+fmt.Println("  \033[90mContraseñas de alta entropía generadas con crypto/rand (16 caracteres):\033[0m\n")
 
-opt := core.ReadMenuOption("\n Longitud deseada (o ENTER para 16):", nil, "16")
-length, err := strconv.Atoi(opt)
-if err != nil || length < 4 {
-length = 16
+for i := 1; i <= 4; i++ {
+pwd, _ := GenerateSecurePassword(16)
+fmt.Printf("    \033[36m[%d]\033[0m 🔐 \033[32m%s\033[0m\n", i, pwd)
 }
 
-fmt.Printf("\n \033[32m[+] CONTRASEÑAS GENERADAS (%d CARACTERES):\033[0m\n", length)
-fmt.Println(" -------------------------------------------------------------")
+fmt.Println("")
+fmt.Println("  \033[90m---------------------------------------------------------------------------\033[0m")
+fmt.Println("  \033[36m[R]\033[0m 🔄 REGENERAR NUEVAS CONTRASEÑAS")
+fmt.Println("  \033[31m[X]\033[0m ❌ VOLVER AL MENÚ PRINCIPAL")
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
+fmt.Print("  \033[32m>\033[0m SELECCIONE UNA OPCIÓN: ")
 
-firstPwd := ""
-for i := 1; i <= 5; i++ {
-pwd := GeneratePassword(length)
-if i == 1 {
-firstPwd = pwd
-}
-fmt.Printf(" [%d]  \033[36m%s\033[0m\n", i, pwd)
-}
+var opt string
+fmt.Scanln(&opt)
+opt = strings.ToUpper(strings.TrimSpace(opt))
 
-CopyToClipboard(firstPwd)
-fmt.Println(" -------------------------------------------------------------")
-fmt.Println(" \033[32m[OK] La contraseña [1] ha sido copiada al portapapeles.\033[0m")
-core.PauseEnter("")
+if opt == "X" {
+return
+}
+}
 }

@@ -4,93 +4,126 @@ import (
 "fmt"
 "os/exec"
 "strings"
+"syscall"
+"unsafe"
 "techflow/pkg/core"
 )
 
-func ShowBatteryHealth() {
+var (
+kernel32              = syscall.NewLazyDLL("kernel32.dll")
+procGlobalMemoryStatus = kernel32.NewProc("GlobalMemoryStatusEx")
+procGetSystemPower     = kernel32.NewProc("GetSystemPowerStatus")
+)
+
+type memorystatusex struct {
+dwLength                uint32
+dwMemoryLoad            uint32
+ullTotalPhys            uint64
+ullAvailPhys            uint64
+ullTotalPageFile        uint64
+ullAvailPageFile        uint64
+ullTotalVirtual         uint64
+ullAvailVirtual         uint64
+ullAvailExtendedVirtual uint64
+}
+
+type systemPowerStatus struct {
+ACLineStatus        byte
+BatteryFlag         byte
+BatteryLifePercent  byte
+SystemStatusFlag    byte
+BatteryLifeTime     uint32
+BatteryFullLifeTime uint32
+}
+
+func ShowSystemInfo() {
+core.ClearScreen()
 core.ShowBanner()
-fmt.Println("\n \033[36m===== SALUD DE BATERIA =====\033[0m")
+fmt.Println("\n\033[32m📊 INFORMACIÓN DEL SISTEMA Y RENDIMIENTO DE HARDWARE\033[0m")
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
 
-psQuery := `
-$b = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue
-if (-not $b) { "NO_BATTERY"; exit }
-$status = $b.BatteryStatus
-$charge = $b.EstimatedChargeRemaining
-Write-Host "STATUS:$status|CHARGE:$charge"
-`
-out, _ := core.RunPowerShellCmd(psQuery)
-out = strings.TrimSpace(out)
+var mem memorystatusex
+mem.dwLength = uint32(unsafe.Sizeof(mem))
+r1, _, _ := procGlobalMemoryStatus.Call(uintptr(unsafe.Pointer(&mem)))
+if r1 != 0 {
+totalGB := float64(mem.ullTotalPhys) / (1024 * 1024 * 1024)
+availGB := float64(mem.ullAvailPhys) / (1024 * 1024 * 1024)
+usedGB := totalGB - availGB
+fmt.Printf("  \033[36m[MEMORIA RAM]\033[0m    🧠 Total: \033[32m%.2f GB\033[0m | En uso: \033[33m%.2f GB\033[0m | Libre: \033[32m%.2f GB\033[0m (Carga: %d%%)\n",
+totalGB, usedGB, availGB, mem.dwMemoryLoad)
+}
 
-if strings.Contains(out, "NO_BATTERY") || out == "" {
-fmt.Println(" \033[33m[!] No se detecto bateria en este equipo (Equipo de escritorio).\033[0m")
+cmdCPU := exec.Command("wmic", "cpu", "get", "name,NumberOfCores,NumberOfLogicalProcessors", "/format:list")
+outCPU, err := cmdCPU.Output()
+if err == nil {
+lines := strings.Split(string(outCPU), "\n")
+var name, cores, threads string
+for _, line := range lines {
+line = strings.TrimSpace(line)
+if strings.HasPrefix(line, "Name=") {
+name = strings.TrimPrefix(line, "Name=")
+} else if strings.HasPrefix(line, "NumberOfCores=") {
+cores = strings.TrimPrefix(line, "NumberOfCores=")
+} else if strings.HasPrefix(line, "NumberOfLogicalProcessors=") {
+threads = strings.TrimPrefix(line, "NumberOfLogicalProcessors=")
+}
+}
+if name != "" {
+fmt.Printf("  \033[36m[PROCESADOR]\033[0m     ⚡ %s (\033[32m%s núcleos\033[0m / \033[32m%s hilos\033[0m)\n", name, cores, threads)
+}
+}
+
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
 core.PauseEnter("")
-return
 }
 
-fmt.Printf(" [+] Estado reportado: %s\n", out)
-fmt.Println("\n \033[33m[+] Generando reporte detallado de Windows (powercfg /batteryreport)...\033[0m")
+func ShowBatteryHealth() {
+core.ClearScreen()
+core.ShowBanner()
+fmt.Println("\n\033[32m🔋 ESTADO DE LA BATERÍA Y ALIMENTACIÓN ACPI\033[0m")
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
 
-reportCmd := exec.Command("powercfg", "/batteryreport", "/output", "BatteryReport.html")
-if err := reportCmd.Run(); err == nil {
-fmt.Println(" \033[32m[✔] Reporte generado: BatteryReport.html en el directorio actual.\033[0m")
-opt := core.ReadMenuOption(" Desea abrir el reporte en el navegador? (S/N):", []string{"S", "N"}, "N")
-if opt == "S" {
-_ = exec.Command("cmd", "/c", "start", "BatteryReport.html").Start()
+var power systemPowerStatus
+r, _, _ := procGetSystemPower.Call(uintptr(unsafe.Pointer(&power)))
+if r != 0 {
+acStatus := "⚡ Desconectado (Modo Batería)"
+if power.ACLineStatus == 1 {
+acStatus = "🔌 Conectado a la Corriente Eléctrica"
 }
+
+if power.BatteryFlag == 128 || power.BatteryLifePercent == 255 {
+fmt.Printf("  \033[36m[ALIMENTACIÓN]\033[0m   %s\n", acStatus)
+fmt.Println("  \033[33m[DETECCIÓN]\033[0m      🖥️ Equipo de escritorio o sin módulo de batería ACPI presente.")
 } else {
-fmt.Println(" \033[31m[✘] Error al ejecutar powercfg.\033[0m")
+fmt.Printf("  \033[36m[ALIMENTACIÓN]\033[0m   %s\n", acStatus)
+fmt.Printf("  \033[36m[NIVEL CARGA]\033[0m    🔋 \033[32m%d%%\033[0m de capacidad disponible\n", power.BatteryLifePercent)
+}
 }
 
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
 core.PauseEnter("")
 }
 
 func ShowTemperatures() {
+core.ClearScreen()
 core.ShowBanner()
-fmt.Println("\n \033[36m[*] TEMPERATURAS Y ESTADO DE DISCOS\033[0m")
-fmt.Println(" ===================================================================")
+fmt.Println("\n\033[32m🌡️ MONITOREO TÉRMICO DE SENSORES ACPI / WMI\033[0m")
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
 
-psCmd := `
-Write-Host "--- SENSORES CPU ---" -ForegroundColor Cyan
-$temps = Get-CimInstance -Namespace root/WMI -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue
-if ($temps) {
-foreach ($t in $temps) {
-$c = [math]::Round(($t.CurrentTemperature - 2732) / 10, 1)
-Write-Host " Sensor: $c C" -ForegroundColor Yellow
+out, err := core.RunPowerShellCmd("Get-WmiObject -Namespace root/wmi -Class MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | ForEach-Object { [math]::Round(($_.CurrentTemperature - 2732) / 10, 1) }")
+tempStr := strings.TrimSpace(out)
+if err == nil && tempStr != "" {
+temps := strings.Split(tempStr, "\n")
+for idx, t := range temps {
+t = strings.TrimSpace(t)
+if t != "" {
+fmt.Printf("  \033[36m[SENSOR %d]\033[0m       🌡️ Temperatura actual: \033[32m%s °C\033[0m\n", idx+1, t)
+}
 }
 } else {
-Write-Host " No se detectaron zonas termicas ACPI estandares." -ForegroundColor DarkGray
+fmt.Println("  \033[33m[AVISO]\033[0m          Sensores térmicos OEM reservados o no expuestos por la BIOS del equipo.")
 }
 
-Write-Host "` + "`n" + `--- ESTADO DE DISCOS ---" -ForegroundColor Cyan
-Get-PhysicalDisk -ErrorAction SilentlyContinue | Format-Table -AutoSize FriendlyName, MediaType, HealthStatus
-`
-out, _ := core.RunPowerShellCmd(psCmd)
-fmt.Println(out)
-
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
 core.PauseEnter("")
 }
-
-func ShowSystemInfo() {
-core.ShowBanner()
-fmt.Println("\n \033[36m===== INFORME TECNICO DE HARDWARE =====\033[0m")
-
-psCmd := `
-$cs = Get-CimInstance Win32_ComputerSystemProduct -ErrorAction SilentlyContinue
-$cpu = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue
-$os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-$mem = Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum
-
-Write-Host "EQUIPO      : $env:COMPUTERNAME" -ForegroundColor Green
-Write-Host "MODELO      : $($cs.Name)" -ForegroundColor Green
-Write-Host "PROCESADOR  : $($cpu.Name.Trim())" -ForegroundColor Green
-Write-Host "RAM TOTAL   : $([math]::Round($mem.Sum / 1GB, 2)) GB" -ForegroundColor Green
-Write-Host "SISTEMA     : $($os.Caption) ($($os.OSArchitecture))" -ForegroundColor Green
-Write-Host "BUILD       : $($os.BuildNumber)" -ForegroundColor Green
-`
-out, _ := core.RunPowerShellCmd(psCmd)
-fmt.Println(out)
-
-core.PauseEnter("")
-}
-
-
