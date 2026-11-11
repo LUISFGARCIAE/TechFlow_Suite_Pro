@@ -15,19 +15,19 @@ cmd.Stderr = os.Stderr
 _ = cmd.Run()
 }
 
-// ShowDiagnosticMenu corresponde a [D] PURGA Y FORMATEO / INTEGRIDAD
+// ShowDiagnosticMenu corresponde a [D] PURGA Y FORMATEO
 func ShowDiagnosticMenu() {
 validKeys := []string{"1", "2", "3", "4", "5", "X"}
 
 for {
 core.ShowBanner()
-fmt.Println("\n\033[44;37m 🩺 HERRAMIENTAS DE INTEGRIDAD Y REPARACIÓN DEL SISTEMA \033[0m")
+fmt.Println("\n\033[41;37m 🔥 PURGA Y FORMATEO - BORRADO SEGURO, USB Y DISKPART \033[0m")
 fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
-fmt.Println("  \033[36m[1] REPARAR IMAGEN WINDOWS     \033[0m - Restaurar almacén de componentes (DISM)")
-fmt.Println("  \033[36m[2] INTEGRIDAD DE ARCHIVOS     \033[0m - Escanear y reparar sistema (SFC /scannow)")
-fmt.Println("  \033[36m[3] REINICIAR PILA DE RED      \033[0m - Reset Winsock, TCP/IP y FlushDNS")
-fmt.Println("  \033[36m[4] SINCRONIZAR HORA NTP       \033[0m - Forzar reloj oficial de Windows (w32tm)")
-fmt.Println("  \033[36m[5] CHECKDISK EN LÍNEA (C:)    \033[0m - Auditar errores de disco sin reiniciar")
+fmt.Println("  \033[36m[1] FORMATEAR USB / EXTERNA    \033[0m - Formateo rápido (exFAT / NTFS / FAT32) seguro")
+fmt.Println("  \033[36m[2] DISKPART CLEAN + PARTICIÓN \033[0m - Limpiar tabla de particiones de disco/USB")
+fmt.Println("  \033[36m[3] SANITIZAR PC PARA VENTA    \033[0m - Borrar archivos de usuario, Wi-Fi y espacio libre")
+fmt.Println("  \033[36m[4] LIMPIAR APPS / BLOATWARE   \033[0m - Gestor rápido de desinstalación de programas")
+fmt.Println("  \033[36m[5] RESTABLECER WINDOWS (OEM)  \033[0m - Lanzar asistente de fábrica (systemreset)")
 fmt.Println("")
 fmt.Println("  \033[90m⌨️  CONTROL\033[0m")
 fmt.Println("  \033[90m---------------------------------------------------------------------------\033[0m")
@@ -44,28 +44,100 @@ return
 
 switch opt {
 case "1":
-fmt.Println("\n  \033[36m[*] Ejecutando DISM /Online /Cleanup-Image /RestoreHealth...\033[0m")
-runCLI("dism", "/online", "/cleanup-image", "/restorehealth")
+fmt.Println("\n  \033[36m[*] Unidades disponibles (excluyendo unidad del sistema C:):\033[0m\n")
+out, _ := core.RunPowerShellCmd(`Get-Volume | Where-Object { $_.DriveLetter -and $_.DriveLetter -ne 'C' } | Select-Object DriveLetter, FileSystemLabel, FileSystem, DriveType, @{N='SizeGB';E={[math]::Round($_.Size/1GB,1)}} | Format-Table -AutoSize`)
+fmt.Println(out)
+
+letter := core.ReadMenuOption("  > Ingresa la LETRA de unidad a formatear (o X para cancelar):", []string{"D", "E", "F", "G", "H", "I", "J", "K", "X"}, "X")
+if letter == "X" {
+continue
+}
+fs := core.ReadMenuOption("  > Formato de archivos [N=NTFS | E=exFAT | F=FAT32]:", []string{"N", "E", "F"}, "E")
+fsName := "exFAT"
+if fs == "N" {
+fsName = "NTFS"
+} else if fs == "F" {
+fsName = "FAT32"
+}
+
+confirm := core.ReadMenuOption(fmt.Sprintf("  \033[31m[!] ¿CONFIRMAS FORMATEAR %s: EN %s? SE BORRARÁ TODO (S/N):\033[0m", letter, fsName), []string{"S", "N"}, "N")
+if confirm == "S" {
+fmt.Printf("\n  \033[36m[*] Formateando unidad %s: como %s...\033[0m\n", letter, fsName)
+res, err := core.RunPowerShellCmd(fmt.Sprintf(`Format-Volume -DriveLetter '%s' -FileSystem %s -NewFileSystemLabel 'USB_TECHFLOW' -Confirm:$false`, letter, fsName))
+if err != nil {
+fmt.Printf("  \033[31m[!] Error al formatear: %v\033[0m\n", err)
+} else {
+fmt.Println(res)
+fmt.Printf("  \033[32m[✔] Unidad %s: formateada correctamente.\033[0m\n", letter)
+}
+}
 core.PauseEnter("")
+
 case "2":
-fmt.Println("\n  \033[36m[*] Ejecutando SFC /scannow...\033[0m")
-runCLI("sfc", "/scannow")
+fmt.Println("\n  \033[36m[*] Discos físicos detectados (El Disco 0 del sistema está protegido):\033[0m\n")
+out, _ := core.RunPowerShellCmd(`Get-Disk | Select-Object Number, FriendlyName, PartitionStyle, BusType, @{N='SizeGB';E={[math]::Round($_.Size/1GB,1)}} | Format-Table -AutoSize`)
+fmt.Println(out)
+
+diskNum := core.ReadMenuOption("  > Selecciona el NÚMERO de disco secundario a limpiar (1-9, o X):", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "X"}, "X")
+if diskNum == "X" {
+continue
+}
+partStyle := core.ReadMenuOption("  > Tabla de particiones [G=GPT | M=MBR]:", []string{"G", "M"}, "G")
+convertCmd := "convert gpt"
+if partStyle == "M" {
+convertCmd = "convert mbr"
+}
+
+confirm := core.ReadMenuOption(fmt.Sprintf("  \033[31m[!] PELIGRO: ¿EJECUTAR DISKPART CLEAN EN DISCO %s? (S/N):\033[0m", diskNum), []string{"S", "N"}, "N")
+if confirm == "S" {
+fmt.Printf("\n  \033[36m[*] Ejecutando secuencia DiskPart en Disco %s...\033[0m\n", diskNum)
+dpScript := fmt.Sprintf("select disk %s\r\nclean\r\n%s\r\ncreate partition primary\r\nformat fs=ntfs quick label=\"DATA_CLEAN\"\r\nassign\r\nexit\r\n", diskNum, convertCmd)
+tmpScript := `C:\Windows\Temp\tf_diskpart.txt`
+_ = os.WriteFile(tmpScript, []byte(dpScript), 0644)
+runCLI("diskpart", "/s", tmpScript)
+_ = os.Remove(tmpScript)
+fmt.Println("\n  \033[32m[✔] DiskPart finalizó la limpieza y particionado del disco.\033[0m")
+}
 core.PauseEnter("")
+
 case "3":
-fmt.Println("\n  \033[36m[*] Restableciendo sockets, IP y limpiando caché DNS...\033[0m")
-runCLI("netsh", "winsock", "reset")
-runCLI("netsh", "int", "ip", "reset")
-runCLI("ipconfig", "/flushdns")
-fmt.Println("\n  \033[32m[✔] Conectividad y adaptadores de red restablecidos.\033[0m")
+fmt.Println("\n  \033[33m[!] SANITIZACIÓN DE PERFIL PARA ENTREGA O VENTA DE EQUIPO\033[0m")
+fmt.Println("      Esto eliminará archivos de: Escritorio, Documentos, Descargas, Imágenes,")
+fmt.Println("      Videos, Música, Papelera de reciclaje y perfiles Wi-Fi guardados.")
+confirm := core.ReadMenuOption("\n  \033[31m> ¿CONFIRMAS SANITIZAR ESTE PERFIL DE USUARIO? (S/N):\033[0m", []string{"S", "N"}, "N")
+if confirm == "S" {
+fmt.Println("\n  \033[36m[*] Eliminando carpetas personales del perfil activo...\033[0m")
+psClean := `
+$folders = @('Desktop','Documents','Downloads','Pictures','Videos','Music')
+foreach ($f in $folders) {
+    $target = Join-Path $env:USERPROFILE $f
+    if (Test-Path $target) {
+        Get-ChildItem -Path $target -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+netsh wlan delete profile name=* i=* | Out-Null
+`
+_, _ = core.RunPowerShellCmd(psClean)
+fmt.Println("  \033[32m[✔] Archivos personales, Papelera y redes Wi-Fi eliminados.\033[0m")
+
+wipeFree := core.ReadMenuOption("  > ¿Sobrescribir espacio libre del disco con cipher /w:C:? (Lento) (S/N):", []string{"S", "N"}, "N")
+if wipeFree == "S" {
+runCLI("cipher", "/w:C:")
+}
+}
 core.PauseEnter("")
+
 case "4":
-fmt.Println("\n  \033[36m[*] Forzando sincronización con servidor de hora oficial...\033[0m")
-runCLI("w32tm", "/resync")
+fmt.Println("\n  \033[36m[*] Abriendo panel de Aplicaciones y Características para desinstalación...\033[0m")
+_ = exec.Command("cmd", "/c", "start", "ms-settings:appsfeatures").Start()
 core.PauseEnter("")
+
 case "5":
-fmt.Println("\n  \033[36m[*] Ejecutando CHKDSK C: /scan (auditoría en línea sin reinicio)...\033[0m\n")
-runCLI("chkdsk", "C:", "/scan")
-core.PauseEnter("")
+confirm := core.ReadMenuOption("  > ¿Lanzar asistente oficial de Restablecimiento de Fábrica de Windows? (S/N):", []string{"S", "N"}, "N")
+if confirm == "S" {
+_ = exec.Command("systemreset", "-factoryreset").Start()
+}
 }
 }
 }

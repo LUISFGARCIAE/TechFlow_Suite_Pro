@@ -80,7 +80,7 @@ fmt.Println(" \033[31m   ❌ [X] SALIR DEL SCRIPT\033[0m")
 func showSubmenuK() {
 for {
 core.ShowBanner()
-fmt.Println("\n  \033[44;37m 🛠️  SOPORTE TÉCNICO PRO - DIAGNÓSTICO AVANZADO \033[0m")
+fmt.Println("\n  \033[44;37m 🛠️  SOPORTE TÉCNICO PRO - DIAGNÓSTICO Y REPARACIÓN \033[0m")
 fmt.Println("  \033[36m═══════════════════════════════════════════════════════════════════════════\033[0m")
 fmt.Println("  \033[36m[A] SALUD FÍSICA DISCOS        \033[0m - Telemetría S.M.A.R.T. y estado NVMe/SSD/HDD")
 fmt.Println("  \033[36m[B] REPARAR SISTEMA (SFC+DISM) \033[0m - Reparación profunda de imagen y archivos")
@@ -90,6 +90,8 @@ fmt.Println("  \033[36m[E] REINICIAR A BIOS / UEFI    \033[0m - Reinicio directo
 fmt.Println("  \033[36m[F] SALUD DE BATERÍA           \033[0m - Capacidad de diseño vs carga completa")
 fmt.Println("  \033[36m[G] INFO TÉCNICA COMPLETA      \033[0m - Inventario detallado de Hardware y Software")
 fmt.Println("  \033[36m[H] VISOR EVENTOS CRÍTICOS     \033[0m - Últimos 10 errores graves / BSOD del sistema")
+fmt.Println("  \033[36m[I] CHECKDISK EN LÍNEA (C:)    \033[0m - Auditar errores de disco sin reiniciar")
+fmt.Println("  \033[36m[J] RESET PILA DE RED Y DNS    \033[0m - Restablecer Winsock, TCP/IP y FlushDNS")
 fmt.Println("  \033[36m[T] TEMPERATURAS Y SENSORES    \033[0m - Lectura térmica de CPU y placa")
 fmt.Println("  \033[36m[Z] MODO DIOS (GOD MODE)       \033[0m - Panel maestro con +200 ajustes de Windows")
 fmt.Println("")
@@ -98,7 +100,7 @@ fmt.Println("  \033[90m---------------------------------------------------------
 fmt.Println("  \033[31m[X] VOLVER                     \033[0m - Regresar al Menú Principal")
 fmt.Println("  \033[36m═══════════════════════════════════════════════════════════════════════════\033[0m")
 
-opt := core.ReadMenuOption("\n  \033[32m> SELECCIONE:\033[0m", []string{"A", "B", "C", "D", "E", "F", "G", "H", "T", "Z", "X"}, "")
+opt := core.ReadMenuOption("\n  \033[32m> SELECCIONE:\033[0m", []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "T", "Z", "X"}, "")
 if opt == "" {
 continue
 }
@@ -114,7 +116,7 @@ fmt.Println(out)
 core.PauseEnter("")
 case "B":
 fmt.Println("\n  \033[32m[+] Ejecutando reparación integral SFC + DISM...\033[0m")
-_, _ = core.RunPowerShellCmd("sfc /scannow; dism /online /cleanup-image /restorehealth")
+_, _ = core.RunPowerShellCmd("dism /online /cleanup-image /restorehealth; sfc /scannow")
 core.PauseEnter("")
 case "C":
 out, _ := core.RunPowerShellCmd("(Get-WmiObject -Class SoftwareLicensingService).OA3xOriginalProductKey")
@@ -137,6 +139,16 @@ case "H":
 fmt.Println("\n  \033[36m[*] Últimos 10 eventos críticos o errores graves del sistema:\033[0m\n")
 out, _ := core.RunPowerShellCmd(`Get-WinEvent -FilterHashtable @{LogName='System'; Level=1,2} -MaxEvents 10 -ErrorAction SilentlyContinue | Select-Object TimeCreated, Id, ProviderName, @{N='Mensaje';E={($_.Message -split "\r?\n")[0]}} | Format-Table -AutoSize`)
 fmt.Println(out)
+core.PauseEnter("")
+case "I":
+fmt.Println("\n  \033[36m[*] Ejecutando CHKDSK C: /scan (auditoría en línea)...\033[0m\n")
+out, _ := core.RunPowerShellCmd("chkdsk C: /scan")
+fmt.Println(out)
+core.PauseEnter("")
+case "J":
+fmt.Println("\n  \033[36m[*] Restableciendo Winsock, IP y caché DNS...\033[0m")
+_, _ = core.RunPowerShellCmd("netsh winsock reset; netsh int ip reset; ipconfig /flushdns")
+fmt.Println("  \033[32m[✔] Pila de red restablecida.\033[0m")
 core.PauseEnter("")
 case "T":
 hardware.ShowTemperatures()
