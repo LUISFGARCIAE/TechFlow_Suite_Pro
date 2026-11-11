@@ -1,10 +1,17 @@
-DevTools/
-dist/
+﻿# Binarios compilados y paquetes de distribución
 *.exe
+*.com
+*.zip
 *.syso
-TechFlow_Pro.exe
+dist/
+
+# Herramientas privadas de desarrollo y reportes de auditoría
+DevHub.bat
 DEV_AUDIT_REPORT.txt
+
+# Descargas temporales y herramientas portables en tiempo de ejecución
 tools_portable/
+downloads/
 *.log
 *.tmp
 *.bak
