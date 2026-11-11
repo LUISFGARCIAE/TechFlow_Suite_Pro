@@ -80,47 +80,68 @@ fmt.Println(" \033[31m   ❌ [X] SALIR DEL SCRIPT\033[0m")
 func showSubmenuK() {
 for {
 core.ShowBanner()
-fmt.Println("\n \033[36m🛠️ SOPORTE TECNICO PRO\033[0m")
-fmt.Println(" 💾 [A] SALUD DISCO")
-fmt.Println(" 🔧 [B] REPARAR SISTEMA (SFC + DISM)")
-fmt.Println(" 🔑 [C] CLAVE BIOS - Recupera la licencia original del equipo.")
-fmt.Println(" ⏰ [D] SINCRONIZAR HORA")
-fmt.Println(" 🔋 [F] SALUD DE BATERIA")
-fmt.Println(" 🌡️ [T] TEMPERATURAS CPU/GPU - Monitoreo en tiempo real")
-fmt.Println(" ℹ️ [G] INFO TECNICA COMPLETA (HW/SW)")
-fmt.Println(" ⚡ [Z] MODO DIOS - Todos los accesos de configuracion")
-fmt.Println("\n \033[90m⌨️ CONTROL\033[0m")
-fmt.Println(" \033[31m-------------------\033[0m")
-fmt.Println(" \033[31m❌ [X] VOLVER\033[0m")
+fmt.Println("\n  \033[44;37m 🛠️  SOPORTE TÉCNICO PRO - DIAGNÓSTICO AVANZADO \033[0m")
+fmt.Println("  \033[36m═══════════════════════════════════════════════════════════════════════════\033[0m")
+fmt.Println("  \033[36m[A] SALUD FÍSICA DISCOS        \033[0m - Telemetría S.M.A.R.T. y estado NVMe/SSD/HDD")
+fmt.Println("  \033[36m[B] REPARAR SISTEMA (SFC+DISM) \033[0m - Reparación profunda de imagen y archivos")
+fmt.Println("  \033[36m[C] CLAVE LICENCIA BIOS (OEM)  \033[0m - Recuperar clave original embebida en placa")
+fmt.Println("  \033[36m[D] SINCRONIZAR RELOJ OFICIAL  \033[0m - Forzar servicio w32time NTP")
+fmt.Println("  \033[36m[E] REINICIAR A BIOS / UEFI    \033[0m - Reinicio directo al firmware sin teclas")
+fmt.Println("  \033[36m[F] SALUD DE BATERÍA           \033[0m - Capacidad de diseño vs carga completa")
+fmt.Println("  \033[36m[G] INFO TÉCNICA COMPLETA      \033[0m - Inventario detallado de Hardware y Software")
+fmt.Println("  \033[36m[H] VISOR EVENTOS CRÍTICOS     \033[0m - Últimos 10 errores graves / BSOD del sistema")
+fmt.Println("  \033[36m[T] TEMPERATURAS Y SENSORES    \033[0m - Lectura térmica de CPU y placa")
+fmt.Println("  \033[36m[Z] MODO DIOS (GOD MODE)       \033[0m - Panel maestro con +200 ajustes de Windows")
+fmt.Println("")
+fmt.Println("  \033[90m⌨️  CONTROL\033[0m")
+fmt.Println("  \033[90m---------------------------------------------------------------------------\033[0m")
+fmt.Println("  \033[31m[X] VOLVER                     \033[0m - Regresar al Menú Principal")
+fmt.Println("  \033[36m═══════════════════════════════════════════════════════════════════════════\033[0m")
 
-opt := core.ReadMenuOption("\n >", []string{"A", "B", "C", "D", "F", "T", "G", "Z", "X"}, "")
+opt := core.ReadMenuOption("\n  \033[32m> SELECCIONE:\033[0m", []string{"A", "B", "C", "D", "E", "F", "G", "H", "T", "Z", "X"}, "")
+if opt == "" {
+continue
+}
 if opt == "X" {
 break
 }
 
 switch opt {
 case "A":
-hardware.ShowTemperatures()
+fmt.Println("\n  \033[36m[*] Consultando salud física de unidades...\033[0m\n")
+out, _ := core.RunPowerShellCmd(`Get-PhysicalDisk | Select-Object FriendlyName, MediaType, HealthStatus, OperationalStatus, @{N='SizeGB';E={[math]::Round($_.Size/1GB,1)}} | Format-Table -AutoSize`)
+fmt.Println(out)
+core.PauseEnter("")
 case "B":
-fmt.Println("\n\033[32m[+] Ejecutando reparacion de sistema...\033[0m")
-core.RunPowerShellCmd("sfc /scannow; dism /online /cleanup-image /restorehealth")
+fmt.Println("\n  \033[32m[+] Ejecutando reparación integral SFC + DISM...\033[0m")
+_, _ = core.RunPowerShellCmd("sfc /scannow; dism /online /cleanup-image /restorehealth")
 core.PauseEnter("")
 case "C":
 out, _ := core.RunPowerShellCmd("(Get-WmiObject -Class SoftwareLicensingService).OA3xOriginalProductKey")
-fmt.Printf("\n\033[32m[+] Clave BIOS encontrada: %s\033[0m\n", out)
+fmt.Printf("\n  \033[32m[+] Clave BIOS OEM encontrada: %s\033[0m\n", out)
 core.PauseEnter("")
 case "D":
-fmt.Println("\n\033[32m[+] Sincronizando hora con servidor oficial...\033[0m")
-core.RunPowerShellCmd("net stop w32time; net start w32time; w32tm /resync /force")
+fmt.Println("\n  \033[32m[+] Sincronizando hora con servidor oficial...\033[0m")
+_, _ = core.RunPowerShellCmd("net stop w32time; net start w32time; w32tm /resync /force")
 core.PauseEnter("")
+case "E":
+confirm := core.ReadMenuOption("  ¿Reiniciar ahora mismo directamente hacia BIOS/UEFI? (S/N):", []string{"S", "N"}, "N")
+if confirm == "S" {
+_, _ = core.RunPowerShellCmd("shutdown /r /fw /t 0")
+}
 case "F":
 hardware.ShowBatteryHealth()
-case "T":
-hardware.ShowTemperatures()
 case "G":
 hardware.ShowSystemInfo()
+case "H":
+fmt.Println("\n  \033[36m[*] Últimos 10 eventos críticos o errores graves del sistema:\033[0m\n")
+out, _ := core.RunPowerShellCmd(`Get-WinEvent -FilterHashtable @{LogName='System'; Level=1,2} -MaxEvents 10 -ErrorAction SilentlyContinue | Select-Object TimeCreated, Id, ProviderName, @{N='Mensaje';E={($_.Message -split "\r?\n")[0]}} | Format-Table -AutoSize`)
+fmt.Println(out)
+core.PauseEnter("")
+case "T":
+hardware.ShowTemperatures()
 case "Z":
-core.RunPowerShellCmd("Start-Process 'explorer.exe' 'shell:::{ED7BA470-8E54-465E-825C-99712043E01C}'")
+_, _ = core.RunPowerShellCmd("Start-Process 'explorer.exe' 'shell:::{ED7BA470-8E54-465E-825C-99712043E01C}'")
 core.PauseEnter("ENTER para volver")
 }
 }

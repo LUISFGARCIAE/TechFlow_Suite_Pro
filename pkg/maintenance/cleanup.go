@@ -5,400 +5,135 @@ import (
 "os"
 "os/exec"
 "path/filepath"
-"strings"
 "techflow/pkg/core"
 )
 
-var excludedPatterns = []string{
-"cpuz", "hwmonitor", "gpuz", "aida64", "msiafterburner",
-}
+func InvokeTempOptimizer() {
+validKeys := []string{"1", "2", "3", "4", "5", "X"}
 
-func isExcluded(name string) bool {
-lower := strings.ToLower(name)
-for _, pattern := range excludedPatterns {
-if strings.Contains(lower, pattern) {
-return true
-}
-}
-return false
-}
+for {
+core.ShowBanner()
+fmt.Println("\n\033[44;37m 🧹 OPTIMIZACIÓN Y PURGA PROFUNDA DE TEMPORALES \033[0m")
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
+fmt.Println("  \033[36m[1] LIMPIEZA RÁPIDA (EXPRESS)  \033[0m - Purgar %TEMP%, Windows\\Temp y Prefetch")
+fmt.Println("  \033[36m[2] CACHÉ WINDOWS UPDATE       \033[0m - Vaciar descargas viejas de SoftwareDistribution")
+fmt.Println("  \033[36m[3] CACHÉ MINIATURAS Y DNS     \033[0m - Limpiar Thumbnails, caché web y FlushDNS")
+fmt.Println("  \033[36m[4] PAPELERA Y VOLCADOS BSOD   \033[0m - Vaciar Papelera, reportes WER y Minidumps")
+fmt.Println("  \033[36m[5] PURGA PROFUNDA TOTAL (AIO) \033[0m - Ejecutar limpieza completa + WinSxS DISM")
+fmt.Println("")
+fmt.Println("  \033[90m⌨️  CONTROL\033[0m")
+fmt.Println("  \033[90m---------------------------------------------------------------------------\033[0m")
+fmt.Println("  \033[31m[X] VOLVER                     \033[0m - Regresar al Menú Principal")
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
 
-func cleanDirectory(dirPath string, isDemo bool) (int, int) {
-if _, err := os.Stat(dirPath); os.IsNotExist(err) {
-return 0, 0
-}
-
-entries, err := os.ReadDir(dirPath)
-if err != nil {
-return 0, 0
-}
-
-failCount := 0
-deletedCount := 0
-
-for _, entry := range entries {
-name := entry.Name()
-if isExcluded(name) {
-fmt.Printf("    \033[90m[EXCLUIDO] %s (en uso por hardware monitor)\033[0m\n", name)
+opt := core.ReadMenuOption("\n  \033[32m> SELECCIONE NIVEL DE LIMPIEZA:\033[0m", validKeys, "")
+if opt == "" {
 continue
 }
-
-fullPath := filepath.Join(dirPath, name)
-if isDemo {
-fmt.Printf("    \033[33m[DEMO] Se eliminaria: %s\033[0m\n", fullPath)
-continue
-}
-
-err := os.RemoveAll(fullPath)
-if err != nil {
-failCount++
-} else {
-deletedCount++
-}
-}
-return deletedCount, failCount
-}
-
-func runDiskPartScript(scriptContent string) {
-tmpFile := filepath.Join(os.Getenv("TEMP"), "tf_diskpart.txt")
-err := os.WriteFile(tmpFile, []byte(scriptContent), 0644)
-if err != nil {
-fmt.Printf(" \033[31m[✘] Error al crear script temporal: %v\033[0m\n", err)
+if opt == "X" {
 return
 }
-defer os.Remove(tmpFile)
-
-cmd := exec.Command("diskpart", "/s", tmpFile)
-cmd.Stdout = os.Stdout
-cmd.Stderr = os.Stderr
-_ = cmd.Run()
-}
-
-// InvokeSimpleDiskPart replica la gestión completa de DiskPart simplificado
-func InvokeSimpleDiskPart() {
-for {
-core.ShowBanner()
-fmt.Println("\n \033[36m🛠️ DISKPART SIMPLIFICADO - GESTIÓN DE DISCOS Y PARTICIONES\033[0m")
-fmt.Println(" ═══════════════════════════════════════════════════════════════════")
-fmt.Println(" 📋 INFORMACIÓN BÁSICA:")
-fmt.Println("   [1] LISTAR DISCOS (ver unidades conectadas)")
-fmt.Println("   [2] VER DETALLES DE UN DISCO (tamaño, particiones)")
-fmt.Println("   [3] VER VOLÚMENES (particiones con letras asignadas)")
-fmt.Println("\n 🔧 OPERACIONES SEGURAS:")
-fmt.Println("   [4] ASIGNAR LETRA DE UNIDAD")
-fmt.Println("   [5] EXTENDER PARTICIÓN (aprovechar espacio libre)")
-fmt.Println("   [6] REDUCIR PARTICIÓN (shrink - liberar espacio)")
-fmt.Println("   [7] VERIFICAR PARTICIÓN (chkdsk)")
-fmt.Println("   [8] OCULTAR / REVELAR PARTICIÓN")
-fmt.Println("\n ⚠️ OPERACIONES CRÍTICAS (DESTRUCCIÓN / MODIFICACIÓN DE DATOS):")
-fmt.Println("   [9]  LIMPIAR DISCO COMPLETO (clean - borra todo)")
-fmt.Println("   [10] FORMATEAR COMO FAT32")
-fmt.Println("   [11] FORMATEAR COMO NTFS")
-fmt.Println("   [12] ACTIVAR PARTICIÓN (marcar como activa/booteable)")
-fmt.Println("   [13] CONVERTIR MBR -> GPT")
-fmt.Println("   [14] CONVERTIR GPT -> MBR")
-fmt.Println("   [15] ELIMINAR PARTICIÓN")
-fmt.Println("\n \033[90m⌨️ CONTROL\033[0m")
-fmt.Println(" \033[31m═══════════════════════════════════════════════════════════════════\033[0m")
-fmt.Println(" \033[31m[X] VOLVER AL MENÚ DE DIAGNÓSTICO\033[0m")
-
-opt := core.ReadMenuOption("\n > SELECCIONE:", []string{
-"1", "2", "3", "4", "5", "6", "7", "8",
-"9", "10", "11", "12", "13", "14", "15", "X",
-}, "")
-
-if opt == "X" {
-break
-}
 
 switch opt {
 case "1":
-fmt.Println("\n\033[32m[+] Discos conectados:\033[0m")
-runDiskPartScript("list disk\nexit\n")
+runExpressClean()
 core.PauseEnter("")
 case "2":
-dNum := core.ReadMenuOption(" Ingrese número de disco:", nil, "")
-if dNum != "" {
-runDiskPartScript(fmt.Sprintf("select disk %s\ndetail disk\nexit\n", dNum))
-}
+runWinUpdateClean()
 core.PauseEnter("")
 case "3":
-fmt.Println("\n\033[32m[+] Volúmenes del sistema:\033[0m")
-runDiskPartScript("list volume\nexit\n")
+runThumbAndDNSClean()
 core.PauseEnter("")
 case "4":
-dNum := core.ReadMenuOption(" Número de disco:", nil, "")
-pNum := core.ReadMenuOption(" Número de partición:", nil, "")
-letra := core.ReadMenuOption(" Letra a asignar (ej: E):", nil, "")
-if dNum != "" && pNum != "" && letra != "" {
-runDiskPartScript(fmt.Sprintf("select disk %s\nselect partition %s\nassign letter=%s\nexit\n", dNum, pNum, letra))
-fmt.Println(" \033[32m[✔] Operación completada.\033[0m")
-}
+runRecycleAndDumpsClean()
 core.PauseEnter("")
 case "5":
-dNum := core.ReadMenuOption(" Número de disco:", nil, "")
-pNum := core.ReadMenuOption(" Número de partición:", nil, "")
-sz := core.ReadMenuOption(" Tamaño a extender en MB (ENTER para máximo disponible):", nil, "")
-if dNum != "" && pNum != "" {
-if sz != "" {
-runDiskPartScript(fmt.Sprintf("select disk %s\nselect partition %s\nextend size=%s\nexit\n", dNum, pNum, sz))
-} else {
-runDiskPartScript(fmt.Sprintf("select disk %s\nselect partition %s\nextend\nexit\n", dNum, pNum))
-}
-fmt.Println(" \033[32m[✔] Partición extendida.\033[0m")
-}
-core.PauseEnter("")
-case "6":
-dNum := core.ReadMenuOption(" Número de disco:", nil, "")
-pNum := core.ReadMenuOption(" Número de partición:", nil, "")
-sz := core.ReadMenuOption(" Tamaño a reducir en MB:", nil, "")
-if dNum != "" && pNum != "" && sz != "" {
-runDiskPartScript(fmt.Sprintf("select disk %s\nselect partition %s\nshrink desired=%s\nexit\n", dNum, pNum, sz))
-fmt.Println(" \033[32m[✔] Partición reducida.\033[0m")
-}
-core.PauseEnter("")
-case "7":
-dNum := core.ReadMenuOption(" Número de disco:", nil, "")
-pNum := core.ReadMenuOption(" Número de partición:", nil, "")
-if dNum != "" && pNum != "" {
-runDiskPartScript(fmt.Sprintf("select disk %s\nselect partition %s\nchkdsk /f\nexit\n", dNum, pNum))
-}
-core.PauseEnter("")
-case "8":
-dNum := core.ReadMenuOption(" Número de disco:", nil, "")
-pNum := core.ReadMenuOption(" Número de partición:", nil, "")
-act := core.ReadMenuOption(" ¿Ocultar (H) o Revelar (R)?:", []string{"H", "R"}, "H")
-if dNum != "" && pNum != "" {
-if act == "H" {
-runDiskPartScript(fmt.Sprintf("select disk %s\nselect partition %s\nremove letter=\nexit\n", dNum, pNum))
-} else {
-runDiskPartScript(fmt.Sprintf("select disk %s\nselect partition %s\nassign\nexit\n", dNum, pNum))
-}
-fmt.Println(" \033[32m[✔] Estado de letra modificado.\033[0m")
-}
-core.PauseEnter("")
-case "9":
-dNum := core.ReadMenuOption(" \033[31mNúmero de disco a LIMPIAR TOTALMENTE:\033[0m", nil, "")
-if dNum != "" {
-confirm := core.ReadMenuOption(fmt.Sprintf(" \033[31m¿CONFIRMA BORRAR TODO EL DISCO %s? Escriba 'BORRAR':\033[0m", dNum), nil, "")
-if strings.ToUpper(confirm) == "BORRAR" {
-runDiskPartScript(fmt.Sprintf("select disk %s\nclean\ncreate partition primary\nactive\nformat fs=ntfs quick\nassign\nexit\n", dNum))
-fmt.Println(" \033[32m[✔] Disco limpiado y formateado en NTFS.\033[0m")
-}
-}
-core.PauseEnter("")
-case "10":
-dNum := core.ReadMenuOption(" Número de disco:", nil, "")
-pNum := core.ReadMenuOption(" Número de partición:", nil, "")
-if dNum != "" && pNum != "" {
-confirm := core.ReadMenuOption(" Confirme formateo FAT32 escribiendo 'FORMATEAR':", nil, "")
-if strings.ToUpper(confirm) == "FORMATEAR" {
-runDiskPartScript(fmt.Sprintf("select disk %s\nselect partition %s\nformat fs=fat32 quick\nexit\n", dNum, pNum))
-fmt.Println(" \033[32m[✔] Formateo FAT32 finalizado.\033[0m")
-}
-}
-core.PauseEnter("")
-case "11":
-dNum := core.ReadMenuOption(" Número de disco:", nil, "")
-pNum := core.ReadMenuOption(" Número de partición:", nil, "")
-if dNum != "" && pNum != "" {
-confirm := core.ReadMenuOption(" Confirme formateo NTFS escribiendo 'FORMATEAR':", nil, "")
-if strings.ToUpper(confirm) == "FORMATEAR" {
-runDiskPartScript(fmt.Sprintf("select disk %s\nselect partition %s\nformat fs=ntfs quick\nexit\n", dNum, pNum))
-fmt.Println(" \033[32m[✔] Formateo NTFS finalizado.\033[0m")
-}
-}
-core.PauseEnter("")
-case "12":
-dNum := core.ReadMenuOption(" Número de disco:", nil, "")
-pNum := core.ReadMenuOption(" Número de partición a activar:", nil, "")
-if dNum != "" && pNum != "" {
-runDiskPartScript(fmt.Sprintf("select disk %s\nselect partition %s\nactive\nexit\n", dNum, pNum))
-fmt.Println(" \033[32m[✔] Partición marcada como activa.\033[0m")
-}
-core.PauseEnter("")
-case "13":
-dNum := core.ReadMenuOption(" Número de disco a convertir a GPT:", nil, "")
-if dNum != "" {
-confirm := core.ReadMenuOption(" Confirme conversión escribiendo 'CONVERTIR':", nil, "")
-if strings.ToUpper(confirm) == "CONVERTIR" {
-runDiskPartScript(fmt.Sprintf("select disk %s\nclean\nconvert gpt\nexit\n", dNum))
-fmt.Println(" \033[32m[✔] Disco convertido a GPT.\033[0m")
-}
-}
-core.PauseEnter("")
-case "14":
-dNum := core.ReadMenuOption(" Número de disco a convertir a MBR:", nil, "")
-if dNum != "" {
-confirm := core.ReadMenuOption(" Confirme conversión escribiendo 'CONVERTIR':", nil, "")
-if strings.ToUpper(confirm) == "CONVERTIR" {
-runDiskPartScript(fmt.Sprintf("select disk %s\nclean\nconvert mbr\nexit\n", dNum))
-fmt.Println(" \033[32m[✔] Disco convertido a MBR.\033[0m")
-}
-}
-core.PauseEnter("")
-case "15":
-dNum := core.ReadMenuOption(" Número de disco:", nil, "")
-pNum := core.ReadMenuOption(" Número de partición a eliminar:", nil, "")
-if dNum != "" && pNum != "" {
-confirm := core.ReadMenuOption(" Confirme eliminación escribiendo 'BORRAR':", nil, "")
-if strings.ToUpper(confirm) == "BORRAR" {
-runDiskPartScript(fmt.Sprintf("select disk %s\nselect partition %s\ndelete partition\nexit\n", dNum, pNum))
-fmt.Println(" \033[32m[✔] Partición eliminada.\033[0m")
-}
-}
+runExpressClean()
+runWinUpdateClean()
+runThumbAndDNSClean()
+runRecycleAndDumpsClean()
+fmt.Println("\n  \033[36m[DISM WINSXS]\033[0m   🧹 Limpiando almacén de componentes obsoletos...")
+_ = exec.Command("dism.exe", "/Online", "/Cleanup-Image", "/StartComponentCleanup").Run()
+fmt.Println("  \033[32m[✔] Purga profunda integral finalizada con éxito.\033[0m")
 core.PauseEnter("")
 }
 }
 }
 
-// ShowDiagnosticMenu replica [D] PURGA Y FORMATEO con todas las opciones originales
-func ShowDiagnosticMenu() {
-for {
-core.ShowBanner()
-fmt.Println("\n \033[31m🧹 PURGA Y FORMATEO - LIMPIEZA AVANZADA\033[0m")
-fmt.Println(" ---------------------------------------------------------------------------")
-fmt.Println(" 🗑️ [1] LIMPIAR ARCHIVOS TEMPORALES PROFUNDO")
-fmt.Println(" 🧽 [2] LIMPIAR CACHÉ DE WINDOWS (WinSxS Component Cleanup)")
-fmt.Println(" 🔄 [3] ELIMINAR RESTOS DE ACTUALIZACIONES ANTIGUAS (SPSuperseded)")
-fmt.Println(" 📊 [4] ANALIZAR Y LIMPIAR DISCO (cleanmgr nativo)")
-fmt.Println(" ⚡ [5] FORMATEO RÁPIDO DE UNIDAD USB (DiskPart FAT32)")
-fmt.Println(" 💿 [6] CREAR USB BOOTEABLE (Abrir Rufus)")
-fmt.Println(" 🛠️ [8] DISKPART SIMPLIFICADO - Gestión fácil de discos/USB")
-fmt.Println("\n \033[90m⌨️ CONTROL\033[0m")
-fmt.Println(" \033[31m-------------------\033[0m")
-fmt.Println(" \033[31m❌ [X] VOLVER\033[0m")
-
-opt := core.ReadMenuOption("\n > SELECCIONE:", []string{"1", "2", "3", "4", "5", "6", "8", "X"}, "")
-if opt == "X" {
-break
+// purgeDirectory mantiene compatibilidad con system_tweaks.go
+func purgeDirectory(dirPath string) (int, int64) {
+return cleanDirSafe(dirPath), 0
 }
 
-switch opt {
-case "1":
-fmt.Println("\n\033[33m[+] Limpieza profunda de temporales...\033[0m")
-cleanDirectory(os.Getenv("TEMP"), false)
-cleanDirectory(filepath.Join(os.Getenv("SystemRoot"), "Temp"), false)
-fmt.Println(" \033[32m[✔] Completado.\033[0m")
-core.PauseEnter("")
-case "2":
-fmt.Println("\n\033[33m[+] Ejecutando DISM StartComponentCleanup...\033[0m")
-cmd := exec.Command("dism", "/online", "/Cleanup-Image", "/StartComponentCleanup", "/ResetBase")
-cmd.Stdout = os.Stdout
-cmd.Stderr = os.Stderr
-_ = cmd.Run()
-fmt.Println("\n \033[32m[✔] Limpieza de WinSxS finalizada.\033[0m")
-core.PauseEnter("")
-case "3":
-fmt.Println("\n\033[33m[+] Eliminando versiones obsoletas de Windows (SPSuperseded)...\033[0m")
-cmd := exec.Command("dism", "/online", "/Cleanup-Image", "/SPSuperseded")
-cmd.Stdout = os.Stdout
-cmd.Stderr = os.Stderr
-_ = cmd.Run()
-fmt.Println("\n \033[32m[✔] Paquetes residuales eliminados.\033[0m")
-core.PauseEnter("")
-case "4":
-fmt.Println("\n\033[33m[+] Abriendo Liberador de espacio en disco (cleanmgr)...\033[0m")
-_ = exec.Command("cleanmgr.exe").Start()
-core.PauseEnter("ENTER después de cerrar")
-case "5":
-letra := core.ReadMenuOption("\n LETRA DE LA UNIDAD USB (ej: D, sin dos puntos):", nil, "")
-if letra != "" {
-confirm := core.ReadMenuOption(fmt.Sprintf(" ¿CONFIRMA formatear la unidad %s:? Escriba 'FORMATEAR':", letra), nil, "")
-if strings.ToUpper(confirm) == "FORMATEAR" {
-fmt.Println("\n\033[33m[+] Formateando unidad...\033[0m")
-cmd := exec.Command("cmd", "/c", fmt.Sprintf("format %s: /FS:FAT32 /Q /Y", letra))
-cmd.Stdout = os.Stdout
-cmd.Stderr = os.Stderr
-_ = cmd.Run()
-fmt.Println(" \033[32m[✔] Formateo completado.\033[0m")
-}
-}
-core.PauseEnter("")
-case "6":
-fmt.Println("\n\033[36m[+] Abriendo página de descarga oficial de Rufus...\033[0m")
-_ = exec.Command("cmd", "/c", "start", "https://rufus.ie/es/").Start()
-core.PauseEnter("")
-case "8":
-InvokeSimpleDiskPart()
-}
-}
-}
-
-// InvokeTempOptimizer replica [E] OPTIMIZAR TEMP
-func InvokeTempOptimizer() {
-for {
-core.ShowBanner()
-fmt.Println("\n \033[36m🗂️ GESTIÓN DE ALMACENAMIENTO Y LIMPIEZA\033[0m")
-fmt.Println(" \033[90m---------------------------------------------------------------------------\033[0m")
-fmt.Println(" 🔧 [1] TODO (Mantenimiento Integral) -> Limpieza total de basura y residuos.")
-fmt.Println(" 🗑️ [2] Papelera de Reciclaje         -> Vacía archivos eliminados de todos los discos.")
-fmt.Println(" 🧹 [3] Temporales de Usuario         -> Caché de apps y navegación del perfil actual.")
-fmt.Println(" ⚙️ [4] Temporales del Sistema        -> Archivos residuales de Windows y updates.")
-fmt.Println(" 🧽 [5] LIMPIEZA AVANZADA (BleachBit) -> App gráfica externa.")
-fmt.Println("\n \033[90m⌨️ CONTROL\033[0m")
-fmt.Println(" \033[31m-------------------\033[0m")
-fmt.Println(" \033[31m❌ [X] VOLVER AL MENÚ PRINCIPAL\033[0m")
-
-opt := core.ReadMenuOption("\n > SELECCIONE UNA OPCION:", []string{"1", "2", "3", "4", "5", "X"}, "")
-if opt == "X" {
-break
-}
-
-if opt == "5" {
-fmt.Println("\n\033[33m[+] Verificando BleachBit...\033[0m")
-_, err := exec.LookPath("bleachbit")
+func cleanDirSafe(dirPath string) int {
+entries, err := os.ReadDir(dirPath)
 if err != nil {
-fmt.Println("\033[33m[+] Instalando BleachBit con Winget...\033[0m")
-core.RunPowerShellCmd("winget install BleachBit.BleachBit --silent --accept-package-agreements")
+return 0
 }
-_ = exec.Command("bleachbit").Start()
-core.PauseEnter("ENTER después de cerrar BleachBit")
-continue
+deleted := 0
+for _, entry := range entries {
+fullPath := filepath.Join(dirPath, entry.Name())
+if err := os.RemoveAll(fullPath); err == nil {
+deleted++
 }
-
-demoOpt := core.ReadMenuOption(" ¿Ejecutar en MODO DEMO? (S/N):", []string{"S", "N"}, "N")
-isDemo := (demoOpt == "S")
-
-userTemp := os.Getenv("TEMP")
-winTemp := filepath.Join(os.Getenv("SystemRoot"), "Temp")
-
-if (opt == "1" || opt == "2") && !isDemo {
-fmt.Println("\n\033[33m[*] Vaciando Papelera de Reciclaje...\033[0m")
-core.RunPowerShellCmd("Clear-RecycleBin -Confirm:$false -ErrorAction SilentlyContinue")
-fmt.Println(" \033[32m[+] Papelera limpia.\033[0m")
+}
+return deleted
 }
 
-var targets []string
-switch opt {
-case "1":
-targets = []string{userTemp, winTemp}
-case "3":
-targets = []string{userTemp}
-case "4":
-targets = []string{winTemp}
+func runExpressClean() {
+fmt.Println("\n  \033[36m[*] Ejecutando Limpieza Rápida de Temporales...\033[0m\n")
+userTemp := os.TempDir()
+winTemp := `C:\Windows\Temp`
+prefetch := `C:\Windows\Prefetch`
+
+c1 := cleanDirSafe(userTemp)
+fmt.Printf("  \033[36m[USER TEMP]\033[0m     🧹 Elementos eliminados: \033[32m%d\033[0m (%s)\n", c1, userTemp)
+
+c2 := cleanDirSafe(winTemp)
+fmt.Printf("  \033[36m[WINDOWS TEMP]\033[0m  🧹 Elementos eliminados: \033[32m%d\033[0m (%s)\n", c2, winTemp)
+
+c3 := cleanDirSafe(prefetch)
+fmt.Printf("  \033[36m[PREFETCH]\033[0m      🧹 Elementos eliminados: \033[32m%d\033[0m (%s)\n", c3, prefetch)
 }
 
-if len(targets) > 0 {
-fmt.Println("\n\033[33m[*] Eliminando archivos temporales...\033[0m")
-totalDeleted, totalFailed := 0, 0
-for _, target := range targets {
-fmt.Printf("  - Procesando: %s...\n", target)
-d, f := cleanDirectory(target, isDemo)
-totalDeleted += d
-totalFailed += f
+func runWinUpdateClean() {
+fmt.Println("\n  \033[36m[*] Purgando caché de Windows Update...\033[0m\n")
+_ = exec.Command("net", "stop", "wuauserv").Run()
+_ = exec.Command("net", "stop", "bits").Run()
+
+wuDir := `C:\Windows\SoftwareDistribution\Download`
+c := cleanDirSafe(wuDir)
+fmt.Printf("  \033[36m[WIN UPDATE]\033[0m    🧹 Paquetes residuales eliminados: \033[32m%d\033[0m\n", c)
+
+_ = exec.Command("net", "start", "wuauserv").Run()
+_ = exec.Command("net", "start", "bits").Run()
 }
 
-if !isDemo {
-fmt.Println("\n \033[32m[+] PROCESO FINALIZADO.\033[0m")
-fmt.Printf("     Elementos eliminados: %d\n", totalDeleted)
-if totalFailed > 0 {
-fmt.Printf("     \033[90m[!] %d elementos en uso no se pudieron borrar.\033[0m\n", totalFailed)
+func runThumbAndDNSClean() {
+fmt.Println("\n  \033[36m[*] Limpiando caché de miniaturas y resolución DNS...\033[0m\n")
+localAppData := os.Getenv("LOCALAPPDATA")
+thumbDir := filepath.Join(localAppData, `Microsoft\Windows\Explorer`)
+
+matches, _ := filepath.Glob(filepath.Join(thumbDir, "thumbcache_*.db"))
+deleted := 0
+for _, m := range matches {
+if os.Remove(m) == nil {
+deleted++
 }
-} else {
-fmt.Println("\n \033[33m[DEMO] Simulación completada. No se aplicaron cambios.\033[0m")
 }
+fmt.Printf("  \033[36m[THUMBNAILS]\033[0m    🧹 Archivos de caché visual purgados: \033[32m%d\033[0m\n", deleted)
+
+_ = exec.Command("ipconfig", "/flushdns").Run()
+fmt.Println("  \033[36m[DNS RESOLVER]\033[0m  🧹 Caché DNS vaciada correctamente")
 }
-core.PauseEnter("para volver")
-}
+
+func runRecycleAndDumpsClean() {
+fmt.Println("\n  \033[36m[*] Vaciando Papelera y volcados de memoria...\033[0m\n")
+_ = exec.Command("powershell", "-NoProfile", "-Command", "Clear-RecycleBin -Force -ErrorAction SilentlyContinue").Run()
+fmt.Println("  \033[36m[PAPELERA]\033[0m      🧹 Papelera de reciclaje vaciada en todas las unidades")
+
+cWer := cleanDirSafe(`C:\ProgramData\Microsoft\Windows\WER\ReportQueue`)
+cDump := cleanDirSafe(`C:\Windows\Minidump`)
+_ = os.Remove(`C:\Windows\MEMORY.DMP`)
+fmt.Printf("  \033[36m[VOLCADOS/WER]\033[0m  🧹 Reportes y volcados eliminados: \033[32m%d\033[0m\n", cWer+cDump)
 }

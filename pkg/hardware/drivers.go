@@ -5,7 +5,6 @@ import (
 "os"
 "os/exec"
 "path/filepath"
-"strings"
 "techflow/pkg/core"
 )
 
@@ -34,39 +33,58 @@ return cmd.Run()
 }
 
 func InvokeDriverManagement() {
-for {
-core.ClearScreen()
-core.ShowBanner()
-fmt.Println("\n\033[32m💾 GESTIÓN AVANZADA DE CONTROLADORES / DRIVERS\033[0m")
-fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
-fmt.Println("  \033[36m[1]\033[0m 💾 RESPALDAR DRIVERS INSTALADOS (Exportar a C:\\Drivers_Backup)")
-fmt.Println("  \033[36m[2]\033[0m 📥 RESTAURAR DRIVERS DESDE CARPETA (Inyección recursiva vía pnputil)")
-fmt.Println("")
-fmt.Println("  \033[90m---------------------------------------------------------------------------\033[0m")
-fmt.Println("  \033[31m[X]\033[0m ❌ VOLVER AL MENÚ PRINCIPAL")
-fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
-fmt.Print("  \033[32m>\033[0m SELECCIONE UNA OPCIÓN: ")
+validKeys := []string{"1", "2", "3", "4", "5", "X"}
 
-var opt string
-fmt.Scanln(&opt)
-opt = strings.ToUpper(strings.TrimSpace(opt))
+for {
+core.ShowBanner()
+fmt.Println("\n\033[44;37m 💾 GESTIÓN AVANZADA DE CONTROLADORES / DRIVERS \033[0m")
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
+fmt.Println("  \033[36m[1] RESPALDAR DRIVERS OEM       \033[0m - Exportar todos a C:\\Drivers_Backup (DISM)")
+fmt.Println("  \033[36m[2] RESTAURAR DESDE CARPETA     \033[0m - Inyección recursiva de .INF (pnputil)")
+fmt.Println("  \033[36m[3] AUDITORÍA DRIVERS TERCEROS  \033[0m - Listar paquetes OEM instalados y versiones")
+fmt.Println("  \033[36m[4] HARDWARE CON ERROR / FALLO  \033[0m - Detectar dispositivos PnP con alertas")
+fmt.Println("  \033[36m[5] ABRIR ADMIN. DISPOSITIVOS   \033[0m - Lanzar consola gráfica (devmgmt.msc)")
+fmt.Println("")
+fmt.Println("  \033[90m⌨️  CONTROL\033[0m")
+fmt.Println("  \033[90m---------------------------------------------------------------------------\033[0m")
+fmt.Println("  \033[31m[X] VOLVER                      \033[0m - Regresar al Menú Principal")
+fmt.Println("\033[36m═════════════════════════════════════════════════════════════════════════════\033[0m")
+
+opt := core.ReadMenuOption("\n  \033[32m> SELECCIONE:\033[0m", validKeys, "")
+if opt == "" {
+continue
+}
+if opt == "X" {
+return
+}
 
 switch opt {
 case "1":
-_ = ExportDrivers("C:\\Drivers_Backup")
+if err := ExportDrivers("C:\\Drivers_Backup"); err != nil {
+fmt.Printf("\n  \033[31m[!] Error al exportar drivers: %v\033[0m\n", err)
+} else {
+fmt.Println("\n  \033[32m[✔] Respaldo completado en C:\\Drivers_Backup\033[0m")
+}
 core.PauseEnter("")
 case "2":
-fmt.Print("\n  Ruta del directorio de drivers [Default: C:\\Drivers_Backup]: ")
-var path string
-fmt.Scanln(&path)
-path = strings.TrimSpace(path)
-if path == "" {
-path = "C:\\Drivers_Backup"
+if err := RestoreDrivers("C:\\Drivers_Backup"); err != nil {
+fmt.Printf("\n  \033[31m[!] Error al restaurar drivers: %v\033[0m\n", err)
+} else {
+fmt.Println("\n  \033[32m[✔] Controladores inyectados correctamente.\033[0m")
 }
-_ = RestoreDrivers(path)
 core.PauseEnter("")
-case "X":
-return
+case "3":
+fmt.Println("\n  \033[36m[*] Listando controladores OEM de terceros...\033[0m\n")
+out, _ := core.RunPowerShellCmd("Get-WindowsDriver -Online | Select-Object Driver, ProviderName, ClassName, Version | Format-Table -AutoSize")
+fmt.Println(out)
+core.PauseEnter("")
+case "4":
+fmt.Println("\n  \033[36m[*] Buscando dispositivos con errores o sin controlador...\033[0m\n")
+out, _ := core.RunPowerShellCmd("$err = Get-PnpDevice | Where-Object { $_.Status -ne 'OK' -and $_.Status -ne 'Unknown' }; if ($err) { $err | Select-Object Status, Class, FriendlyName, InstanceId | Format-Table -AutoSize } else { 'Todos los dispositivos PnP operan correctamente (Status: OK).' }")
+fmt.Println(out)
+core.PauseEnter("")
+case "5":
+_ = exec.Command("devmgmt.msc").Start()
 }
 }
 }

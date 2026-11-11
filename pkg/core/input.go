@@ -7,44 +7,29 @@ import (
 "strings"
 )
 
-// ReadMenuOption espera la entrada del usuario y requiere presionar ENTER obligatoriamente.
-func ReadMenuOption(prompt string, validOptions []string, defaultValue string) string {
+func ReadMenuOption(prompt string, validKeys []string, defaultVal string) string {
 reader := bufio.NewReader(os.Stdin)
-for {
 fmt.Print(prompt + " ")
-input, err := reader.ReadString('\n')
-if err != nil {
-return defaultValue
+line, _ := reader.ReadString('\n')
+opt := strings.ToUpper(strings.TrimSpace(line))
+if opt == "" {
+return defaultVal
 }
-
-clean := strings.ToUpper(strings.TrimSpace(input))
-
-if clean == "" {
-if defaultValue != "" {
-return strings.ToUpper(defaultValue)
-}
-// Si el usuario da ENTER en blanco sin default, se limpia y se vuelve a solicitar sin saltos
-continue
-}
-
-if len(validOptions) > 0 {
-for _, opt := range validOptions {
-if clean == strings.ToUpper(opt) {
-return clean
+for _, k := range validKeys {
+if opt == strings.ToUpper(k) {
+return opt
 }
 }
-fmt.Printf(" \033[33m[!] Opción '%s' no válida. Permitidas: %s\033[0m\n", clean, strings.Join(validOptions, ", "))
-} else {
-return clean
-}
-}
+return ""
 }
 
 func PauseEnter(msg string) {
 if msg == "" {
-msg = "Presiona ENTER para continuar..."
+msg = "\n  \033[90mPresione ENTER para continuar...\033[0m"
+} else {
+msg = "\n  \033[90m" + msg + "\033[0m"
 }
-fmt.Printf("\n\033[90m%s\033[0m", msg)
+fmt.Print(msg)
 reader := bufio.NewReader(os.Stdin)
 _, _ = reader.ReadString('\n')
 }
