@@ -3,3 +3,9 @@ dist/
 *.exe
 *.syso
 TechFlow_Pro.exe
+DEV_AUDIT_REPORT.txt
+tools_portable/
+*.log
+*.tmp
+*.bak
+tf_diskpart.txt
